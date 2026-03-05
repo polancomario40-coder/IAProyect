@@ -1,0 +1,55 @@
+Starting project at C:\DEV\IAProyect\CXP\mobile
+Error: Cannot find module 'ajv/dist/compile/codegen'
+Require stack:
+- C:\DEV\IAProyect\CXP\mobile\node_modules\ajv-keywords\dist\definitions\typeof.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\ajv-keywords\dist\keywords\typeof.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\ajv-keywords\dist\keywords\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\ajv-keywords\dist\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\schema-utils\dist\validate.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\schema-utils\dist\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\expo-router\plugin\build\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\expo-router\app.plugin.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config-plugins\build\utils\plugin-resolver.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config-plugins\build\plugins\withStaticPlugin.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config-plugins\build\plugins\withPlugins.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config-plugins\build\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config\build\plugins\withConfigPlugins.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config\build\Config.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config\build\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\cli\build\src\start\detectDevClient.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\cli\build\src\start\resolveOptions.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\cli\build\src\start\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\cli\build\bin\cli
+- C:\DEV\IAProyect\CXP\mobile\node_modules\expo\bin\cli
+Error: Cannot find module 'ajv/dist/compile/codegen'
+Require stack:
+- C:\DEV\IAProyect\CXP\mobile\node_modules\ajv-keywords\dist\definitions\typeof.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\ajv-keywords\dist\keywords\typeof.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\ajv-keywords\dist\keywords\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\ajv-keywords\dist\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\schema-utils\dist\validate.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\schema-utils\dist\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\expo-router\plugin\build\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\expo-router\app.plugin.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config-plugins\build\utils\plugin-resolver.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config-plugins\build\plugins\withStaticPlugin.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config-plugins\build\plugins\withPlugins.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config-plugins\build\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config\build\plugins\withConfigPlugins.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config\build\Config.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\config\build\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\cli\build\src\start\detectDevClient.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\cli\build\src\start\resolveOptions.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\cli\build\src\start\index.js
+- C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\cli\build\bin\cli
+- C:\DEV\IAProyect\CXP\mobile\node_modules\expo\bin\cli
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1144:15)
+    at Module._load (node:internal/modules/cjs/loader:985:27)
+    at Module.require (node:internal/modules/cjs/loader:1235:19)
+    at require (node:internal/modules/helpers:176:18)
+    at Object.<anonymous> (C:\DEV\IAProyect\CXP\mobile\node_modules\ajv-keywords\dist\definitions\typeof.js:3:19)
+    at Module._compile (node:internal/modules/cjs/loader:1376:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1435:10)
+    at Module.load (node:internal/modules/cjs/loader:1207:32)
+    at Module._load (node:internal/modules/cjs/loader:1023:12)
+    at Module.require (node:internal/modules/cjs/loader:1235:19)

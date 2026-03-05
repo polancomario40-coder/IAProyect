@@ -1,0 +1,6 @@
+@CxpApi_HostAddress = http://localhost:5039
+
+GET {{CxpApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

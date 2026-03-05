@@ -1,0 +1,149 @@
+Node.js (v20.11.1) is outdated and unsupported. Please update to a newer Node.js LTS version (required: >=20.19.4)
+Go to: https://nodejs.org/en/download
+
+Starting project at C:\DEV\IAProyect\CXP\mobile
+React Compiler enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+The following packages should be updated for best compatibility with the installed expo version:
+  @react-native-async-storage/async-storage@3.0.1 - expected version: 2.2.0
+  @types/react@19.1.17 - expected version: ~19.2.10
+  eslint-config-expo@10.0.0 - expected version: ~55.0.0
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8081
+Logs for your project will appear below.
+Web node_modules\expo-router\entry.js ▓▓░░░░░░░░░░░░░░ 16.0% ( 4/10)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓░░░░░░░░░░░░░░ 12.9% (14/39)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓░░░░░░░░░░░ 36.0% (10/22)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓░░░░░░░░░░░░ 27.4% ( 72/138)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓░░░░░░░░░░░ 36.0% (106/245)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓░░░░░░░░░░░░ 28.3% (212/409)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓░░░░░░░░░░░ 36.0% (220/369)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓▓▓▓░░░░░░░░░ 48.2% (415/617)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓░░░░░░░░ 53.2% (415/569)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 62.5% (613/785)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 73.8% (593/693)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 89.4% (833/881)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.6% (849/864)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 98.9% (1050/1056)
+λ Bundling failed 24368ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1059 modules)
+
+Metro error: Unable to resolve module expo-web-browser from C:\DEV\IAProyect\CXP\mobile\components\external-link.tsx: expo-web-browser could not be found within the project or in these directories:
+  node_modules
+[0m [90m 1 |[39m [36mimport[39m { [33mHref[39m[33m,[39m [33mLink[39m } [36mfrom[39m [32m'expo-router'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 2 |[39m [36mimport[39m { openBrowserAsync[33m,[39m [33mWebBrowserPresentationStyle[39m } [36mfrom[39m [32m'expo-web-browser'[39m[33m;[39m
+ [90m   |[39m                                                                [31m[1m^[22m[39m
+ [90m 3 |[39m [36mimport[39m { type [33mComponentProps[39m } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m 4 |[39m
+ [90m 5 |[39m type [33mProps[39m [33m=[39m [33mOmit[39m[33m<[39m[33mComponentProps[39m[33m<[39m[36mtypeof[39m [33mLink[39m[33m>[39m[33m,[39m [32m'href'[39m[33m>[39m [33m&[39m { href[33m:[39m [33mHref[39m [33m&[39m string }[33m;[39m[0m
+
+Import stack:
+
+ components\external-link.tsx
+ | import "expo-web-browser"
+
+ app\(tabs)\explore.tsx
+ | import "@/components/external-link"
+
+ app (require.context)
+
+
+
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.1% (878/914)
+Web Bundling failed 25124ms node_modules\expo-router\entry.js (964 modules)
+Web node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundling failed 1218ms node_modules\expo-router\entry.js (907 modules)
+
+Metro error: Unable to resolve module expo-web-browser from C:\DEV\IAProyect\CXP\mobile\components\external-link.tsx: expo-web-browser could not be found within the project or in these directories:
+  node_modules
+[0m [90m 1 |[39m [36mimport[39m { [33mHref[39m[33m,[39m [33mLink[39m } [36mfrom[39m [32m'expo-router'[39m[33m;[39m
+[31m[1m>[22m[39m[90m 2 |[39m [36mimport[39m { openBrowserAsync[33m,[39m [33mWebBrowserPresentationStyle[39m } [36mfrom[39m [32m'expo-web-browser'[39m[33m;[39m
+ [90m   |[39m                                                                [31m[1m^[22m[39m
+ [90m 3 |[39m [36mimport[39m { type [33mComponentProps[39m } [36mfrom[39m [32m'react'[39m[33m;[39m
+ [90m 4 |[39m
+ [90m 5 |[39m type [33mProps[39m [33m=[39m [33mOmit[39m[33m<[39m[33mComponentProps[39m[33m<[39m[36mtypeof[39m [33mLink[39m[33m>[39m[33m,[39m [32m'href'[39m[33m>[39m [33m&[39m { href[33m:[39m [33mHref[39m [33m&[39m string }[33m;[39m[0m
+
+Import stack:
+
+ components\external-link.tsx
+ | import "expo-web-browser"
+
+ app\(tabs)\explore.tsx
+ | import "@/components/external-link"
+
+ app (require.context)
+
+
+
+λ Bundling failed 1231ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (927 modules)
+Web node_modules\expo-router\_error.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 2885ms node_modules\expo-router\_error.js (133 modules)
+Web node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundling failed 2188ms node_modules\expo-router\entry.js (925 modules)
+
+Metro error: Unable to resolve module react-native-reanimated from C:\DEV\IAProyect\CXP\mobile\components\hello-wave.tsx: react-native-reanimated could not be found within the project or in these directories:
+  node_modules
+[0m[31m[1m>[22m[39m[90m 1 |[39m [36mimport[39m [33mAnimated[39m [36mfrom[39m [32m'react-native-reanimated'[39m[33m;[39m
+ [90m   |[39m                       [31m[1m^[22m[39m
+ [90m 2 |[39m
+ [90m 3 |[39m [36mexport[39m [36mfunction[39m [33mHelloWave[39m() {
+ [90m 4 |[39m   [36mreturn[39m ([0m
+
+Import stack:
+
+ components\hello-wave.tsx
+ | import "react-native-reanimated"
+
+ app\(tabs)\index.tsx
+ | import "@/components/hello-wave"
+
+ app (require.context)
+
+
+
+λ Bundling failed 2226ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1057 modules)
+Web Bundled 127ms node_modules\expo-router\_error.js (1 module)
+Web node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web node_modules\expo-router\entry.js ▓▓▓░░░░░░░░░░░░░ 20.7% ( 57/151)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓░░░░░░░░░░░░ 25.0% (135/281)
+Web node_modules\expo-router\entry.js ▓▓▓░░░░░░░░░░░░░ 20.8% (170/383)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓░░░░░░░░░░░░ 28.1% (347/655)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓░░░░░░░░ 52.9% (373/513)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓▓▓▓░░░░░░░░░ 49.1% (629/898)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓░░░░░░░ 61.9% (506/643)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓▓▓▓▓▓▓▓░░░░░ 74.6% ( 908/1051)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 78.8% (696/784)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 88.6% (1183/1257)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.8% (875/885)
+λ node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.4% (1363/1367)
+λ Bundled 21933ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1367 modules)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 97.8% (1196/1217)
+Web Bundled 25485ms node_modules\expo-router\entry.js (1276 modules)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓░░░░░░░░░░░ 36.9% (320/543)
+Web node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░ 93.1% (915/977)
+Web Bundled 8205ms node_modules\expo-router\entry.js (1277 modules)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 109ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1 module)
+Web Bundled 1402ms node_modules\expo-router\entry.js (1 module)
+Web node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 90ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1 module)
+Web Bundled 904ms node_modules\expo-router\entry.js (1 module)
+Web Bundled 83ms node_modules\expo-router\entry.js (1 module)
+λ Bundled 68ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1 module)
+Web Bundled 800ms node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+Web node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+λ Bundled 86ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1 module)
+Web Bundled 904ms node_modules\expo-router\entry.js (1 module)
+Web Bundled 78ms node_modules\expo-router\entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console
+C:\DEV\IAProyect\CXP\mobile\node_modules\dnssd-advertise\dist\dnssd-advertise.js:2603
+      return async function announce() {
+                                    ^
+
+RangeError: Maximum call stack size exceeded
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v20.11.1

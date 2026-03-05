@@ -1,0 +1,21 @@
+# Node/React Native/Expo
+node_modules/
+npm-debug.log
+yarn-error.log
+.expo/
+dist/
+.env
+
+# .NET / C#
+[Bb]in/
+[Oo]bj/
+*.user
+*.userprefs
+*.suo
+.vs/
+*.sqlite
+*.db
+
+# OS generated files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,1 @@
+Error al registrar la factura: Cannot insert the value NULL into column 'StatusEcf', table 'cbsvmo.dbo.cxpDocumentos'; column does not allow nulls. INSERT fails.

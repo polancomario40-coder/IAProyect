@@ -1,0 +1,13 @@
+Starting project at C:\DEV\IAProyect\CXP\mobile
+Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './src/lib/TerminalReporter' is not defined by "exports" in C:\DEV\IAProyect\CXP\mobile\node_modules\metro\package.json
+Error: Package subpath './src/lib/TerminalReporter' is not defined by "exports" in C:\DEV\IAProyect\CXP\mobile\node_modules\metro\package.json
+    at exportsNotFound (node:internal/modules/esm/resolve:303:10)
+    at packageExportsResolve (node:internal/modules/esm/resolve:650:9)
+    at resolveExports (node:internal/modules/cjs/loader:591:36)
+    at Function.Module._findPath (node:internal/modules/cjs/loader:668:31)
+    at Function.Module._resolveFilename (node:internal/modules/cjs/loader:1130:27)
+    at Function.Module._load (node:internal/modules/cjs/loader:985:27)
+    at Module.require (node:internal/modules/cjs/loader:1235:19)
+    at require (node:internal/modules/helpers:176:18)
+    at UpstreamTerminalReporter (C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\cli\build\src\start\server\metro\TerminalReporter.js:26:55)
+    at Object.<anonymous> (C:\DEV\IAProyect\CXP\mobile\node_modules\@expo\cli\src\start\server\metro\TerminalReporter.ts:45:27)

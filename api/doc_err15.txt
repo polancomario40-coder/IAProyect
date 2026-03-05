@@ -1,0 +1,1 @@
+{"success":true,"mensaje":"Factura registrada exitosamente con SQL Directo.","idDocumento":194903,"guidDocumento":"ce7f170e-a10e-46b0-b189-97f8978afbbf"}
