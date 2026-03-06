@@ -1,12 +1,13 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
+import { useRouter } from 'expo-router';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
 import { Colors } from '../constants/Colors';
 
+const { width } = Dimensions.get('window');
+
 export default function LoginScreen() {
-    const { idEmpresa, nombre } = useLocalSearchParams();
     const [usuarioStr, setUsuarioStr] = useState('');
     const [clave, setClave] = useState('');
     const [loading, setLoading] = useState(false);
@@ -15,21 +16,19 @@ export default function LoginScreen() {
 
     const handleLogin = async () => {
         if (!usuarioStr) {
-            Alert.alert('Error', 'Debe ingresar usuario');
+            Alert.alert('Error', 'Debe ingresar el usuario');
             return;
         }
 
         setLoading(true);
         try {
             const response = await api.post('/login', {
-                idEmpresa: idEmpresa,
                 usuario: usuarioStr,
                 clave: clave,
             });
 
             const { token, usuario } = response.data;
-            await login(token, usuario, { idEmpresa, nombre });
-            router.replace('/dashboard');
+            await login(token, usuario);
         } catch (error: any) {
             const msg = error.response?.data || 'Error conectando al servidor';
             Alert.alert('Credenciales incorrectas', typeof msg === 'string' ? msg : 'Error interno');
@@ -39,62 +38,77 @@ export default function LoginScreen() {
     };
 
     return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Iniciar Sesión</Text>
-            <Text style={styles.subtitle}>{nombre}</Text>
+        <SafeAreaView style={styles.safeArea}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={styles.keyboardView}
+            >
+                <View style={styles.container}>
+                    <Text style={styles.title}>Dataflow CXP</Text>
+                    <Text style={styles.subtitle}>Iniciar Sesión</Text>
 
-            <View style={styles.form}>
-                <TextInput
-                    style={styles.input}
-                    placeholder="Usuario"
-                    placeholderTextColor={Colors.light.textMuted}
-                    value={usuarioStr}
-                    onChangeText={setUsuarioStr}
-                    autoCapitalize="none"
-                />
-                <TextInput
-                    style={styles.input}
-                    placeholder="Contraseña"
-                    placeholderTextColor={Colors.light.textMuted}
-                    value={clave}
-                    onChangeText={setClave}
-                    secureTextEntry
-                />
+                    <View style={styles.form}>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Usuario"
+                            placeholderTextColor={Colors.light.textMuted}
+                            value={usuarioStr}
+                            onChangeText={setUsuarioStr}
+                            autoCapitalize="none"
+                        />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Contraseña"
+                            placeholderTextColor={Colors.light.textMuted}
+                            value={clave}
+                            onChangeText={setClave}
+                            secureTextEntry
+                        />
 
-                <TouchableOpacity
-                    style={[styles.button, loading && styles.buttonDisabled]}
-                    onPress={handleLogin}
-                    disabled={loading}
-                >
-                    {loading ? (
-                        <ActivityIndicator color="#FFF" />
-                    ) : (
-                        <Text style={styles.buttonText}>Ingresar</Text>
-                    )}
-                </TouchableOpacity>
-            </View>
-            <Text style={styles.version}>App CXP v1.0.0</Text>
-        </View>
+                        <TouchableOpacity
+                            style={[styles.button, loading && styles.buttonDisabled]}
+                            onPress={handleLogin}
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="#FFF" />
+                            ) : (
+                                <Text style={styles.buttonText}>Ingresar</Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                    <Text style={styles.version}>App CXP v2.0</Text>
+                </View>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
+    safeArea: {
         flex: 1,
         backgroundColor: Colors.light.background,
+    },
+    keyboardView: {
+        flex: 1,
+    },
+    container: {
+        flex: 1,
         justifyContent: 'center',
         paddingHorizontal: 20,
+        width: Platform.OS === 'web' ? Math.min(width, 400) : '100%',
+        alignSelf: 'center',
     },
     title: {
-        fontSize: 28,
+        fontSize: 32,
         fontWeight: 'bold',
-        color: Colors.light.text,
+        color: '#1F3A8A',
         textAlign: 'center',
         marginBottom: 5,
     },
     subtitle: {
-        fontSize: 16,
-        color: Colors.light.primary,
+        fontSize: 18,
+        color: Colors.light.textMuted,
         textAlign: 'center',
         marginBottom: 40,
         fontWeight: '600',
@@ -111,12 +125,23 @@ const styles = StyleSheet.create({
         fontSize: 16,
         marginBottom: 15,
         color: Colors.light.text,
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3 },
+            android: { elevation: 2 },
+            web: { boxShadow: '0px 2px 3px rgba(0,0,0,0.1)' } as any,
+        }),
     },
     button: {
-        backgroundColor: Colors.light.primary,
+        backgroundColor: '#1F3A8A',
         padding: 15,
         borderRadius: 8,
         alignItems: 'center',
+        marginTop: 10,
+        ...Platform.select({
+            ios: { shadowColor: '#1F3A8A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
+            android: { elevation: 4 },
+            web: { boxShadow: '0px 4px 5px rgba(31,58,138,0.3)' } as any,
+        }),
     },
     buttonDisabled: {
         opacity: 0.7,

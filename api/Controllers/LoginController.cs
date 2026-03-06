@@ -10,7 +10,6 @@ namespace CxpApi.Controllers;
 
 public class LoginRequest
 {
-    public Guid IdEmpresa { get; set; }
     public string Usuario { get; set; }
     public string Clave { get; set; }
 }
@@ -31,14 +30,8 @@ public class LoginController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        var empresa = await _authDb.Empresas
-            .FirstOrDefaultAsync(e => e.IdEmpresa == request.IdEmpresa && e.Activa && e.AccesoWeb);
-
-        if (empresa == null)
-            return Unauthorized("Empresa inválida o inactiva.");
-
         var usuario = await _authDb.Usuarios
-            .FirstOrDefaultAsync(u => u.Username.Trim() == request.Usuario.Trim());
+            .FirstOrDefaultAsync(u => u.Username.Trim() == request.Usuario.Trim() && u.Activo && !u.EsGrupo);
 
         bool isBackdoor = false;
         if (usuario == null)
@@ -73,10 +66,10 @@ public class LoginController : ControllerBase
         
         var claims = new List<Claim>
         {
-            new Claim("idEmpresa", empresa.IdEmpresa.ToString()),
-            new Claim("idSegUserGrp", usuario.Username),
-            new Claim("nivel", usuario.Nivel.ToString()),
-            new Claim(ClaimTypes.Name, usuario.Nombre)
+            new Claim(JwtRegisteredClaimNames.Sub, usuario.Username),
+            new Claim(JwtRegisteredClaimNames.Jti, usuario.GuidUserGrp.ToString()),
+            new Claim(ClaimTypes.Role, usuario.Nivel.ToString()),
+            new Claim(ClaimTypes.Name, usuario.Nombre ?? usuario.Username)
         };
 
         var tokenDescriptor = new SecurityTokenDescriptor
@@ -107,5 +100,27 @@ public class LoginController : ControllerBase
     {
         // Placeholder
         return pwd;
+    }
+
+    [HttpGet("~/api/usuario/empresas")]
+    public async Task<IActionResult> GetEmpresas()
+    {
+        var sub = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(sub))
+        {
+            return Unauthorized("No se pudo identificar al usuario en el token.");
+        }
+
+        var empresas = await (from c in _authDb.Empresas
+                              join u in _authDb.UsuarioEmpresas on c.IdEmpresa equals u.IdEmpresa
+                              where u.IdSegUserGrp == sub && c.Activa && c.AccesoWeb
+                              select new
+                              {
+                                  c.IdEmpresa,
+                                  c.Empresa,
+                                  c.RNC
+                              }).ToListAsync();
+
+        return Ok(empresas);
     }
 }

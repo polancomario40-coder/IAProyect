@@ -28,16 +28,30 @@ public class ErpConnectionProvider : IErpConnectionProvider
             throw new UnauthorizedAccessException("El usuario no está autenticado.");
         }
 
-        var idEmpresaClaim = httpContext.User.FindFirst("idEmpresa")?.Value;
-        if (string.IsNullOrEmpty(idEmpresaClaim) || !Guid.TryParse(idEmpresaClaim, out Guid idEmpresa))
+        var sub = httpContext.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value 
+            ?? httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(sub))
         {
-            throw new UnauthorizedAccessException("Token no contiene un 'idEmpresa' válido.");
+            throw new UnauthorizedAccessException("Token no contiene identificación de usuario válida.");
+        }
+
+        var selectedCompanyHeader = httpContext.Request.Headers["X-Selected-Company"].FirstOrDefault();
+        if (string.IsNullOrEmpty(selectedCompanyHeader) || !Guid.TryParse(selectedCompanyHeader, out Guid idEmpresa))
+        {
+            throw new UnauthorizedAccessException("Cabecera X-Selected-Company requerida y/o inválida.");
         }
 
         // Consultar CBSRepository para armar la cadena
         using var scope = _serviceProvider.CreateScope();
         var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
         
+        var userHasAccess = authDb.UsuarioEmpresas.Any(ue => ue.IdEmpresa == idEmpresa && ue.IdSegUserGrp == sub);
+        if (!userHasAccess)
+        {
+            throw new UnauthorizedAccessException("El usuario no tiene acceso a la empresa seleccionada.");
+        }
+
         var empresa = authDb.Empresas.FirstOrDefault(e => e.IdEmpresa == idEmpresa && e.Activa && e.AccesoWeb);
         if (empresa == null)
         {

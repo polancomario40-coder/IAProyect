@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Platform } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../services/api';
 import { Colors } from '../constants/Colors';
+
+interface ClaseGasto {
+    idClasegasto: string;
+    claseGasto: string;
+}
 
 export default function NuevaFacturaScreen() {
     const params = useLocalSearchParams();
@@ -21,14 +27,34 @@ export default function NuevaFacturaScreen() {
     const [referencia, setReferencia] = useState('');
 
     // Seccion 2: Montos
-    const [subtotal, setSubtotal] = useState('0');
-    const [itbis, setItbis] = useState('0');
-    const [total, setTotal] = useState('0');
+    const [subtotal, setSubtotal] = useState('');
+    const [itbis, setItbis] = useState('');
+    const [total, setTotal] = useState('');
+
+    // Extra: ClaseGasto
+    const [clases, setClases] = useState<ClaseGasto[]>([]);
+    const [idClasegasto, setIdClasegasto] = useState('');
 
     // Seccion 3: Detalle
     const [concepto, setConcepto] = useState('');
 
     const [loading, setLoading] = useState(false);
+
+    // Cargar Catálogo DGII
+    useEffect(() => {
+        const fetchClases = async () => {
+            try {
+                const response = await api.get('/clasegasto');
+                setClases(response.data);
+                if (response.data.length > 0) {
+                    setIdClasegasto(response.data[0].idClasegasto);
+                }
+            } catch (error) {
+                console.error('Error fetching clase gasto', error);
+            }
+        };
+        fetchClases();
+    }, []);
 
     // Auto-calcular Fecha de Vencimiento
     useEffect(() => {
@@ -41,32 +67,75 @@ export default function NuevaFacturaScreen() {
         }
     }, [fechaEmision, diasCredito]);
 
-    // Auto-calcular Total
-    useEffect(() => {
-        const valSub = parseFloat(subtotal) || 0;
-        const valItbis = parseFloat(itbis) || 0;
-        setTotal((valSub + valItbis).toFixed(2));
-    }, [subtotal, itbis]);
+    // Auto-calcular Montos Bidireccionales
+    // Cambio Subtotal -> Actualiza ITBIS y Total
+    const handleSubtotalChange = (val: string) => {
+        setSubtotal(val);
+        const numVal = parseFloat(val) || 0;
+        const newItbis = numVal * 0.18;
+        const newTotal = numVal + newItbis;
+
+        setItbis(newItbis.toFixed(2));
+        setTotal(newTotal.toFixed(2));
+    };
+
+    // Cambio Total -> Extrae Subtotal e ITBIS
+    const handleTotalChange = (val: string) => {
+        setTotal(val);
+        const numTotal = parseFloat(val) || 0;
+        const newSubtotal = numTotal / 1.18;
+        const newItbis = numTotal - newSubtotal;
+
+        setSubtotal(newSubtotal.toFixed(2));
+        setItbis(newItbis.toFixed(2));
+    };
+
+    // Cambio Manual de Itbis -> Suma de nuevo el Total (manteniendo subtotal firme)
+    const handleItbisChange = (val: string) => {
+        setItbis(val);
+        const numSub = parseFloat(subtotal) || 0;
+        const numItbis = parseFloat(val) || 0;
+        setTotal((numSub + numItbis).toFixed(2));
+    };
+
+    const validateNCF = (val: string) => {
+        // Regex: starts with B or E, then digits. Total 11 or 13 chars
+        const regex = /^[BE]\d{10,12}$/i;
+        return regex.test(val);
+    };
+
+    const displayAlert = (title: string, msg: string) => {
+        if (Platform.OS === 'web') {
+            window.alert(`${title}: ${msg}`);
+        } else {
+            Alert.alert(title, msg);
+        }
+    };
 
     const handleGuardar = async () => {
-        if (!referencia) {
-            Alert.alert('Error', 'Debe ingresar el número de factura (Referencia).');
+        if (!referencia || referencia.trim() === '') {
+            displayAlert('Error', 'Debe ingresar el número de factura (Referencia).');
             return;
         }
-        if (pedirNCF && !ncf) {
-            Alert.alert('NCF Requerido', 'Este suplidor exige número de comprobante fiscal (NCF).');
-            return;
+        if (pedirNCF) {
+            if (!ncf || ncf.trim() === '') {
+                displayAlert('NCF Requerido', 'Este suplidor exige número de comprobante fiscal (NCF).');
+                return;
+            }
+            if (!validateNCF(ncf)) {
+                displayAlert('NCF Inválido', 'El NCF debe empezar con B o E y tener 11 o 13 caracteres en total.');
+                return;
+            }
         }
-        if (parseFloat(total) <= 0) {
-            Alert.alert('Error', 'El monto total debe ser mayor a cero.');
+
+        const numTotal = parseFloat(total);
+        if (isNaN(numTotal) || numTotal <= 0) {
+            displayAlert('Error', 'El monto total debe ser un número mayor a cero.');
             return;
         }
 
         if (Platform.OS === 'web') {
-            const confirmed = window.confirm('¿Desea registrar esta factura?');
-            if (confirmed) {
-                submitFactura();
-            }
+            submitFactura();
         } else {
             Alert.alert(
                 'Confirmación',
@@ -96,6 +165,7 @@ export default function NuevaFacturaScreen() {
                 valor: parseFloat(subtotal) || 0,
                 montoImpuestos: parseFloat(itbis) || 0,
                 total: parseFloat(total) || 0,
+                idClasegasto,
                 rnc,
                 nombre
             });
@@ -120,7 +190,8 @@ export default function NuevaFacturaScreen() {
                 msg = error.message;
             }
 
-            Alert.alert('Error', typeof msg === 'string' ? msg : JSON.stringify(msg));
+            const finalMsg = typeof msg === 'string' ? msg : JSON.stringify(msg);
+            displayAlert('Error', finalMsg);
         } finally {
             setLoading(false);
         }
@@ -157,16 +228,28 @@ export default function NuevaFacturaScreen() {
 
             {/* SECCION 2 */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Sección 2: Montos</Text>
+                <Text style={styles.sectionTitle}>Sección 2: Clasificación y Montos</Text>
 
-                <Text style={styles.label}>Subtotal</Text>
-                <TextInput style={styles.input} value={subtotal} onChangeText={setSubtotal} keyboardType="numeric" />
+                <Text style={styles.label}>Clase de Gasto (DGII)</Text>
+                <View style={styles.pickerContainer}>
+                    <Picker
+                        selectedValue={idClasegasto}
+                        onValueChange={(itemValue: string) => setIdClasegasto(itemValue)}
+                    >
+                        {clases.map(c => (
+                            <Picker.Item key={c.idClasegasto} label={c.claseGasto} value={c.idClasegasto} />
+                        ))}
+                    </Picker>
+                </View>
 
-                <Text style={styles.label}>ITBIS</Text>
-                <TextInput style={styles.input} value={itbis} onChangeText={setItbis} keyboardType="numeric" />
+                <Text style={styles.label}>Total Factura (Extrae Subtotal/ITBIS al digitar)</Text>
+                <TextInput style={[styles.input, styles.inputTotal]} value={total} onChangeText={handleTotalChange} keyboardType="numeric" placeholder="0.00" />
 
-                <Text style={styles.label}>Total (Auto)</Text>
-                <TextInput style={[styles.input, styles.inputTotal]} value={total} editable={false} />
+                <Text style={styles.label}>Subtotal (Altera ITBIS/Total al digitar)</Text>
+                <TextInput style={styles.input} value={subtotal} onChangeText={handleSubtotalChange} keyboardType="numeric" placeholder="0.00" />
+
+                <Text style={styles.label}>ITBIS (Altera Total al digitar)</Text>
+                <TextInput style={styles.input} value={itbis} onChangeText={handleItbisChange} keyboardType="numeric" placeholder="0.00" />
             </View>
 
             {/* SECCION 3 */}
@@ -256,5 +339,13 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontSize: 18,
         fontWeight: 'bold',
+    },
+    pickerContainer: {
+        backgroundColor: Colors.light.background,
+        borderWidth: 1,
+        borderColor: Colors.light.border,
+        borderRadius: 6,
+        marginBottom: 15,
+        overflow: 'hidden'
     }
 });

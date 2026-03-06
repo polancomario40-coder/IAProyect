@@ -69,6 +69,21 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// Global Exception Middleware for Auth
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (UnauthorizedAccessException ex)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        context.Response.ContentType = "application/json";
+        await context.Response.WriteAsJsonAsync(new { mensaje = ex.Message });
+    }
+});
+
 app.UseHttpsRedirection();
 app.UseCors("AllowAll");
 

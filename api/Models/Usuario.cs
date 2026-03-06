@@ -18,6 +18,9 @@ public class Usuario
     
     public bool Activo { get; set; }
     
+    [Column("esGrupo")]
+    public bool EsGrupo { get; set; }
+    
     public int Nivel { get; set; }
     
     [MaxLength(100)]

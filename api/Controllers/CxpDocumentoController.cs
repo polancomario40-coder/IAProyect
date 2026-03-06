@@ -20,6 +20,7 @@ public class FacturaRequest
     public decimal Total { get; set; }
     public string? RNC { get; set; }
     public string? Nombre { get; set; }
+    public string? IdClasegasto { get; set; }
 }
 
 [ApiController]
@@ -74,7 +75,32 @@ public class CxpDocumentoController : ControllerBase
 
         try
         {
-            var command = _erpDb.Database.GetDbConnection().CreateCommand();
+            await _erpDb.Database.OpenConnectionAsync();
+            var connection = _erpDb.Database.GetDbConnection();
+
+            using var transaction = connection.BeginTransaction();
+            var command = connection.CreateCommand();
+            command.Transaction = transaction;
+
+            var addParam = (string name, object? value) => {
+                var p = command.CreateParameter();
+                p.ParameterName = name;
+                p.Value = value ?? DBNull.Value;
+                command.Parameters.Add(p);
+            };
+
+            // 1. DUPLICATE CHECK
+            command.CommandText = "SELECT 1 FROM cxpDocumentos WHERE idSuplidor = @CheckIdSup AND Referencia = @CheckRef";
+            addParam("@CheckIdSup", request.IdSuplidor);
+            addParam("@CheckRef", refDefinitiva);
+
+            var exists = await command.ExecuteScalarAsync();
+            if (exists != null && exists != DBNull.Value)
+            {
+                return Conflict("Este Comprobante Fiscal ya fue registrado para este suplidor");
+            }
+
+            // 2. INSERT FACTURA
             command.CommandText = @"
                 INSERT INTO cxpDocumentos (
                     idTrans, Fecha, idSuplidor, Referencia, Valor, 
@@ -95,21 +121,12 @@ public class CxpDocumentoController : ControllerBase
                     1, 0, 'A', @Fecha, '2000201', 
                     '', 0, 0, 1, 1,
                     '', '', @CompFiscal, @GUIDDocumento, 
-                    '02', '1', 1, '1', 
+                    '02', @IdClasegasto, 1, '1', 
                     @RNC, @Nombre, @Vencimiento, @FechaEmision, 'COSTO',
                     4, 0, @Valor, 
                     0, 0, 0, 0,
                     '', '', '', ''
                 )";
-
-            _erpDb.Database.OpenConnection();
-
-            var addParam = (string name, object? value) => {
-                var p = command.CreateParameter();
-                p.ParameterName = name;
-                p.Value = value ?? DBNull.Value;
-                command.Parameters.Add(p);
-            };
 
             addParam("@Fecha", fechaActual);
             addParam("@IdSuplidor", request.IdSuplidor);
@@ -119,15 +136,16 @@ public class CxpDocumentoController : ControllerBase
             addParam("@Concepto", conceptoDefinitivo);
             addParam("@CompFiscal", ncfDefinitivo);
             addParam("@GUIDDocumento", guidDoc);
+            addParam("@IdClasegasto", string.IsNullOrEmpty(request.IdClasegasto) ? "1" : request.IdClasegasto);
             addParam("@RNC", rncDefinitivo);
             addParam("@Nombre", nombreDefinitivo);
-            
-            // Handle optional dates
             addParam("@Vencimiento", request.Vencimiento.HasValue ? request.Vencimiento.Value : fechaActual);
             addParam("@FechaEmision", request.FechaEmision);
 
             var resultId = await command.ExecuteScalarAsync();
             var finalId = Convert.ToInt32(resultId);
+
+            transaction.Commit();
 
             return Ok(new 
             {
@@ -135,13 +153,14 @@ public class CxpDocumentoController : ControllerBase
                 mensaje = "Factura registrada exitosamente con SQL Directo.",
                 idDocumento = finalId,
                 guidDocumento = guidDoc,
-                databaseDestino = _erpDb.Database.GetDbConnection().Database,
-                serverDestino = _erpDb.Database.GetDbConnection().DataSource
+                databaseDestino = connection.Database,
+                serverDestino = connection.DataSource
             });
         }
         catch (Exception ex)
         {
-            return BadRequest($"Error SQL directo al registrar: {ex.InnerException?.Message ?? ex.Message}");
+            var msg = ex.InnerException?.Message ?? ex.Message;
+            return BadRequest(new { mensaje = $"Error SQL directo al registrar: {msg}" });
         }
     }
 
