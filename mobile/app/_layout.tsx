@@ -33,7 +33,7 @@ function RootLayoutNav() {
     } else if (status === 'AUTHENTICATED_NO_COMPANY' && segments[0] !== 'empresa-selector') {
       router.replace('/empresa-selector');
     } else if (status === 'READY') {
-      if (segments[0] === 'login' || segments[0] === 'empresa-selector' || !segments[0] || segments[0] === 'index') {
+      if (segments[0] === 'login' || segments[0] === 'empresa-selector' || !segments[0]) {
         router.replace('/dashboard');
       }
     }

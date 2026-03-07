@@ -21,6 +21,9 @@ public class FacturaRequest
     public string? RNC { get; set; }
     public string? Nombre { get; set; }
     public string? IdClasegasto { get; set; }
+    public int IdMoneda { get; set; }
+    public int IdPagoForma { get; set; }
+    public bool EsServicio { get; set; }
 }
 
 [ApiController]
@@ -118,12 +121,12 @@ public class CxpDocumentoController : ControllerBase
                 VALUES (
                     13, @Fecha, @IdSuplidor, @Referencia, @Valor, 
                     @MontoImpuestos, 0, 0, @Concepto, 
-                    1, 0, 'A', @Fecha, '2000201', 
-                    '', 0, 0, 1, 1,
+                    @IdMoneda, 0, 'A', @Fecha, '2000201', 
+                    '', 0, 0, 0, 1,
                     '', '', @CompFiscal, @GUIDDocumento, 
                     '02', @IdClasegasto, 1, '1', 
                     @RNC, @Nombre, @Vencimiento, @FechaEmision, 'COSTO',
-                    4, 0, @Valor, 
+                    @IdPagoForma, @MontoFBienes, @MontoFServicios, 
                     0, 0, 0, 0,
                     '', '', '', ''
                 )";
@@ -134,6 +137,7 @@ public class CxpDocumentoController : ControllerBase
             addParam("@Valor", request.Valor);
             addParam("@MontoImpuestos", request.MontoImpuestos);
             addParam("@Concepto", conceptoDefinitivo);
+            addParam("@IdMoneda", request.IdMoneda);
             addParam("@CompFiscal", ncfDefinitivo);
             addParam("@GUIDDocumento", guidDoc);
             addParam("@IdClasegasto", string.IsNullOrEmpty(request.IdClasegasto) ? "1" : request.IdClasegasto);
@@ -141,6 +145,19 @@ public class CxpDocumentoController : ControllerBase
             addParam("@Nombre", nombreDefinitivo);
             addParam("@Vencimiento", request.Vencimiento.HasValue ? request.Vencimiento.Value : fechaActual);
             addParam("@FechaEmision", request.FechaEmision);
+            addParam("@IdPagoForma", request.IdPagoForma);
+            
+            // Logica Bienes/Servicios Distribuido
+            if (request.EsServicio)
+            {
+                addParam("@MontoFBienes", 0m);
+                addParam("@MontoFServicios", request.Valor);
+            }
+            else
+            {
+                addParam("@MontoFBienes", request.Valor);
+                addParam("@MontoFServicios", 0m);
+            }
 
             var resultId = await command.ExecuteScalarAsync();
             var finalId = Convert.ToInt32(resultId);

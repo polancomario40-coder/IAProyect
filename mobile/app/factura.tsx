@@ -3,12 +3,26 @@ import { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet, Alert,
 import { Picker } from '@react-native-picker/picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../services/api';
+import storageService from '../services/storage';
 import { Colors } from '../constants/Colors';
 
 interface ClaseGasto {
     idClasegasto: string;
     claseGasto: string;
 }
+
+interface Moneda {
+    idMoneda: number;
+    nombre: string;
+}
+
+interface FormaPago {
+    idPagoForma: number;
+    nombre: string;
+}
+
+const DEFAULT_MONEDA_ID = 1;
+const DEFAULT_PAGO_ID = 4;
 
 export default function NuevaFacturaScreen() {
     const params = useLocalSearchParams();
@@ -25,35 +39,67 @@ export default function NuevaFacturaScreen() {
     const [fechaVencimiento, setFechaVencimiento] = useState('');
     const [ncf, setNcf] = useState('');
     const [referencia, setReferencia] = useState('');
+    const [esServicio, setEsServicio] = useState<boolean>(false);
 
     // Seccion 2: Montos
     const [subtotal, setSubtotal] = useState('');
     const [itbis, setItbis] = useState('');
     const [total, setTotal] = useState('');
 
-    // Extra: ClaseGasto
+    // Extra: ClaseGasto, Moneda, y Forma Pago
     const [clases, setClases] = useState<ClaseGasto[]>([]);
     const [idClasegasto, setIdClasegasto] = useState('');
+
+    const [monedas, setMonedas] = useState<Moneda[]>([]);
+    const [idMoneda, setIdMoneda] = useState<number>(DEFAULT_MONEDA_ID);
+
+    const [formasPago, setFormasPago] = useState<FormaPago[]>([]);
+    const [idPagoForma, setIdPagoForma] = useState<number>(DEFAULT_PAGO_ID);
 
     // Seccion 3: Detalle
     const [concepto, setConcepto] = useState('');
 
     const [loading, setLoading] = useState(false);
 
-    // Cargar Catálogo DGII
+    // Cargar Catálogos DGII, Monedas y Formas de Pago
     useEffect(() => {
-        const fetchClases = async () => {
+        const fetchCatalogs = async () => {
             try {
-                const response = await api.get('/clasegasto');
-                setClases(response.data);
-                if (response.data.length > 0) {
-                    setIdClasegasto(response.data[0].idClasegasto);
+                // Fetch DGII
+                const resClase = await api.get('/clasegasto');
+                setClases(resClase.data);
+
+                const lastClase = await storageService.getItem('@last_clasegasto');
+                if (lastClase) {
+                    setIdClasegasto(lastClase);
+                } else if (resClase.data.length > 0) {
+                    setIdClasegasto(resClase.data[0].idClasegasto);
                 }
+
+                // Fetch Monedas
+                const resMonedas = await api.get('/monedas');
+                setMonedas(resMonedas.data);
+
+                // Fetch Formas Pago
+                const resFormas = await api.get('/formaspago');
+                setFormasPago(resFormas.data);
+
+                // Rehidratar Sticky Settings desde Storage
+                const lastMoneda = await storageService.getItem('@last_moneda');
+                if (lastMoneda) {
+                    setIdMoneda(Number(lastMoneda));
+                }
+
+                const lastPago = await storageService.getItem('@last_pagoforma');
+                if (lastPago) {
+                    setIdPagoForma(Number(lastPago));
+                }
+
             } catch (error) {
-                console.error('Error fetching clase gasto', error);
+                console.error('Error fetching catalogs', error);
             }
         };
-        fetchClases();
+        fetchCatalogs();
     }, []);
 
     // Auto-calcular Fecha de Vencimiento
@@ -96,6 +142,22 @@ export default function NuevaFacturaScreen() {
         const numSub = parseFloat(subtotal) || 0;
         const numItbis = parseFloat(val) || 0;
         setTotal((numSub + numItbis).toFixed(2));
+    };
+
+    // Sticky Settings Handlers
+    const handleClasegastoChange = async (val: string) => {
+        setIdClasegasto(val);
+        await storageService.setItem('@last_clasegasto', val);
+    };
+
+    const handleMonedaChange = async (val: number) => {
+        setIdMoneda(val);
+        await storageService.setItem('@last_moneda', val.toString());
+    };
+
+    const handlePagoFormaChange = async (val: number) => {
+        setIdPagoForma(val);
+        await storageService.setItem('@last_pagoforma', val.toString());
     };
 
     const validateNCF = (val: string) => {
@@ -162,10 +224,13 @@ export default function NuevaFacturaScreen() {
                 referencia,
                 compFiscal: ncf,
                 concepto,
+                esServicio,
                 valor: parseFloat(subtotal) || 0,
                 montoImpuestos: parseFloat(itbis) || 0,
                 total: parseFloat(total) || 0,
                 idClasegasto,
+                idMoneda,
+                idPagoForma,
                 rnc,
                 nombre
             });
@@ -207,6 +272,22 @@ export default function NuevaFacturaScreen() {
                 <Text style={styles.label}>Suplidor</Text>
                 <TextInput style={[styles.input, styles.inputReadonly]} value={nombre} editable={false} />
 
+                <Text style={styles.label}>Tipo de Factura</Text>
+                <View style={styles.toggleContainer}>
+                    <TouchableOpacity
+                        style={[styles.toggleButton, !esServicio && styles.toggleButtonActive]}
+                        onPress={() => setEsServicio(false)}
+                    >
+                        <Text style={[styles.toggleText, !esServicio && styles.toggleTextActive]}>📦 Bienes</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.toggleButton, esServicio && styles.toggleButtonActive]}
+                        onPress={() => setEsServicio(true)}
+                    >
+                        <Text style={[styles.toggleText, esServicio && styles.toggleTextActive]}>🛠️ Servicios</Text>
+                    </TouchableOpacity>
+                </View>
+
                 <Text style={styles.label}>Fecha Emisión (YYYY-MM-DD)</Text>
                 <TextInput style={styles.input} value={fechaEmision} onChangeText={setFechaEmision} />
 
@@ -234,11 +315,25 @@ export default function NuevaFacturaScreen() {
                 <View style={styles.pickerContainer}>
                     <Picker
                         selectedValue={idClasegasto}
-                        onValueChange={(itemValue: string) => setIdClasegasto(itemValue)}
+                        onValueChange={(itemValue: string) => handleClasegastoChange(itemValue)}
                     >
                         {clases.map(c => (
                             <Picker.Item key={c.idClasegasto} label={c.claseGasto} value={c.idClasegasto} />
                         ))}
+                    </Picker>
+                </View>
+
+                <Text style={styles.label}>Moneda</Text>
+                <View style={styles.pickerContainer}>
+                    <Picker selectedValue={idMoneda} onValueChange={(val) => handleMonedaChange(Number(val))}>
+                        {monedas.map(m => <Picker.Item key={m.idMoneda} label={m.nombre} value={m.idMoneda} />)}
+                    </Picker>
+                </View>
+
+                <Text style={styles.label}>Forma de Pago</Text>
+                <View style={styles.pickerContainer}>
+                    <Picker selectedValue={idPagoForma} onValueChange={(val) => handlePagoFormaChange(Number(val))}>
+                        {formasPago.map(f => <Picker.Item key={f.idPagoForma} label={f.nombre} value={f.idPagoForma} />)}
                     </Picker>
                 </View>
 
@@ -347,5 +442,31 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         marginBottom: 15,
         overflow: 'hidden'
+    },
+    toggleContainer: {
+        flexDirection: 'row',
+        marginBottom: 15,
+        borderRadius: 8,
+        backgroundColor: Colors.light.card,
+        borderWidth: 1,
+        borderColor: Colors.light.primary,
+        overflow: 'hidden'
+    },
+    toggleButton: {
+        flex: 1,
+        paddingVertical: 12,
+        alignItems: 'center',
+        backgroundColor: Colors.light.card,
+    },
+    toggleButtonActive: {
+        backgroundColor: Colors.light.primary,
+    },
+    toggleText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: Colors.light.primary,
+    },
+    toggleTextActive: {
+        color: '#FFF',
     }
 });
