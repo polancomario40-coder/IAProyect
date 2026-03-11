@@ -14,17 +14,15 @@ public class CfgEmpresa
     public string Empresa { get; set; }
     
     [MaxLength(20)]
-    public string RNC { get; set; }
+    public string? RNC { get; set; }
     
-    [Required]
     [MaxLength(50)]
-    public string Servidor { get; set; }
+    public string? Servidor { get; set; }
     
-    [Required]
     [MaxLength(50)]
-    public string BaseDatos { get; set; }
+    public string? BaseDatos { get; set; }
     
-    public bool Trusted { get; set; }
+    public bool? Trusted { get; set; }
     
     [MaxLength(50)]
     public string? UserId { get; set; }

@@ -85,6 +85,21 @@ app.Use(async (context, next) =>
 });
 
 app.UseHttpsRedirection();
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var exceptionHandlerPathFeature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
+        if (exceptionHandlerPathFeature?.Error is Exception ex)
+        {
+            Console.WriteLine($"\n\n[GLOBAL CRASH]: {ex.Message}");
+            Console.WriteLine($"[INNER CRASH]: {ex.InnerException?.Message}\n\n");
+        }
+        context.Response.StatusCode = 500;
+        await context.Response.WriteAsJsonAsync(new { error = "Internal server error." });
+    });
+});
+
 app.UseCors("AllowAll");
 
 app.UseAuthentication();

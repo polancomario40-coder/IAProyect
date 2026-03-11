@@ -22,7 +22,7 @@ public class SuplidoresController : ControllerBase
     {
         // Se ejecuta utilizando la base de datos resuelta dinámicamente
         var suplidores = await _erpDb.CxpSuplidores
-            .Where(s => s.Estatus == true && s.MostrarEnCXP == true)
+            .Where(s => (s.Estatus ?? false) == true && (s.MostrarEnCXP ?? false) == true)
             .Select(s => new
             {
                 s.IdSuplidor,
@@ -42,6 +42,39 @@ public class SuplidoresController : ControllerBase
             .ToListAsync();
 
         return Ok(suplidores);
+    }
+
+    [HttpGet("test-conexion")]
+    public async Task<IActionResult> TestConexion()
+    {
+        try
+        {
+            var provider = HttpContext.RequestServices.GetRequiredService<CxpApi.Providers.IErpConnectionProvider>();
+            var cx = provider.GetConnectionString();
+            
+            using var conn = new Microsoft.Data.SqlClient.SqlConnection(cx);
+            await conn.OpenAsync();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT TOP 1 idSuplidor, Nombre FROM cxpsuplidores";
+            using var reader = await cmd.ExecuteReaderAsync();
+            var result = "";
+            if (await reader.ReadAsync())
+            {
+                result = reader["Nombre"].ToString();
+            }
+            return Ok(new { success = true, connectionString = cx, suplidor1 = result });
+        }
+        catch (Exception ex)
+        {
+            var messages = new List<string>();
+            var currentEx = ex;
+            while (currentEx != null)
+            {
+                messages.Add(currentEx.Message);
+                currentEx = currentEx.InnerException;
+            }
+            return BadRequest(new { success = false, errors = messages });
+        }
     }
 
     public class NuevoSuplidorRequest

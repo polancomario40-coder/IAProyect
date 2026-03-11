@@ -24,6 +24,7 @@ public class FacturaRequest
     public int IdMoneda { get; set; }
     public int IdPagoForma { get; set; }
     public bool EsServicio { get; set; }
+    public string? FotoBase64 { get; set; }
 }
 
 [ApiController]
@@ -161,6 +162,42 @@ public class CxpDocumentoController : ControllerBase
 
             var resultId = await command.ExecuteScalarAsync();
             var finalId = Convert.ToInt32(resultId);
+
+            // 3. INSERT IMAGEN (Si existe)
+            if (!string.IsNullOrEmpty(request.FotoBase64))
+            {
+                // Limpiar prefijo data:image/xxx;base64, si el frontend lo envió
+                var base64Data = request.FotoBase64;
+                if (base64Data.Contains(","))
+                {
+                    base64Data = base64Data.Substring(base64Data.IndexOf(",") + 1);
+                }
+
+                byte[] imageBytes = Convert.FromBase64String(base64Data);
+
+                var imgCommand = connection.CreateCommand();
+                imgCommand.Transaction = transaction;
+                imgCommand.CommandText = @"
+                    INSERT INTO ImgImagen (
+                        idImagen, idDocumento, imagen, Fecha, TipoDoc, esPDF
+                    ) VALUES (
+                        @IdImagen, @IdDocumento, @Imagen, @FechaImg, 'FacturaCXP', 0
+                    )";
+
+                var addImgParam = (string name, object? value) => {
+                    var p = imgCommand.CreateParameter();
+                    p.ParameterName = name;
+                    p.Value = value ?? DBNull.Value;
+                    imgCommand.Parameters.Add(p);
+                };
+
+                addImgParam("@IdImagen", Guid.NewGuid());
+                addImgParam("@IdDocumento", guidDoc);
+                addImgParam("@Imagen", imageBytes);
+                addImgParam("@FechaImg", DateTime.Now);
+
+                await imgCommand.ExecuteNonQueryAsync();
+            }
 
             transaction.Commit();
 

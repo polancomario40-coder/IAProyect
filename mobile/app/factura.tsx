@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Platform, Image } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Picker } from '@react-native-picker/picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../services/api';
@@ -58,6 +60,7 @@ export default function NuevaFacturaScreen() {
 
     // Seccion 3: Detalle
     const [concepto, setConcepto] = useState('');
+    const [fotoFactura, setFotoFactura] = useState<string | null>(null);
 
     const [loading, setLoading] = useState(false);
 
@@ -174,6 +177,58 @@ export default function NuevaFacturaScreen() {
         }
     };
 
+    const procesarImagen = async (uri: string) => {
+        try {
+            const manipResult = await ImageManipulator.manipulateAsync(
+                uri,
+                [{ resize: { width: 1024 } }],
+                { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+            );
+            if (manipResult.base64) {
+                setFotoFactura(manipResult.base64);
+            }
+        } catch (error) {
+            displayAlert('Error', 'No se pudo procesar la imagen.');
+            console.error(error);
+        }
+    };
+
+    const handleTomarFoto = async () => {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+            displayAlert('Permiso Denegado', 'Se necesita acceso a la cámara para tomar fotos.');
+            return;
+        }
+
+        const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            allowsEditing: false,
+            quality: 1, // Will compress later down the pipeline with manipulator
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+            await procesarImagen(result.assets[0].uri);
+        }
+    };
+
+    const handleSeleccionarGaleria = async () => {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+            displayAlert('Permiso Denegado', 'Se necesita acceso a la galería.');
+            return;
+        }
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: false,
+            quality: 1,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+            await procesarImagen(result.assets[0].uri);
+        }
+    };
+
     const handleGuardar = async () => {
         if (!referencia || referencia.trim() === '') {
             displayAlert('Error', 'Debe ingresar el número de factura (Referencia).');
@@ -232,7 +287,8 @@ export default function NuevaFacturaScreen() {
                 idMoneda,
                 idPagoForma,
                 rnc,
-                nombre
+                nombre,
+                fotoBase64: fotoFactura
             });
 
             router.replace({
@@ -357,6 +413,33 @@ export default function NuevaFacturaScreen() {
                     onChangeText={setConcepto}
                     multiline
                 />
+
+                <Text style={[styles.sectionTitle, { marginTop: 15 }]}>Adjuntos</Text>
+                {!fotoFactura ? (
+                    <View style={styles.attachmentButtons}>
+                        <TouchableOpacity style={styles.buttonSecondary} onPress={handleTomarFoto}>
+                            <Text style={styles.buttonTextSecondary}>📸 Escanear Factura</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.buttonSecondary, { marginTop: 10 }]} onPress={handleSeleccionarGaleria}>
+                            <Text style={styles.buttonTextSecondary}>🖼️ Seleccionar de Galería</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <View style={styles.thumbnailContainer}>
+                        <Image
+                            source={{ uri: `data:image/jpeg;base64,${fotoFactura}` }}
+                            style={styles.thumbnail}
+                        />
+                        <View style={styles.thumbnailActions}>
+                            <TouchableOpacity style={[styles.buttonSecondary, { flex: 1, marginRight: 5 }]} onPress={handleTomarFoto}>
+                                <Text style={styles.buttonTextSecondary}>🔄 Retomar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.buttonDanger, { flex: 1, marginLeft: 5 }]} onPress={() => setFotoFactura(null)}>
+                                <Text style={styles.buttonTextSecondary}>🗑️ Eliminar</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
             </View>
 
             <TouchableOpacity
@@ -468,5 +551,46 @@ const styles = StyleSheet.create({
     },
     toggleTextActive: {
         color: '#FFF',
+    },
+    attachmentButtons: {
+        marginBottom: 5,
+    },
+    buttonSecondary: {
+        backgroundColor: Colors.light.card,
+        borderWidth: 1,
+        borderColor: Colors.light.primary,
+        padding: 15,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    buttonDanger: {
+        backgroundColor: Colors.light.card,
+        borderWidth: 1,
+        borderColor: Colors.light.danger,
+        padding: 15,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    buttonTextSecondary: {
+        color: Colors.light.primary,
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    thumbnailContainer: {
+        alignItems: 'center',
+        marginBottom: 5,
+    },
+    thumbnail: {
+        width: 200,
+        height: 250,
+        borderRadius: 8,
+        marginBottom: 10,
+        resizeMode: 'contain',
+        backgroundColor: '#E5E7EB',
+    },
+    thumbnailActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        width: '100%',
     }
 });

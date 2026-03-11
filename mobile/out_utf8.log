@@ -1,0 +1,70 @@
+﻿Starting project at C:\DEV\IAProyect\CXP\mobile
+npx : PluginError: Package 
+"expo-web-browser" does 
+not contain a valid config 
+plugin.
+At line:1 char:1
++ npx expo start -c > 
+out.log 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (Plu  
+  ginError: Pa... config   
+  plugin.:String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+Learn more: https://docs.ex
+po.dev/guides/config-plugin
+s/#creating-a-plugin
+
+Cannot use import 
+statement outside a module
+C:\DEV\IAProyect\CXP\mobile
+\node_modules\expo-web-brow
+ser\build\WebBrowser.js:1
+import { 
+UnavailabilityError } from 
+'expo-modules-core';
+^^^^^^
+
+SyntaxError: Cannot use 
+import statement outside a 
+module
+    at 
+internalCompileFunction 
+(node:internal/vm:77:18)
+    at wrapSafe (node:inter
+nal/modules/cjs/loader:1288
+:20)
+    at Module._compile (nod
+e:internal/modules/cjs/load
+er:1340:27)
+    at 
+Module._extensions..js (nod
+e:internal/modules/cjs/load
+er:1435:10)
+    at Module.load (node:in
+ternal/modules/cjs/loader:1
+207:32)
+    at Module._load (node:i
+nternal/modules/cjs/loader:
+1023:12)
+    at Module.require (node
+:internal/modules/cjs/loade
+r:1235:19)
+    at require (node:intern
+al/modules/helpers:176:18)
+    at requirePluginFile (C
+:\DEV\IAProyect\CXP\mobile\
+node_modules\@expo\config-p
+lugins\build\utils\plugin-r
+esolver.js:207:12)
+    at resolveConfigPluginF
+unctionWithInfo (C:\DEV\IAP
+royect\CXP\mobile\node_modu
+les\@expo\config-plugins\bu
+ild\utils\plugin-resolver.j
+s:148:14)
