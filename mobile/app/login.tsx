@@ -1,5 +1,6 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform, Dimensions, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Dimensions, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
@@ -51,7 +52,7 @@ export default function LoginScreen() {
                             resizeMode="contain"
                         />
                     </View>
-                    <Text style={styles.title}>CXPay Pro</Text>
+                    <Text style={styles.title}>Aplicación Móvil</Text>
                     <Text style={styles.subtitle}>Iniciar Sesión</Text>
 
                     <View style={styles.form}>
@@ -115,11 +116,12 @@ const styles = StyleSheet.create({
         height: 180,
     },
     title: {
-        fontSize: 32,
-        fontWeight: 'bold',
+        fontSize: 24,
+        fontWeight: '500',
         color: Colors.light.primary,
         textAlign: 'center',
         marginBottom: 5,
+        letterSpacing: 1,
     },
     subtitle: {
         fontSize: 18,
