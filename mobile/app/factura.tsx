@@ -311,7 +311,9 @@ export default function NuevaFacturaScreen() {
                 idPagoForma,
                 rnc,
                 nombre,
-                fotoBase64: fotoFactura
+                fotoBase64: fotoFactura,
+                idtrans: 1,
+                idTrans: 1
             });
 
             router.replace({

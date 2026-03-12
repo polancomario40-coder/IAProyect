@@ -25,6 +25,7 @@ public class FacturaRequest
     public int IdPagoForma { get; set; }
     public bool EsServicio { get; set; }
     public string? FotoBase64 { get; set; }
+    public int idTrans { get; set; } = 1;
 }
 
 [ApiController]
@@ -120,7 +121,7 @@ public class CxpDocumentoController : ControllerBase
                 ) 
                 OUTPUT INSERTED.idDocumento
                 VALUES (
-                    13, @Fecha, @IdSuplidor, @Referencia, @Valor, 
+                    @IdTrans, @Fecha, @IdSuplidor, @Referencia, @Valor, 
                     @MontoImpuestos, 0, 0, @Concepto, 
                     @IdMoneda, 0, 'A', @Fecha, '2000201', 
                     '', 0, 0, 0, 1,
@@ -132,6 +133,7 @@ public class CxpDocumentoController : ControllerBase
                     '', '', '', ''
                 )";
 
+            addParam("@IdTrans", request.idTrans);
             addParam("@Fecha", fechaActual);
             addParam("@IdSuplidor", request.IdSuplidor);
             addParam("@Referencia", refDefinitiva);
