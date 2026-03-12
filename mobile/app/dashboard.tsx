@@ -30,7 +30,7 @@ export default function DashboardScreen() {
 
                 <TouchableOpacity
                     style={styles.menuItemOutline}
-                // onPress={() => router.push('/registradas')} // Para futuro
+                    onPress={() => router.push('/registradas')}
                 >
                     <Text style={styles.menuTextOutline}>📄 Facturas Registradas</Text>
                 </TouchableOpacity>

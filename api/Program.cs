@@ -69,22 +69,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-// Global Exception Middleware for Auth
-app.Use(async (context, next) =>
-{
-    try
-    {
-        await next();
-    }
-    catch (UnauthorizedAccessException ex)
-    {
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        context.Response.ContentType = "application/json";
-        await context.Response.WriteAsJsonAsync(new { mensaje = ex.Message });
-    }
-});
-
-app.UseHttpsRedirection();
+// Global Exception Middleware
 app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
@@ -94,7 +79,16 @@ app.UseExceptionHandler(errorApp =>
         {
             Console.WriteLine($"\n\n[GLOBAL CRASH]: {ex.Message}");
             Console.WriteLine($"[INNER CRASH]: {ex.InnerException?.Message}\n\n");
+
+            if (ex is UnauthorizedAccessException)
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsJsonAsync(new { mensaje = ex.Message });
+                return;
+            }
         }
+        
         context.Response.StatusCode = 500;
         await context.Response.WriteAsJsonAsync(new { error = "Internal server error." });
     });

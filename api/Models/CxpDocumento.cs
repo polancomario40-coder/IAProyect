@@ -65,7 +65,7 @@ public class CxpDocumento
     public bool PendEnvioEcf { get; set; } = true;
 
     // Campos faltantes obligatorios heredados de Delphi
-    public int idTrans { get; set; } = 13; // Factura de Compra
+    public int idTrans { get; set; } = 1; // Factura de Compra
     public int idMoneda { get; set; } = 1; // DOP
     public short Dias { get; set; } = 0;
     public bool CodifManual { get; set; } = false;

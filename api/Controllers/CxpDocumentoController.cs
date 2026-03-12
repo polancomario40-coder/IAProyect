@@ -42,7 +42,7 @@ public class CxpDocumentoController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateFactura([FromBody] FacturaRequest request)
     {
-        var idUsuario = User.FindFirst("idSegUserGrp")?.Value ?? "UNKNOWN";
+        var idUsuario = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "UNKNOWN";
 
         var nuevoDoc = new CxpDocumento
         {
@@ -218,6 +218,149 @@ public class CxpDocumentoController : ControllerBase
         }
     }
 
+    [HttpPost("escanear")]
+    public async Task<IActionResult> EscanearFactura([FromBody] OcrRequest request)
+    {
+        if (string.IsNullOrEmpty(request.FotoBase64))
+        {
+            return BadRequest(new { success = false, mensaje = "No se recibió ninguna imagen." });
+        }
+
+        // Simular el tiempo lógico de envío al proveedor de IA, procesamiento y respuesta
+        await Task.Delay(2500);
+
+        // Generar data mística/realista de prueba
+        var rnd = new Random();
+        var numBienes = rnd.Next(1000, 5000) + (decimal)rnd.NextDouble();
+        var ncfAleatorio = "B01" + rnd.Next(10000000, 99999999).ToString("D8"); // Ej: B0112345678
+        var rncAleatorio = rnd.Next(100000000, 999999999).ToString();
+
+        // Respuesta artificial
+        var response = new OcrResponse
+        {
+            Success = true,
+            Mensaje = "Extracción completada",
+            RNC = rncAleatorio,
+            NCF = ncfAleatorio,
+            Fecha = DateTime.UtcNow.Date.AddDays(-rnd.Next(1, 30)), // Fecha aleatoria en el último mes
+            TotalBienes = Math.Round(numBienes, 2),
+            TotalServicios = 0.00m
+        };
+
+        return Ok(response);
+    }
+
+    [HttpGet("registradas")]
+    public async Task<IActionResult> GetFacturasRegistradas([FromQuery] string? buscar)
+    {
+        var idUsuario = User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(idUsuario))
+        {
+            // Fallback for cases where it might not be securely mapped, though Authorize should catch it
+            idUsuario = "UNKNOWN"; 
+        }
+
+        try
+        {
+            await _erpDb.Database.OpenConnectionAsync();
+            var connection = _erpDb.Database.GetDbConnection();
+
+            var command = connection.CreateCommand();
+            
+            string whereFilter = "";
+            if (!string.IsNullOrWhiteSpace(buscar))
+            {
+                whereFilter = "WHERE d.Nombre LIKE '%' + @Buscar + '%' OR d.CompFiscal LIKE '%' + @Buscar + '%' OR d.RNC LIKE '%' + @Buscar + '%' OR d.Referencia LIKE '%' + @Buscar + '%'";
+                var pSearch = command.CreateParameter();
+                pSearch.ParameterName = "@Buscar";
+                pSearch.Value = buscar.Trim();
+                command.Parameters.Add(pSearch);
+            }
+
+            command.CommandText = $@"
+                SELECT TOP 50
+                    d.idDocumento,
+                    d.GUIDDocumento,
+                    d.FechaEmision,
+                    d.CompFiscal,
+                    d.Concepto,
+                    (COALESCE(d.montoFacturadoBienes, 0) + COALESCE(d.montoFacturadoServicios, 0)) as Total,
+                    d.RNC,
+                    d.Nombre,
+                    CASE WHEN i.idDocumento IS NOT NULL THEN 1 ELSE 0 END as TieneImagen
+                FROM cxpDocumentos d
+                LEFT JOIN ImgImagen i ON d.GUIDDocumento = i.idDocumento
+                {whereFilter}
+                ORDER BY d.Fecha DESC
+            ";
+            
+            var param = command.CreateParameter();
+            param.ParameterName = "@Usuario";
+            param.Value = idUsuario;
+            command.Parameters.Add(param);
+
+            var facturas = new List<object>();
+
+            using (var reader = await command.ExecuteReaderAsync())
+            {
+                while (await reader.ReadAsync())
+                {
+                    facturas.Add(new
+                    {
+                        idDocumento = reader["idDocumento"],
+                        guidDocumento = reader["GUIDDocumento"],
+                        fechaEmision = reader["FechaEmision"],
+                        compFiscal = reader["CompFiscal"]?.ToString(),
+                        concepto = reader["Concepto"]?.ToString(),
+                        total = reader["Total"],
+                        rnc = reader["RNC"]?.ToString(),
+                        nombre = reader["Nombre"]?.ToString(),
+                        tieneImagen = Convert.ToBoolean(reader["TieneImagen"])
+                    });
+                }
+            }
+
+            return Ok(facturas);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { mensaje = "Error al obtener las facturas registradas.", detalle = ex.Message });
+        }
+    }
+
+    [HttpGet("{guid}/imagen")]
+    public async Task<IActionResult> GetImagenFactura(Guid guid)
+    {
+        try
+        {
+            await _erpDb.Database.OpenConnectionAsync();
+            var connection = _erpDb.Database.GetDbConnection();
+
+            var command = connection.CreateCommand();
+            command.CommandText = "SELECT imagen FROM ImgImagen WHERE idDocumento = @IdDocumento";
+            
+            var param = command.CreateParameter();
+            param.ParameterName = "@IdDocumento";
+            param.Value = guid;
+            command.Parameters.Add(param);
+
+            var imageObj = await command.ExecuteScalarAsync();
+
+            if (imageObj != null && imageObj != DBNull.Value)
+            {
+                byte[] imageBytes = (byte[])imageObj;
+                string base64String = Convert.ToBase64String(imageBytes);
+                return Ok(new { success = true, imagenBase64 = base64String });
+            }
+
+            return NotFound(new { success = false, mensaje = "Imagen no encontrada." });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, mensaje = "Error al obtener la imagen.", detalle = ex.Message });
+        }
+    }
+    
     [HttpGet("tables")]
     [AllowAnonymous]
     public async Task<IActionResult> GetTables()

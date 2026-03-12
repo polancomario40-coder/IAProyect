@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, SafeAreaView, KeyboardAvoidingView, Platform, Dimensions, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import api from '../services/api';
 import { AuthContext } from '../context/AuthContext';
@@ -44,7 +44,14 @@ export default function LoginScreen() {
                 style={styles.keyboardView}
             >
                 <View style={styles.container}>
-                    <Text style={styles.title}>Dataflow CXP</Text>
+                    <View style={styles.logoContainer}>
+                        <Image 
+                            source={require('../assets/images/logo-sade.png')} 
+                            style={styles.logo}
+                            resizeMode="contain"
+                        />
+                    </View>
+                    <Text style={styles.title}>CXPay Pro</Text>
                     <Text style={styles.subtitle}>Iniciar Sesión</Text>
 
                     <View style={styles.form}>
@@ -99,10 +106,18 @@ const styles = StyleSheet.create({
         width: Platform.OS === 'web' ? Math.min(width, 400) : '100%',
         alignSelf: 'center',
     },
+    logoContainer: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    logo: {
+        width: 540,
+        height: 180,
+    },
     title: {
         fontSize: 32,
         fontWeight: 'bold',
-        color: '#1F3A8A',
+        color: Colors.light.primary,
         textAlign: 'center',
         marginBottom: 5,
     },
@@ -110,7 +125,7 @@ const styles = StyleSheet.create({
         fontSize: 18,
         color: Colors.light.textMuted,
         textAlign: 'center',
-        marginBottom: 40,
+        marginBottom: 30,
         fontWeight: '600',
     },
     form: {
@@ -132,15 +147,15 @@ const styles = StyleSheet.create({
         }),
     },
     button: {
-        backgroundColor: '#1F3A8A',
+        backgroundColor: Colors.light.primary,
         padding: 15,
         borderRadius: 8,
         alignItems: 'center',
         marginTop: 10,
         ...Platform.select({
-            ios: { shadowColor: '#1F3A8A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
+            ios: { shadowColor: Colors.light.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
             android: { elevation: 4 },
-            web: { boxShadow: '0px 4px 5px rgba(31,58,138,0.3)' } as any,
+            web: { boxShadow: `0px 4px 5px ${Colors.light.primary}4D` } as any,
         }),
     },
     buttonDisabled: {

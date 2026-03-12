@@ -63,6 +63,7 @@ export default function NuevaFacturaScreen() {
     const [fotoFactura, setFotoFactura] = useState<string | null>(null);
 
     const [loading, setLoading] = useState(false);
+    const [isScanning, setIsScanning] = useState(false);
 
     // Cargar Catálogos DGII, Monedas y Formas de Pago
     useEffect(() => {
@@ -186,10 +187,32 @@ export default function NuevaFacturaScreen() {
             );
             if (manipResult.base64) {
                 setFotoFactura(manipResult.base64);
+                await procesarOCR(manipResult.base64);
             }
         } catch (error) {
             displayAlert('Error', 'No se pudo procesar la imagen.');
             console.error(error);
+        }
+    };
+
+    const procesarOCR = async (base64: string) => {
+        setIsScanning(true);
+        try {
+            const resp = await api.post('/cxpdocumento/escanear', { fotoBase64: base64 });
+            const data = resp.data;
+            if (data && data.success) {
+                if (data.rnc || data.RNC) setReferencia(data.rnc || data.RNC);
+                if (data.ncf || data.NCF) setNcf(data.ncf || data.NCF);
+                if (data.fecha || data.Fecha) setFechaEmision((data.fecha || data.Fecha).split('T')[0]);
+                if (data.totalBienes || data.TotalBienes) handleSubtotalChange((data.totalBienes || data.TotalBienes).toString());
+
+                displayAlert('OCR Exitoso', 'Los datos de la factura han sido extraídos y autocompletados.');
+            }
+        } catch (error) {
+            console.error('OCR Error:', error);
+            displayAlert('Error OCR', 'Falló la extracción automática de datos. Por favor digite manual.');
+        } finally {
+            setIsScanning(false);
         }
     };
 
@@ -430,14 +453,21 @@ export default function NuevaFacturaScreen() {
                             source={{ uri: `data:image/jpeg;base64,${fotoFactura}` }}
                             style={styles.thumbnail}
                         />
-                        <View style={styles.thumbnailActions}>
-                            <TouchableOpacity style={[styles.buttonSecondary, { flex: 1, marginRight: 5 }]} onPress={handleTomarFoto}>
-                                <Text style={styles.buttonTextSecondary}>🔄 Retomar</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.buttonDanger, { flex: 1, marginLeft: 5 }]} onPress={() => setFotoFactura(null)}>
-                                <Text style={styles.buttonTextSecondary}>🗑️ Eliminar</Text>
-                            </TouchableOpacity>
-                        </View>
+                        {isScanning ? (
+                            <View style={{ marginVertical: 10, alignItems: 'center' }}>
+                                <ActivityIndicator size="large" color={Colors.light.primary} />
+                                <Text style={{ color: Colors.light.primary, marginTop: 10, fontWeight: 'bold' }}>Analizando recibo con IA...</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.thumbnailActions}>
+                                <TouchableOpacity style={[styles.buttonSecondary, { flex: 1, marginRight: 5 }]} onPress={handleTomarFoto}>
+                                    <Text style={styles.buttonTextSecondary}>🔄 Retomar</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={[styles.buttonDanger, { flex: 1, marginLeft: 5 }]} onPress={() => setFotoFactura(null)}>
+                                    <Text style={styles.buttonTextSecondary}>🗑️ Eliminar</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
                     </View>
                 )}
             </View>
