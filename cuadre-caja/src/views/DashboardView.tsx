@@ -226,7 +226,7 @@ export default function DashboardView() {
     localStorage.removeItem('empresa');
     localStorage.removeItem('usuario');
     // Redirect to Auth Center SSO
-    window.location.href = `http://localhost:5174/?client_id=cuadre-caja`;
+    window.location.href = `https://auth.sade.com.do/?client_id=cuadre-caja`;
   };
 
   // Group division for calculations
