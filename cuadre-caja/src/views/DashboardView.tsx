@@ -71,9 +71,12 @@ export default function DashboardView() {
       } catch (e) {}
     }
 
-    // Default dates: today
-    const today = new Date();
-    const formattedToday = today.toISOString().split('T')[0];
+    // Default dates: today in local timezone
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const formattedToday = `${year}-${month}-${day}`;
 
     setDesde(formattedToday);
     setHasta(formattedToday);
@@ -161,37 +164,7 @@ export default function DashboardView() {
       setRecords(response.data || []);
     } catch (err: any) {
       console.error('Error fetching cash reconciliation data', err);
-      setErrorMsg('No se pudo conectar a la base de datos de Cuadre. Mostrando datos demostrativos en su lugar.');
-      
-      const mockData: CuadreRecord[] = [
-        // Facturas (orden: 1)
-        { orden: 1, usuario: 'admin', idfactura: null, registro: 'Factura', numero: '00144483', cliente: 'NURY E. CASTILLO MONTILLA', fecha: '2026-05-19T10:15:00', moneda: 'RD$', efectivo: 0.00, tarjeta: 8500.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 8500.00, recibos: 0.00, gastos: 0.00 },
-        { orden: 1, usuario: 'admin', idfactura: null, registro: 'Factura', numero: '00144485', cliente: 'ARMANDO RODRIGUEZ', fecha: '2026-05-19T10:30:00', moneda: 'RD$', efectivo: 0.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 4500.00, factura: 4500.00, recibos: 0.00, gastos: 0.00 },
-        { orden: 1, usuario: 'admin', idfactura: null, registro: 'Factura', numero: '00144494', cliente: 'NAYELI CEDEÑO', fecha: '2026-05-19T10:45:00', moneda: 'RD$', efectivo: 0.00, tarjeta: 6200.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 6200.00, recibos: 0.00, gastos: 0.00 },
-        { orden: 1, usuario: 'admin', idfactura: null, registro: 'Factura', numero: '00144496', cliente: 'RAFAEL CEDEÑO JIMENEZ', fecha: '2026-05-19T11:00:00', moneda: 'RD$', efectivo: 200.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 200.00, recibos: 0.00, gastos: 0.00 },
-        { orden: 1, usuario: 'admin', idfactura: null, registro: 'Factura', numero: '00144498', cliente: 'EPIFANIA BERROA NUÑEZ', fecha: '2026-05-19T11:15:00', moneda: 'RD$', efectivo: 0.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 5600.00, factura: 5600.00, recibos: 0.00, gastos: 0.00 },
-        { orden: 1, usuario: 'admin', idfactura: null, registro: 'Factura', numero: '00144501', cliente: 'CLIENTE GENERICO', fecha: '2026-05-19T11:30:00', moneda: 'RD$', efectivo: 300.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 300.00, recibos: 0.00, gastos: 0.00 },
-        { orden: 1, usuario: 'admin', idfactura: null, registro: 'Factura', numero: '00144503', cliente: 'CONSULTAS DR. CHAVEZ', fecha: '2026-05-19T11:45:00', moneda: 'RD$', efectivo: 1800.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 1800.00, recibos: 0.00, gastos: 0.00 },
-        { orden: 1, usuario: 'admin', idfactura: null, registro: 'Factura', numero: '00144519', cliente: 'PORFIRIA SANTANA CASTILLO', fecha: '2026-05-19T12:00:00', moneda: 'RD$', efectivo: 0.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 6000.00, factura: 6000.00, recibos: 0.00, gastos: 0.00 },
-
-        // Recibos (orden: 2)
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113351', cliente: 'ZACARIAS TEJADA', fecha: '2026-05-19T12:15:00', moneda: 'RD$', efectivo: 4000.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 4000.00, gastos: 0.00 },
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113353', cliente: 'ARMANDO RODRIGUEZ', fecha: '2026-05-19T12:30:00', moneda: 'RD$', efectivo: 2000.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 2000.00, gastos: 0.00 },
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113357', cliente: 'CARLITA BAUTISTA PEREZ DE VIZC', fecha: '2026-05-19T12:45:00', moneda: 'RD$', efectivo: 0.00, tarjeta: 3905.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 3905.00, gastos: 0.00 },
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113358', cliente: 'MAXIMO MONTERO GUERRERO', fecha: '2026-05-19T13:00:00', moneda: 'RD$', efectivo: 3000.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 3000.00, gastos: 0.00 },
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113362', cliente: 'ISABEL MOTA', fecha: '2026-05-19T13:15:00', moneda: 'RD$', efectivo: 3499.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 3499.00, gastos: 0.00 },
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113364', cliente: 'RAMONA MOTA JIMENEZ', fecha: '2026-05-19T13:30:00', moneda: 'RD$', efectivo: 5500.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 5500.00, gastos: 0.00 },
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113367', cliente: 'RAFAELITO GERMAN', fecha: '2026-05-19T13:45:00', moneda: 'RD$', efectivo: 0.00, tarjeta: 2400.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 2400.00, gastos: 0.00 },
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113368', cliente: 'RAFAEL CEDEÑO JIMENEZ', fecha: '2026-05-19T14:00:00', moneda: 'RD$', efectivo: 9000.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 9000.00, gastos: 0.00 },
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113371', cliente: 'EPIFANIA BERROA NUÑEZ', fecha: '2026-05-19T14:15:00', moneda: 'RD$', efectivo: 3600.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 3600.00, gastos: 0.00 },
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113373', cliente: 'MARIA ISABEL COLOME MOTA', fecha: '2026-05-19T14:30:00', moneda: 'RD$', efectivo: 900.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 900.00, gastos: 0.00 },
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113394', cliente: 'PORFIRIA SANTANA CASTILLO', fecha: '2026-05-19T14:45:00', moneda: 'RD$', efectivo: 5000.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 5000.00, gastos: 0.00 },
-        { orden: 2, usuario: 'admin', idfactura: null, registro: 'Recibo', numero: '00113401', cliente: 'SONIA ZORRILLA', fecha: '2026-05-19T15:00:00', moneda: 'RD$', efectivo: 0.00, tarjeta: 3900.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 3900.00, gastos: 0.00 },
-
-        // Gastos (orden: 3)
-        { orden: 3, usuario: 'admin', idfactura: null, registro: 'Gastos', numero: 'Gastos Mate', cliente: 'COMPRA DE MATERIALES GASTABLES DE OFICINA', fecha: '2026-05-19T15:15:00', moneda: 'RD$', efectivo: 0.00, tarjeta: 0.00, cheque: 0.00, otros: 0.00, credito: 0.00, factura: 0.00, recibos: 0.00, gastos: 2930.00 }
-      ];
-      setRecords(mockData);
+      setRecords([]);
     } finally {
       setLoading(false);
     }
