@@ -309,8 +309,28 @@ export default function DashboardView() {
       <header className="dashboard-header no-print">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
           <div style={{ fontSize: '2.5rem' }}>📊</div>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <h1 className="header-title" style={{ margin: 0 }}>{empresaNombre}</h1>
+            <button 
+              onClick={handleLogout} 
+              title="Volver / Cambiar de Empresa"
+              style={{ 
+                background: 'rgba(255,255,255,0.05)', 
+                border: '1px solid rgba(255,255,255,0.1)', 
+                fontSize: '1.2rem', 
+                cursor: 'pointer',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '50%',
+                transition: 'all 0.2s',
+                padding: 0
+              }}
+            >
+              ⬅️
+            </button>
           </div>
         </div>
       </header>
