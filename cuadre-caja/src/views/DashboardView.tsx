@@ -280,31 +280,38 @@ export default function DashboardView() {
     <div className="dashboard-container">
       {/* Header Premium */}
       <header className="dashboard-header no-print">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <div style={{ fontSize: '2.5rem' }}>📊</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <h1 className="header-title" style={{ margin: 0 }}>{empresaNombre}</h1>
-            <button 
-              onClick={handleLogout} 
-              title="Volver / Cambiar de Empresa"
-              style={{ 
-                background: 'rgba(255,255,255,0.05)', 
-                border: '1px solid rgba(255,255,255,0.1)', 
-                fontSize: '1.2rem', 
-                cursor: 'pointer',
-                width: '36px',
-                height: '36px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '50%',
-                transition: 'all 0.2s',
-                padding: 0
-              }}
-            >
-              ⬅️
-            </button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '2.5rem', flexShrink: 0 }}>📊</div>
+            <h1 className="header-title" style={{ margin: 0, overflowWrap: 'break-word', wordBreak: 'break-word' }}>
+              {empresaNombre}
+            </h1>
           </div>
+
+          <button 
+            onClick={handleLogout} 
+            title="Volver / Cambiar de Empresa"
+            style={{ 
+              background: 'rgba(255,255,255,0.05)', 
+              border: '1px solid rgba(255,255,255,0.1)', 
+              fontSize: '1.2rem', 
+              cursor: 'pointer',
+              width: '36px',
+              height: '36px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              transition: 'all 0.2s',
+              padding: 0,
+              flexShrink: 0,
+              marginLeft: '1rem'
+            }}
+          >
+            ⬅️
+          </button>
+
         </div>
       </header>
 
