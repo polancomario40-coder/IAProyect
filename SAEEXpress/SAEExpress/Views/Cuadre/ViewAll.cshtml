@@ -1,0 +1,100 @@
+﻿@model IEnumerable<SAEExpress.Models.spCuadre>
+
+@{
+    ViewBag.Title = "ViewAll";
+    Layout = null;
+}
+
+<h2>Cuadre General</h2>
+
+@*<p>
+    @Html.ActionLink("Create New", "Create")
+</p>*@
+<table class="table">
+    <tr>
+        @*<th>
+            @Html.DisplayNameFor(model => model.Usuario)
+        </th>
+        <th>
+            @Html.DisplayNameFor(model => model.idfactura)
+        </th>*@
+        <th>
+            @Html.DisplayNameFor(model => model.factura)
+        </th>
+        <th>
+            @Html.DisplayNameFor(model => model.Cliente)
+        </th>
+        <th>
+            @Html.DisplayNameFor(model => model.fecha)
+        </th>
+        <th>
+            @Html.DisplayNameFor(model => model.Moneda)
+        </th>
+        <th>
+            @Html.DisplayNameFor(model => model.Efectivo)
+        </th>
+        <th>
+            @Html.DisplayNameFor(model => model.Tarjeta)
+        </th>
+        <th>
+            @Html.DisplayNameFor(model => model.Cheque)
+        </th>
+        <th>
+            @Html.DisplayNameFor(model => model.Otros)
+        </th>
+        <th>
+            @Html.DisplayNameFor(model => model.Credito)
+        </th>
+        <th>
+            @Html.DisplayNameFor(model => model.Recibos)
+        </th>
+        <th></th>
+    </tr>
+
+@foreach (var item in Model) {
+    <tr>
+        @*<td>
+            @Html.DisplayFor(modelItem => item.Usuario)
+        </td>
+        <td>
+            @Html.DisplayFor(modelItem => item.idfactura)
+        </td>*@
+        <td>
+            @Html.DisplayFor(modelItem => item.factura)
+        </td>
+        <td>
+            @Html.DisplayFor(modelItem => item.Cliente)
+        </td>
+        <td>
+            @Html.DisplayFor(modelItem => item.fecha)
+        </td>
+        <td>
+            @Html.DisplayFor(modelItem => item.Moneda)
+        </td>
+        <td>
+            @Html.DisplayFor(modelItem => item.Efectivo)
+        </td>
+        <td>
+            @Html.DisplayFor(modelItem => item.Tarjeta)
+        </td>
+        <td>
+            @Html.DisplayFor(modelItem => item.Cheque)
+        </td>
+        <td>
+            @Html.DisplayFor(modelItem => item.Otros)
+        </td>
+        <td>
+            @Html.DisplayFor(modelItem => item.Credito)
+        </td>
+        <td>
+            @Html.DisplayFor(modelItem => item.Recibos)
+        </td>
+        @*<td>
+            @Html.ActionLink("Edit", "Edit", new { /* id=item.PrimaryKey */ }) |
+            @Html.ActionLink("Details", "Details", new { /* id=item.PrimaryKey */ }) |
+            @Html.ActionLink("Delete", "Delete", new { /* id=item.PrimaryKey */ })
+        </td>*@
+    </tr>
+}
+
+</table>

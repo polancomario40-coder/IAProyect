@@ -1,0 +1,72 @@
+<div class="container"> 
+<h2>
+  <a class="btn btn-primary" type="button" routerLink="/dashboard" >Home </a>
+   {{title}}
+
+</h2>
+<!--<div  class="desplazado"  >-->
+<h5>
+  <button class="btn btn-primary" (click)="listCuadre()" Style="width: 200px;"> Mostrar</button> 
+  <p> </p>
+  <button class="btn btn-primary" (click)="CuadrePDF()" Style="width: 200px;"> Ver Detalle </button> 
+  </h5>
+
+<script>
+      moment().format();
+</script>
+<input type="date" name="desde" id="x1" [(ngModel)]="desde" placeholder="Desde"> 
+       <!--value="<?php echo date("Y-n-j"); ?>"> -->
+<input type="date" name="hasta" id="x2" [(ngModel)]="hasta" placeholder="Hasta" > 
+<p> </p>
+<select  name="id" id="x3" [(ngModel)]="id" style="width: 175px;" placeholder="id">
+  <option value="" > Seleccione un usuario </option>
+  <option *ngFor="let linea of vusuario" value={{linea.id}} > {{linea.usuario}} </option>
+</select>
+<p> </p>
+<select  name="Sucursal" id="x4" [(ngModel)]="Sucursal"  style="width: 175px;" placeholder="Sucursal" >
+  <option value="" > Seleccione una sucursal </option>
+  <option *ngFor="let linea of vsucursales" > {{linea.Sucursal}} </option>
+</select>
+<p> </p>
+<table class="table table-bordered" style="width: 350px;"> 
+    <!--<thead> <tr> 
+    <th>Efectivo</th><th>Tarjeta</th><th>Cheque</th><th>Gastos</th><th>Credito</th>
+    </tr> </thead>
+    <tr *ngFor="let linea of items">
+    <td>{{linea.efectivo}}</td>   
+    <td>{{linea.Tarjeta}}</td> 
+    <td>{{linea.Cheque}}</td> 
+    <td>{{linea.Credito}}</td> 
+    <td>{{linea.fecha|date}}</td> 
+    </tr>-->
+    <tr >
+      <td style="width: 200px;">    
+      <h5>Total Facturado: </h5>
+      <h5>Total Abonado:   </h5>
+      <h5>Efectivo:        </h5>
+      <h5>Tarjeta:         </h5>
+      <h5>Cheque:          </h5>
+      <h5>Credito:         </h5>
+      <h5>Gastos Menores:  </h5>
+      <h4><b>Total a depositar:</b></h4> 
+      </td>
+      <td > 
+      <div *ngIf="items && items[0]" >   
+      <h5> {{items[0].Factura}}</h5>
+      <h5> {{items[0].Recibos}}</h5>
+      <h5> {{items[0].efectivo}}</h5>
+      <h5> {{items[0].Tarjeta}}</h5>
+      <h5> {{items[0].Cheque}}</h5>
+      <h5> {{items[0].Credito}}</h5>
+      <h5> {{items[0].Gastos}}</h5>
+      <h4><b> {{items[0].deposito}}</b></h4>
+      </div>
+      </td>
+    </tr>
+</table> 
+</div>
+
+
+
+
+

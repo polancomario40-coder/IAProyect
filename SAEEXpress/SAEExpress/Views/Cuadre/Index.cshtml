@@ -1,0 +1,28 @@
+﻿@*@model IEnumerable<SAEExpress.Models.spCuadre>*@
+
+@{
+    ViewBag.Title = "Index";
+}
+
+<ul class="nav nav-tabs">
+    <li class="active"><a data-toggle="tab" href="#Ventas">Ventas</a></li>
+    <li><a data-toggle="tab" href="#Gastos">Gastos</a></li>
+
+</ul>
+<div class="tab-content">
+    <div id="Ventas" class="tab-pane fade in active">
+        @using (Html.BeginForm("ViewAll", "Cuadre", FormMethod.Post))
+        {
+            <fieldset>
+                <input type="date" name="textdesde" id="textdesde" /> <input type="date" name="texthasta" id="texthasta" />
+
+                <button type="submit">Mostrar</button>
+            </fieldset>
+        }
+        </div>
+        
+        <div id="Gastos" class="tab-pane fade in"> no hay gastos </div>
+    </div>
+
+ 
+

@@ -1,0 +1,8 @@
+.ok{ 
+    background-color: green;
+}
+
+div.desplazado {
+  position: fixed;
+  left: 10px;
+}
