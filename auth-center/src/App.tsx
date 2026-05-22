@@ -158,10 +158,13 @@ export default function App() {
   return (
     <div className="glass-card">
       <div className="logo-container">
-        {/* Placeholder image loaded via CSS styling or custom text fallback if not found */}
+        {/* Logo Image */}
         <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-          <span style={{ fontSize: '3rem', display: 'block', marginBottom: '0.5rem' }}>🌌</span>
-          <span style={{ fontSize: '1.2rem', fontWeight: 800, letterSpacing: '0.1em', color: '#60a5fa' }}>DATAFLOW ERP</span>
+          <img 
+            src="/logo-sade.png" 
+            alt="SADE Logo" 
+            style={{ maxWidth: '200px', height: 'auto', marginBottom: '0.5rem' }} 
+          />
         </div>
       </div>
 
