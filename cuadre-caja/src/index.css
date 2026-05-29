@@ -160,7 +160,7 @@ body {
 }
 
 .kpi-card {
-  padding: 1.75rem;
+  padding: 1rem 1.25rem;
   border-radius: 16px;
   text-align: left;
   display: flex;
@@ -180,8 +180,6 @@ body {
   letter-spacing: -0.02em;
   color: #fff;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .kpi-label {
