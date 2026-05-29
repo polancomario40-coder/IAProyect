@@ -431,8 +431,14 @@ export default function DashboardView() {
           </div>
         </div>
 
-        {/* KPIs blocks (5 blocks layout) */}
-        <div className="kpis-section" style={{ flex: '3 1 600px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+        {/* KPIs blocks (7 blocks layout) */}
+        <div className="kpis-section" style={{ flex: '3 1 600px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+          
+          <div className="kpi-card glass-card-dark" style={{ background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+            <div className="kpi-value" style={{ color: '#60a5fa' }}>{fmt(totalFacturado)}</div>
+            <div className="kpi-label" style={{ fontWeight: 800 }}>🛒 Total Ventas</div>
+          </div>
+
           <div className="kpi-card glass-card-dark">
             <div className="kpi-value">{fmt(grandEfectivo)}</div>
             <div className="kpi-label">💵 Efectivo Bruto</div>
@@ -441,6 +447,11 @@ export default function DashboardView() {
           <div className="kpi-card glass-card-dark">
             <div className="kpi-value" style={{ color: '#60a5fa' }}>{fmt(grandTarjeta)}</div>
             <div className="kpi-label">💳 Tarjetas</div>
+          </div>
+
+          <div className="kpi-card glass-card-dark">
+            <div className="kpi-value" style={{ color: '#a78bfa' }}>{fmt(grandOtros)}</div>
+            <div className="kpi-label">🧩 Otros Ingresos</div>
           </div>
 
           <div className="kpi-card glass-card-dark">
@@ -453,9 +464,9 @@ export default function DashboardView() {
             <div className="kpi-label">💸 Gastos Menores</div>
           </div>
 
-          <div className="kpi-card glass-card-dark">
+          <div className="kpi-card glass-card-dark" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
             <div className="kpi-value" style={{ color: '#10b981' }}>{fmt(totalDepositar)}</div>
-            <div className="kpi-label">💰 Neto a Depositar</div>
+            <div className="kpi-label" style={{ fontWeight: 800 }}>💰 Neto a Depositar</div>
           </div>
         </div>
       </div>
