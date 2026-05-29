@@ -175,10 +175,13 @@ body {
 }
 
 .kpi-value {
-  font-size: 1.75rem;
+  font-size: clamp(1.05rem, 1.5vw, 1.35rem);
   font-weight: 800;
   letter-spacing: -0.02em;
   color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kpi-label {
