@@ -432,9 +432,9 @@ export default function DashboardView() {
         </div>
 
         {/* KPIs blocks (7 blocks layout) */}
-        <div className="kpis-section" style={{ flex: '3 1 600px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.8rem' }}>
+        <div className="kpis-section" style={{ flex: '3 1 600px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>
           
-          <div className="kpi-card glass-card-dark" style={{ background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+          <div className="kpi-card glass-card-dark" style={{ gridColumn: '1 / -1', background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
             <div className="kpi-value" style={{ color: '#60a5fa' }} title={fmt(totalFacturado)}>{fmt(totalFacturado)}</div>
             <div className="kpi-label" style={{ fontWeight: 800 }}>🛒 Total Ventas</div>
           </div>
