@@ -108,7 +108,7 @@ public class LoginController : ControllerBase
         catch (Exception ex)
         {
             Console.WriteLine($"[LOGIN ERROR] {ex.Message}\n{ex.StackTrace}");
-            return StatusCode(500, new { success = false, message = "Error interno durante el login.", error = ex.Message });
+            return Ok(new { success = false, mensaje = "Error interno durante el login.", error = ex.Message });
         }
     }
 
@@ -153,7 +153,7 @@ public class LoginController : ControllerBase
         {
             var subTrimmed = sub.Trim();
 
-            // Validate if user belongs to Administracion or Contabilidad
+            // Validate if user belongs to cxcsade
             var erpConnProvider = HttpContext.RequestServices.GetRequiredService<CuadreApi.Providers.IErpConnectionProvider>();
             var erpConnStr = erpConnProvider.GetConnectionString();
             using var erpConnection = new Microsoft.Data.SqlClient.SqlConnection(erpConnStr);
@@ -161,7 +161,7 @@ public class LoginController : ControllerBase
 
             using (var cmd = erpConnection.CreateCommand())
             {
-                cmd.CommandText = "SELECT COUNT(1) FROM SegUserinGrp WHERE idSegUser = @user AND idSegGrupo IN ('Administracion', 'Contabilidad')";
+                cmd.CommandText = "SELECT COUNT(1) FROM SegUserinGrp WHERE idSegUser = @user AND idSegGrupo = 'cxcsade'";
                 var pUser = cmd.CreateParameter();
                 pUser.ParameterName = "@user";
                 pUser.Value = subTrimmed;
@@ -170,7 +170,7 @@ public class LoginController : ControllerBase
                 var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
                 if (count == 0)
                 {
-                    return Ok(new { success = false, mensaje = "Su usuario no pertenece a los grupos autorizados (Administración o Contabilidad) para acceder al Cuadre de Caja." });
+                    return Ok(new { success = false, mensaje = "Su usuario no pertenece al grupo autorizado (cxcsade) para acceder al Cuadre de Caja." });
                 }
             }
 
@@ -224,7 +224,7 @@ public class LoginController : ControllerBase
         catch (Exception ex)
         {
             Console.WriteLine($"[GET EMPRESAS ERROR] {ex.Message}\n{ex.StackTrace}");
-            return StatusCode(500, new { success = false, message = "Error al obtener empresas.", error = ex.Message });
+            return Ok(new { success = false, mensaje = "Error al obtener empresas.", error = ex.Message });
         }
     }
 }
