@@ -238,6 +238,7 @@ export default function DashboardView() {
   const totalFacturado = efectivoFacturas + tarjetaFacturas + chequeFacturas + otrosFacturas + creditoFacturas;
   const abonos = efectivoRecibos + tarjetaRecibos + chequeRecibos + otrosRecibos;
   const totalDepositar = grandEfectivo - grandGastos;
+  const sumaIngresos = grandEfectivo + grandTarjeta + grandOtros;
 
   // Format currencies
   const fmt = (num: number) => {
@@ -452,6 +453,11 @@ export default function DashboardView() {
           <div className="kpi-card glass-card-dark">
             <div className="kpi-value" style={{ color: '#a78bfa' }} title={fmt(grandOtros)}>{fmt(grandOtros)}</div>
             <div className="kpi-label">🧩 Otros Ingresos</div>
+          </div>
+
+          <div className="kpi-card glass-card-dark" style={{ background: 'linear-gradient(135deg, rgba(217, 70, 239, 0.1) 0%, rgba(192, 38, 211, 0.05) 100%)', border: '1px solid rgba(217, 70, 239, 0.2)' }}>
+            <div className="kpi-value" style={{ color: '#e879f9' }} title={fmt(sumaIngresos)}>{fmt(sumaIngresos)}</div>
+            <div className="kpi-label" style={{ fontWeight: 800 }}>➕ Suma Ingresos</div>
           </div>
 
           <div className="kpi-card glass-card-dark">
