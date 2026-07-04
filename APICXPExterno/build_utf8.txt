@@ -1,0 +1,27 @@
+﻿  Determining projects to restore...
+  All projects are up-to-date for restore.
+C:\DEV\IAProyect\web\cxp\api\Models\CfgEmpresa.cs(14,19): warning CS8618: Non-nullable property 'Empresa' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Models\Usuario.cs(12,19): warning CS8618: Non-nullable property 'Username' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Models\Usuario.cs(17,19): warning CS8618: Non-nullable property 'Password' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Models\Usuario.cs(27,19): warning CS8618: Non-nullable property 'Nombre' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Models\SegUserGrpEmpresa.cs(12,19): warning CS8618: Non-nullable property 'IdSegUserGrp' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Models\CxpDocumento.cs(50,19): warning CS8618: Non-nullable property 'Usuario' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Controllers\LoginController.cs(14,19): warning CS8618: Non-nullable property 'Usuario' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Controllers\LoginController.cs(15,19): warning CS8618: Non-nullable property 'Clave' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Controllers\CxpDocumentoController.cs(401,17): error CS0117: 'OcrResponse' does not contain a definition for 'TotalServicios' [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+
+Build FAILED.
+
+C:\DEV\IAProyect\web\cxp\api\Models\CfgEmpresa.cs(14,19): warning CS8618: Non-nullable property 'Empresa' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Models\Usuario.cs(12,19): warning CS8618: Non-nullable property 'Username' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Models\Usuario.cs(17,19): warning CS8618: Non-nullable property 'Password' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Models\Usuario.cs(27,19): warning CS8618: Non-nullable property 'Nombre' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Models\SegUserGrpEmpresa.cs(12,19): warning CS8618: Non-nullable property 'IdSegUserGrp' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Models\CxpDocumento.cs(50,19): warning CS8618: Non-nullable property 'Usuario' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Controllers\LoginController.cs(14,19): warning CS8618: Non-nullable property 'Usuario' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Controllers\LoginController.cs(15,19): warning CS8618: Non-nullable property 'Clave' must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring the property as nullable. [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+C:\DEV\IAProyect\web\cxp\api\Controllers\CxpDocumentoController.cs(401,17): error CS0117: 'OcrResponse' does not contain a definition for 'TotalServicios' [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+    8 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:01.53

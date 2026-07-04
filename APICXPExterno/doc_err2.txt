@@ -1,0 +1,1 @@
+Error al registrar la factura: The column "Total" cannot be modified because it is either a computed column or is the result of a UNION operator.

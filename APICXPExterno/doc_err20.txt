@@ -1,0 +1,1 @@
+{"success":true,"mensaje":"Factura registrada exitosamente con SQL Directo.","idDocumento":136711,"guidDocumento":"18bf57f8-9196-45bd-9608-2201d55ca405","databaseDestino":"CBSVMO","serverDestino":"10.0.0.6"}

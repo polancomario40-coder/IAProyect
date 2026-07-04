@@ -1,0 +1,1 @@
+{"success":true,"mensaje":"Factura registrada exitosamente.","idDocumento":194895,"guidDocumento":"830279ca-9f2f-4c2f-aef3-eabfe399136c"}

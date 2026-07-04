@@ -1,0 +1,7 @@
+C:\DEV\IAProyect\web\cxp\api\Controllers\LoginController.cs(178,10): error CS1513: } expected [C:\DEV\IAProyect\web\cxp\api\CxpApi.csproj]
+
+Build FAILED.
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:01.91

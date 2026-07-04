@@ -1,0 +1,15 @@
+Error SQL directo al registrar: Invalid column name 'Usuario'.
+Invalid column name 'FechaRegistro'.
+Invalid column name 'PendValidacion'.
+Invalid column name 'PendEnvioEcf'.
+Invalid column name 'UltError'.
+Invalid column name 'TrackId'.
+Invalid column name 'TipoNcf'.
+Invalid column name 'CodigoSeguridadEcf'.
+Invalid column name 'CompFiscalModificado'.
+Invalid column name 'IdClaseGastoModificado'.
+Invalid column name 'StatusEcf'.
+Invalid column name 'HoraEnvio'.
+Invalid column name 'FechaFirmaDigital'.
+Invalid column name 'FechaVenceNCF'.
+Invalid column name 'FechaCompFiscalModificado'.
