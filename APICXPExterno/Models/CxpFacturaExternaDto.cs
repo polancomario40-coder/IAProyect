@@ -25,6 +25,12 @@ public class CxpFacturaExternaDto
     [Required]
     public decimal Itbis { get; set; }
 
+    public decimal Propina { get; set; }
+    public decimal Isc { get; set; }
+    public decimal OtrosImpuestos { get; set; }
+    public decimal ItbisAlCosto { get; set; }
+    public bool EsServicio { get; set; }
+
     [Required]
     public decimal Total { get; set; }
 }
