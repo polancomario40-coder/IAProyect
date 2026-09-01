@@ -37,6 +37,9 @@ public class CuadreController : ControllerBase
                   ?? User.FindFirst(ClaimTypes.Name)?.Value 
                   ?? "";
 
+        // Ajustar fecha 'hasta' para que incluya todo el dia (23:59:59)
+        hasta = hasta.Date.AddDays(1).AddSeconds(-1);
+
         Console.WriteLine($"[CUADRE QUERY] UserToken: '{sub}', QueryUser: '{usuario}', Desde: '{desde}', Hasta: '{hasta}', Sucursal: '{sucursal}'");
         
         var records = new List<SpCuadre>();
@@ -105,6 +108,7 @@ public class CuadreController : ControllerBase
                     {
                         records.Add(new SpCuadre
                         {
+                            Sucursal = reader["Sucursal"] != DBNull.Value ? reader["Sucursal"]?.ToString()?.Trim() : null,
                             Orden = reader["orden"] != DBNull.Value ? Convert.ToInt32(reader["orden"]) : 1,
                             Usuario = reader["Usuario"] != DBNull.Value ? reader["Usuario"]?.ToString()?.Trim() : null,
                             Idfactura = reader["idfactura"] != DBNull.Value ? (Guid)reader["idfactura"] : null,
@@ -187,6 +191,7 @@ public class CuadreController : ControllerBase
         try
         {
             var cajeros = new List<object>();
+            cajeros.Add(new { Usuario = "Todos", Nombre = "Todos" });
             var connection = _context.Database.GetDbConnection();
             await _context.Database.OpenConnectionAsync();
 
@@ -199,15 +204,11 @@ public class CuadreController : ControllerBase
                 {
                     while (await reader.ReadAsync())
                     {
-                        var usr = reader["idSegUsergrp"]?.ToString()?.Trim();
+                        var usr = reader["idSegUsergrp"] != DBNull.Value ? reader["idSegUsergrp"]?.ToString()?.Trim() : "Todos";
                         var nom = reader["Nombre"]?.ToString()?.Trim();
-                        if (!string.IsNullOrEmpty(usr))
+                        if (!string.IsNullOrEmpty(nom))
                         {
-                            cajeros.Add(new
-                            {
-                                Usuario = usr,
-                                Nombre = nom
-                            });
+                            cajeros.Add(new { Usuario = usr, Nombre = nom });
                         }
                     }
                 }

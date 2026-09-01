@@ -71,6 +71,35 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 
 // Configure Middlewares
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+    var authHeader = context.Request.Headers["Authorization"].ToString();
+    var hasToken = !string.IsNullOrEmpty(authHeader);
+    
+    // Solo logueamos login y empresas para no llenar el log
+    if (path.StartsWithSegments("/api/login") || path.StartsWithSegments("/api/usuario/empresas") || path.StartsWithSegments("/api/usuario/validar-acceso"))
+    {
+        var logLine = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {context.Request.Method} {path} | AuthHeader: {authHeader.Substring(0, Math.Min(authHeader.Length, 30))}...";
+        try { System.IO.File.AppendAllText(@"C:\inetpub\SADE\cuadre-api\api_debug.log", logLine + Environment.NewLine); } catch { }
+    }
+
+    await next();
+
+    if (path.StartsWithSegments("/api/login") || path.StartsWithSegments("/api/usuario/empresas") || path.StartsWithSegments("/api/usuario/validar-acceso"))
+    {
+        var authError = "";
+        var authFeature = context.Features.Get<Microsoft.AspNetCore.Authentication.IAuthenticateResultFeature>();
+        if (authFeature != null && authFeature.AuthenticateResult != null && authFeature.AuthenticateResult.Failure != null)
+        {
+            authError = " | FailReason: " + authFeature.AuthenticateResult.Failure.Message;
+        }
+
+        var outLine = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] RESPONSE {path} -> Status: {context.Response.StatusCode}{authError}";
+        try { System.IO.File.AppendAllText(@"C:\inetpub\SADE\cuadre-api\api_debug.log", outLine + Environment.NewLine); } catch { }
+    }
+});
+
 app.UseRouting();
 
 app.UseCors("AllowFrontends");

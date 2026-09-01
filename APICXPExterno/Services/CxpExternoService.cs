@@ -8,11 +8,13 @@ public class CxpExternoService : ICxpExternoService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<CxpExternoService> _logger;
+    private readonly DgiiService _dgiiService;
 
-    public CxpExternoService(IServiceProvider serviceProvider, ILogger<CxpExternoService> logger)
+    public CxpExternoService(IServiceProvider serviceProvider, ILogger<CxpExternoService> logger, DgiiService dgiiService)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _dgiiService = dgiiService;
     }
 
     public async Task<ResultadoOperacion> ProcesarFacturaExternaAsync(CxpFacturaExternaDto dto)
@@ -38,36 +40,26 @@ public class CxpExternoService : ICxpExternoService
                     return ResultadoOperacion.Fallido($"No se encontró una empresa activa con BaseDatos '{dto.BaseDatos}' y RNC '{dto.RncCompania}'.");
                 }
 
-                var servidor = empresa.Servidor?.Trim() ?? "";
-                if (servidor == "10.0.0.6" || servidor == "127.0.0.6" || servidor == "127.0.0.1" || servidor.ToLower() == "localhost")
-                {
-                    servidor = "localhost";
-                }
-
-                var builder = new SqlConnectionStringBuilder
-                {
-                    DataSource = servidor,
-                    InitialCatalog = empresa.BaseDatos?.Trim() ?? "",
-                    TrustServerCertificate = true,
-                    Encrypt = false
-                };
-
-                if (empresa.Trusted == true)
-                {
-                    builder.IntegratedSecurity = true;
-                }
-                else
-                {
-                    builder.UserID = empresa.UserId?.Trim() ?? "";
-                    // Assuming Encriptada logic is skipped or trivial here as requested, or taking it as is:
-                    builder.Password = empresa.UserPwd?.Trim() ?? ""; // Note: decryption logic should match ErpConnectionProvider if needed
-                }
-
-                connectionString = builder.ConnectionString;
+                var erpConnectionProvider = scope.ServiceProvider.GetRequiredService<Providers.IErpConnectionProvider>();
+                connectionString = erpConnectionProvider.GetConnectionString(empresa.IdEmpresa);
             }
 
             using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync();
+
+            // 2.5 Moneda string lookup (ej: "US$", "RD$")
+            int finalIdMoneda = dto.IdMoneda > 0 ? dto.IdMoneda : 1;
+            if (!string.IsNullOrEmpty(dto.Moneda))
+            {
+                using var cmdMonedaStr = connection.CreateCommand();
+                cmdMonedaStr.CommandText = "SELECT TOP 1 idMoneda FROM Moneda WHERE moneda = @MonedaStr";
+                cmdMonedaStr.Parameters.AddWithValue("@MonedaStr", dto.Moneda);
+                var monRes = await cmdMonedaStr.ExecuteScalarAsync();
+                if (monRes != null && monRes != DBNull.Value)
+                {
+                    finalIdMoneda = Convert.ToInt32(monRes);
+                }
+            }
 
             // 3. Supplier Validation
             using var cmdCheckSuplidor = connection.CreateCommand();
@@ -79,6 +71,7 @@ public class CxpExternoService : ICxpExternoService
             string rncSuplidor = dto.RncSuplidor;
             string tipoIdentificacion = "1"; // Default
 
+            bool suplidorExiste = false;
             using (var reader = await cmdCheckSuplidor.ExecuteReaderAsync())
             {
                 if (await reader.ReadAsync())
@@ -87,10 +80,134 @@ public class CxpExternoService : ICxpExternoService
                     nombreSuplidor = reader["Nombre"]?.ToString() ?? "";
                     rncSuplidor = reader["RNC"]?.ToString() ?? dto.RncSuplidor;
                     tipoIdentificacion = reader["idTipoIdentificacion"]?.ToString() ?? "1";
+                    suplidorExiste = true;
+                }
+            }
+
+            if (!suplidorExiste)
+            {
+                // Prioridad del nombre: DTO > DGII > "Suplidor Generado Automáticamente"
+                string nuevoNombreSuplidor = dto.NombreSuplidor ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(nuevoNombreSuplidor))
+                {
+                    var dgiiResult = await _dgiiService.ConsultarRncAsync(dto.RncSuplidor);
+                    nuevoNombreSuplidor = (dgiiResult != null && dgiiResult.Encontrado && !string.IsNullOrWhiteSpace(dgiiResult.NombreComercial))
+                        ? dgiiResult.NombreComercial
+                        : "Suplidor Generado Automáticamente";
+                }
+
+                // Prevenir error de Foreign Key consultando valores válidos de catálogos
+                using var cmdTipoSup = connection.CreateCommand();
+                cmdTipoSup.CommandText = "SELECT TOP 1 TipoSuplidor FROM cxpTiposSuplidor ORDER BY TipoSuplidor";
+                var tipoSupObj = await cmdTipoSup.ExecuteScalarAsync();
+                int tipoSuplidorVal = (tipoSupObj != null && tipoSupObj != DBNull.Value) ? Convert.ToInt32(tipoSupObj) : 1;
+
+                // Fallback por defecto (según la tabla del cliente: 2 = Compra, 8 = NO ITBIS)
+                int tipoImpuestoVal = dto.Itbis > 0 ? 2 : 8; 
+                
+                using var cmdTipoImp = connection.CreateCommand();
+                if (dto.Itbis <= 0)
+                {
+                    cmdTipoImp.CommandText = "SELECT TOP 1 TipoImpuesto FROM ocTiposImpuestos WHERE Descripcion LIKE '%NO ITBIS%'";
+                }
+                else if (dto.EsServicio)
+                {
+                    cmdTipoImp.CommandText = "SELECT TOP 1 TipoImpuesto FROM ocTiposImpuestos WHERE Descripcion LIKE '%Servicio%' AND Porcentaje > 0";
                 }
                 else
                 {
-                    return ResultadoOperacion.Fallido($"El suplidor con RNC '{dto.RncSuplidor}' no existe o está inactivo. Debe ser creado primero.");
+                    cmdTipoImp.CommandText = "SELECT TOP 1 TipoImpuesto FROM ocTiposImpuestos WHERE Descripcion LIKE '%Compra%' AND Porcentaje > 0";
+                }
+
+                var tipoImpObj = await cmdTipoImp.ExecuteScalarAsync();
+                if (tipoImpObj != null && tipoImpObj != DBNull.Value)
+                {
+                    tipoImpuestoVal = Convert.ToInt32(tipoImpObj);
+                }
+
+                // Obtendremos las cuentas por defecto más adelante para las 3 monedas
+
+                // Insertar suplidor usando los mismos campos que el proyecto web/cxp/api
+                using var cmdInsertSuplidor = connection.CreateCommand();
+                cmdInsertSuplidor.CommandText = @"
+                    INSERT INTO cxpSuplidores (
+                        Nombre, RNC, Estatus, MostrarEnCXP, 
+                        DiasCredito, PedirNCF, TipoImpuesto, 
+                        FechaIngreso, TipoSuplidor, idMoneda, 
+                        UidcxpSuplidores, idTipoIdentificacion, 
+                        Direccion, Ciudad, Provincia, Pais
+                    ) 
+                    OUTPUT INSERTED.IdSuplidor
+                    VALUES (
+                        @Nombre, @RNC, 1, 1, 
+                        0, 'S', @TipoImpuesto, 
+                        @FechaIngreso, @TipoSuplidor, @idMoneda, 
+                        NEWID(), '1', 
+                        @Direccion, @Ciudad, @Provincia, @Pais
+                    )";
+                
+                cmdInsertSuplidor.Parameters.AddWithValue("@Nombre", nuevoNombreSuplidor);
+                cmdInsertSuplidor.Parameters.AddWithValue("@RNC", dto.RncSuplidor);
+                cmdInsertSuplidor.Parameters.AddWithValue("@FechaIngreso", DateTime.UtcNow);
+                cmdInsertSuplidor.Parameters.AddWithValue("@TipoSuplidor", tipoSuplidorVal);
+                cmdInsertSuplidor.Parameters.AddWithValue("@TipoImpuesto", tipoImpuestoVal);
+                cmdInsertSuplidor.Parameters.AddWithValue("@idMoneda", finalIdMoneda);
+                cmdInsertSuplidor.Parameters.AddWithValue("@Direccion", string.IsNullOrWhiteSpace(dto.Direccion) ? DBNull.Value : dto.Direccion);
+                cmdInsertSuplidor.Parameters.AddWithValue("@Ciudad", string.IsNullOrWhiteSpace(dto.Ciudad) ? DBNull.Value : dto.Ciudad);
+                cmdInsertSuplidor.Parameters.AddWithValue("@Provincia", string.IsNullOrWhiteSpace(dto.Provincia) ? DBNull.Value : dto.Provincia);
+                cmdInsertSuplidor.Parameters.AddWithValue("@Pais", string.IsNullOrWhiteSpace(dto.Pais) ? DBNull.Value : dto.Pais);
+
+                var newIdObj = await cmdInsertSuplidor.ExecuteScalarAsync();
+                
+                idSuplidor = Convert.ToInt32(newIdObj);
+                nombreSuplidor = nuevoNombreSuplidor;
+                rncSuplidor = dto.RncSuplidor;
+                tipoIdentificacion = "1";
+
+                // Guardar la cuenta del suplidor para TODAS las monedas configuradas en la BD
+                var monedas = new List<int>();
+                using (var cmdMonedas = connection.CreateCommand())
+                {
+                    cmdMonedas.CommandText = "SELECT idMoneda FROM Moneda";
+                    using (var reader = await cmdMonedas.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            monedas.Add(reader.GetInt32(0));
+                        }
+                    }
+                }
+
+                foreach (int mon in monedas)
+                {
+                    string clavePasivo = mon switch { 2 => "ctacxpdolar", 3 => "ctacxpeuro", _ => "ctacxprd" };
+                    string claveGasto = mon switch { 2 => "ctagastodolar", 3 => "ctagastoeuro", _ => "ctagastord" };
+
+                    // Buscar Pasivo
+                    using var cmdCtaPasivo = connection.CreateCommand();
+                    cmdCtaPasivo.CommandText = "SELECT TOP 1 valor FROM Defaults WHERE Clave = @Clave";
+                    cmdCtaPasivo.Parameters.AddWithValue("@Clave", clavePasivo);
+                    var pasivoObj = await cmdCtaPasivo.ExecuteScalarAsync();
+                    string idPasivo = pasivoObj?.ToString() ?? "";
+
+                    // Buscar Gasto
+                    using var cmdCtaGasto = connection.CreateCommand();
+                    cmdCtaGasto.CommandText = "SELECT TOP 1 valor FROM Defaults WHERE Clave = @Clave";
+                    cmdCtaGasto.Parameters.AddWithValue("@Clave", claveGasto);
+                    var gastoObj = await cmdCtaGasto.ExecuteScalarAsync();
+                    string idGasto = gastoObj?.ToString() ?? "";
+
+                    // Si al menos hay pasivo, insertamos el registro
+                    if (!string.IsNullOrEmpty(idPasivo))
+                    {
+                        using var cmdInsCta = connection.CreateCommand();
+                        cmdInsCta.CommandText = "INSERT INTO cxpSuplidorCuenta (idSuplidor, idMoneda, idcuenta, idcuentaGasto) VALUES (@IdSup, @IdMon, @IdCta, @IdGasto)";
+                        cmdInsCta.Parameters.AddWithValue("@IdSup", idSuplidor);
+                        cmdInsCta.Parameters.AddWithValue("@IdMon", mon);
+                        cmdInsCta.Parameters.AddWithValue("@IdCta", idPasivo);
+                        cmdInsCta.Parameters.AddWithValue("@IdGasto", idGasto);
+                        await cmdInsCta.ExecuteNonQueryAsync();
+                    }
                 }
             }
 
@@ -116,7 +233,7 @@ public class CxpExternoService : ICxpExternoService
                 // 4.1 Defaults Injection
                 using var cmdDefaults = connection.CreateCommand();
                 cmdDefaults.Transaction = transaction;
-                cmdDefaults.CommandText = "SELECT Clave, Valor FROM Defaults WHERE Clave IN ('ClaseGasto', 'FormaPago', 'supl_idcuenta', 'CUENTA_ITBIS', 'CUENTA_PROPINA')";
+                cmdDefaults.CommandText = "SELECT Clave, Valor FROM Defaults WHERE Clave IN ('ClaseGasto', 'FormaPago', 'ctacxprd', 'ctacxpdolar', 'ctacxpeuro', 'CTAITBIS', 'CUENTA_PROPINA')";
                 
                 string idClaseGasto = "01"; // Fallback
                 int idPagoForma = 1; // Fallback
@@ -133,8 +250,12 @@ public class CxpExternoService : ICxpExternoService
 
                         if (clave == "ClaseGasto" && !string.IsNullOrEmpty(valor)) idClaseGasto = valor;
                         if (clave == "FormaPago" && int.TryParse(valor, out int formaPagoVal)) idPagoForma = formaPagoVal;
-                        if (clave == "supl_idcuenta" && !string.IsNullOrEmpty(valor)) cuentaPorPagarPorDefecto = valor;
-                        if (clave == "CUENTA_ITBIS" && !string.IsNullOrEmpty(valor)) cuentaItbis = valor;
+                        
+                        if (finalIdMoneda == 1 && clave == "ctacxprd" && !string.IsNullOrEmpty(valor)) cuentaPorPagarPorDefecto = valor;
+                        if (finalIdMoneda == 2 && clave == "ctacxpdolar" && !string.IsNullOrEmpty(valor)) cuentaPorPagarPorDefecto = valor;
+                        if (finalIdMoneda == 3 && clave == "ctacxpeuro" && !string.IsNullOrEmpty(valor)) cuentaPorPagarPorDefecto = valor;
+
+                        if (clave == "CTAITBIS" && !string.IsNullOrEmpty(valor)) cuentaItbis = valor;
                         if (clave == "CUENTA_PROPINA" && !string.IsNullOrEmpty(valor)) cuentaPropina = valor;
                     }
                 }
@@ -142,8 +263,9 @@ public class CxpExternoService : ICxpExternoService
                 // 4.2 Supplier Accounts
                 using var cmdSupCta = connection.CreateCommand();
                 cmdSupCta.Transaction = transaction;
-                cmdSupCta.CommandText = "SELECT TOP 1 idcuenta, idcuentaGasto FROM cxpSuplidorCuenta WHERE idSuplidor = @IdSuplidor";
+                cmdSupCta.CommandText = "SELECT TOP 1 idcuenta, idcuentaGasto FROM cxpSuplidorCuenta WHERE idSuplidor = @IdSuplidor AND idMoneda = @IdMoneda";
                 cmdSupCta.Parameters.AddWithValue("@IdSuplidor", idSuplidor);
+                cmdSupCta.Parameters.AddWithValue("@IdMoneda", finalIdMoneda);
                 
                 string idCuentaPasivo = cuentaPorPagarPorDefecto;
                 string idCuentaGasto = "";
@@ -174,6 +296,22 @@ public class CxpExternoService : ICxpExternoService
                     }
                 }
 
+                // 4.3.5 Obtener Tasa de Cambio
+                decimal tasaCambio = 1m;
+                if (finalIdMoneda != 1)
+                {
+                    using var cmdTasa = connection.CreateCommand();
+                    cmdTasa.Transaction = transaction;
+                    cmdTasa.CommandText = "SELECT TOP 1 Tasa FROM Tasa WHERE idMoneda = @IdMon AND Fecha <= @FechaFact ORDER BY Fecha DESC";
+                    cmdTasa.Parameters.AddWithValue("@IdMon", finalIdMoneda);
+                    cmdTasa.Parameters.AddWithValue("@FechaFact", dto.FechaFactura.Date);
+                    var tasaObj = await cmdTasa.ExecuteScalarAsync();
+                    if (tasaObj != null && tasaObj != DBNull.Value)
+                    {
+                        tasaCambio = Convert.ToDecimal(tasaObj);
+                    }
+                }
+
                 // 4.4 Invoice Insertion
                 using var cmdInsert = connection.CreateCommand();
                 cmdInsert.Transaction = transaction;
@@ -194,10 +332,10 @@ public class CxpExternoService : ICxpExternoService
                     VALUES (
                         @IdTrans, @Fecha, @IdSuplidor, @Referencia, @Valor, 
                         @MontoImpuestos, 0, 0, @Concepto, 
-                        1, 1, 'A', @FechaStatus, @IdCuenta, 
+                        @IdMoneda, 1, 'A', @FechaStatus, @IdCuenta, 
                         '', 0, 0, 0, @BienesServicio,
                         '', '', @CompFiscal, @GUIDDocumento, 
-                        @IdTipoIdentificacion, @IdClaseGasto, 1, '1', 
+                        @IdTipoIdentificacion, @IdClaseGasto, @Tasa, '1', 
                         @RNC, @Nombre, @Vencimiento, @FechaEmision, 'COSTO',
                         @IdPagoForma, @MontoFBienes, @MontoFServicios, 
                         @MontoItbisCosto, @MontoIsc, @OtrosImpuestos, @Propina,
@@ -221,6 +359,8 @@ public class CxpExternoService : ICxpExternoService
                 addParam("@Concepto", $"Factura externa {dto.Ncf}");
                 addParam("@CompFiscal", dto.Ncf);
                 addParam("@GUIDDocumento", Guid.NewGuid());
+                addParam("@IdMoneda", finalIdMoneda);
+                addParam("@Tasa", tasaCambio);
                 addParam("@IdClaseGasto", idClaseGasto);
                 addParam("@IdCuenta", idCuentaPasivo);
                 addParam("@IdTipoIdentificacion", tipoIdentificacion);
@@ -253,29 +393,79 @@ public class CxpExternoService : ICxpExternoService
                 }
 
                 // 4.6 Codificacion Contable
-                async Task InsertarCuenta(string cta, short dbcr, decimal val)
+                async Task InsertarCuenta(string cta, short dbcr, decimal val, bool esItbis = false)
                 {
                     if (string.IsNullOrEmpty(cta) || val <= 0) return;
-                    using var cmdCta = connection.CreateCommand();
-                    cmdCta.Transaction = transaction;
-                    cmdCta.CommandText = "cxpGuardarCtasDoc;1";
-                    cmdCta.CommandType = System.Data.CommandType.StoredProcedure;
-                    cmdCta.Parameters.AddWithValue("@IdDocumento", insertedId);
-                    cmdCta.Parameters.AddWithValue("@Cta", cta);
-                    cmdCta.Parameters.AddWithValue("@Aux", DBNull.Value);
-                    cmdCta.Parameters.AddWithValue("@dbcr", dbcr);
-                    cmdCta.Parameters.AddWithValue("@Valor", val);
-                    cmdCta.Parameters.AddWithValue("@Automatica", true);
-                    cmdCta.Parameters.AddWithValue("@idCentroCosto", DBNull.Value);
-                    cmdCta.Parameters.AddWithValue("@CentroCosto", DBNull.Value);
-                    cmdCta.Parameters.AddWithValue("@idPartida", DBNull.Value);
-                    await cmdCta.ExecuteNonQueryAsync();
+
+                    decimal valBase = val;
+                    decimal valPrima = 0m;
+                    string ctaPrima = cta;
+
+                    if (finalIdMoneda != 1)
+                    {
+                        if (esItbis)
+                        {
+                            // ITBIS se asienta directamente convertido
+                            valBase = Math.Round(val * tasaCambio, 2);
+                        }
+                        else
+                        {
+                            valPrima = Math.Round(val * (tasaCambio - 1m), 2);
+                            
+                            // Buscar cuenta prima
+                            using var cmdCtaPrima = connection.CreateCommand();
+                            cmdCtaPrima.Transaction = transaction;
+                            cmdCtaPrima.CommandText = "SELECT TOP 1 idCuentaPrima FROM cgCuentaPrima WHERE idCuenta = @IdCta AND idMoneda = @IdMon";
+                            cmdCtaPrima.Parameters.AddWithValue("@IdCta", cta);
+                            cmdCtaPrima.Parameters.AddWithValue("@IdMon", finalIdMoneda);
+                            var objPrima = await cmdCtaPrima.ExecuteScalarAsync();
+                            if (objPrima != null && objPrima != DBNull.Value)
+                            {
+                                ctaPrima = objPrima.ToString()!;
+                            }
+                        }
+                    }
+
+                    // Insertar Base (Original o ITBIS convertido)
+                    using var cmdCta1 = connection.CreateCommand();
+                    cmdCta1.Transaction = transaction;
+                    cmdCta1.CommandText = "cxpGuardarCtasDoc;1";
+                    cmdCta1.CommandType = System.Data.CommandType.StoredProcedure;
+                    cmdCta1.Parameters.AddWithValue("@IdDocumento", insertedId);
+                    cmdCta1.Parameters.AddWithValue("@Cta", cta);
+                    cmdCta1.Parameters.AddWithValue("@Aux", DBNull.Value);
+                    cmdCta1.Parameters.AddWithValue("@dbcr", dbcr);
+                    cmdCta1.Parameters.AddWithValue("@Valor", valBase);
+                    cmdCta1.Parameters.AddWithValue("@Automatica", true);
+                    cmdCta1.Parameters.AddWithValue("@idCentroCosto", DBNull.Value);
+                    cmdCta1.Parameters.AddWithValue("@CentroCosto", DBNull.Value);
+                    cmdCta1.Parameters.AddWithValue("@idPartida", DBNull.Value);
+                    await cmdCta1.ExecuteNonQueryAsync();
+
+                    // Insertar Prima si aplica
+                    if (valPrima > 0)
+                    {
+                        using var cmdCta2 = connection.CreateCommand();
+                        cmdCta2.Transaction = transaction;
+                        cmdCta2.CommandText = "cxpGuardarCtasDoc;1";
+                        cmdCta2.CommandType = System.Data.CommandType.StoredProcedure;
+                        cmdCta2.Parameters.AddWithValue("@IdDocumento", insertedId);
+                        cmdCta2.Parameters.AddWithValue("@Cta", ctaPrima);
+                        cmdCta2.Parameters.AddWithValue("@Aux", DBNull.Value);
+                        cmdCta2.Parameters.AddWithValue("@dbcr", dbcr);
+                        cmdCta2.Parameters.AddWithValue("@Valor", valPrima);
+                        cmdCta2.Parameters.AddWithValue("@Automatica", true);
+                        cmdCta2.Parameters.AddWithValue("@idCentroCosto", DBNull.Value);
+                        cmdCta2.Parameters.AddWithValue("@CentroCosto", DBNull.Value);
+                        cmdCta2.Parameters.AddWithValue("@idPartida", DBNull.Value);
+                        await cmdCta2.ExecuteNonQueryAsync();
+                    }
                 }
 
                 decimal totalCalculado = dto.Subtotal + dto.Itbis + dto.Propina + dto.Isc + dto.OtrosImpuestos;
 
-                // ITBIS (Debito)
-                if (dto.Itbis > 0) await InsertarCuenta(cuentaImpuesto, 1, dto.Itbis);
+                // ITBIS (Debito) - Se envía esItbis = true para conversión directa
+                if (dto.Itbis > 0) await InsertarCuenta(cuentaImpuesto, 1, dto.Itbis, true);
                 // Propina (Debito)
                 if (dto.Propina > 0) await InsertarCuenta(cuentaPropina, 1, dto.Propina);
                 // Gasto Subtotal (Debito)

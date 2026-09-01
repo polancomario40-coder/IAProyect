@@ -1,0 +1,182 @@
+:root {
+  --bg-dark: #0f172a;
+  --sidebar-bg: #1e293b;
+  --card-bg: rgba(30, 41, 59, 0.7);
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --text-light: #f8fafc;
+  --text-muted: #94a3b8;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.05);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-light);
+  overflow-x: hidden;
+}
+
+/* Glassmorphism utilities */
+.glass-panel {
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+.premium-btn {
+  background: linear-gradient(135deg, var(--primary) 0%, #60a5fa 100%);
+  color: white;
+  border: none;
+  padding: 0.5rem 1.2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+}
+
+.premium-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+}
+
+.premium-input {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  color: var(--text-light);
+  padding: 0.5rem;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.3s ease;
+}
+
+.premium-input:focus {
+  border-color: var(--primary);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--sidebar-bg);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* ------------------------------------- */
+/* Print Styles for Professional Reports */
+/* ------------------------------------- */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  .hide-on-print {
+    display: none !important;
+  }
+
+  .glass-panel {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Force light theme colors inside Recharts/Tables when printing */
+  .recharts-text, 
+  th, td, label, p, h1, h2, h3, span {
+    color: black !important;
+  }
+  
+  th {
+    background-color: #f1f5f9 !important;
+    border-bottom: 2px solid #cbd5e1 !important;
+  }
+  
+  td {
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+  
+  tfoot td {
+    border-top: 2px solid #333 !important;
+    color: black !important;
+  }
+
+  /* Make sure background colors (like charts) are printed */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* --- Advanced Print Requirements --- */
+
+  /* 1. Expand table fully */
+  .table-container {
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    border: none !important;
+  }
+
+  /* 2. Page Break Avoidance */
+  .chart-container {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    height: 350px !important; 
+    margin-bottom: 2rem !important;
+  }
+  
+  table {
+    page-break-inside: auto !important;
+    background-color: #ffffff !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+    background-color: #ffffff !important;
+    background: transparent !important;
+  }
+
+  /* 3. Formal borders and strict light mode for cells */
+  th, td {
+    border: 1px solid #ccc !important;
+    background-color: #ffffff !important;
+    background: transparent !important;
+    color: #000000 !important;
+  }
+  
+  tfoot td {
+    border: 2px solid #333 !important;
+    border-top: 2px solid #333 !important;
+    background-color: #f8fafc !important;
+    color: #000000 !important;
+  }
+
+  /* Ensure hover styles or striped rows don't ruin print */
+  tbody tr:hover {
+    background-color: #ffffff !important;
+    background: transparent !important;
+  }
+}

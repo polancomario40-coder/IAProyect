@@ -13,6 +13,12 @@ public class CxpFacturaExternaDto
     [Required]
     public string RncSuplidor { get; set; } = string.Empty;
 
+    public string? NombreSuplidor { get; set; }
+    public string? Direccion { get; set; }
+    public string? Ciudad { get; set; }
+    public string? Provincia { get; set; }
+    public string? Pais { get; set; }
+
     [Required]
     public string Ncf { get; set; } = string.Empty;
 
@@ -30,6 +36,9 @@ public class CxpFacturaExternaDto
     public decimal OtrosImpuestos { get; set; }
     public decimal ItbisAlCosto { get; set; }
     public bool EsServicio { get; set; }
+
+    public int IdMoneda { get; set; } = 1;
+    public string? Moneda { get; set; }
 
     [Required]
     public decimal Total { get; set; }

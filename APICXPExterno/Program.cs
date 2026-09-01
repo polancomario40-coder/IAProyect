@@ -124,13 +124,6 @@ app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Para servir archivos expuestos en wwwroot (app web)
-app.UseDefaultFiles();
-app.UseStaticFiles();
-
 app.MapControllers();
-
-// Fallback al HTMl principal de Expo Router / ASP.NET MVC para IIS
-app.MapFallbackToFile("index.html");
 
 app.Run();

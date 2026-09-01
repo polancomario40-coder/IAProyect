@@ -107,6 +107,8 @@ public class LoginController : ControllerBase
         }
         catch (Exception ex)
         {
+            var logPath = @"C:\inetpub\SADE\cuadre-api\api_debug.log";
+            try { System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [LOGIN EXCEPTION] {ex.Message}\n{ex.StackTrace}\n"); } catch { }
             Console.WriteLine($"[LOGIN ERROR] {ex.Message}\n{ex.StackTrace}");
             return Ok(new { success = false, mensaje = "Error interno durante el login.", error = ex.Message });
         }
@@ -153,24 +155,44 @@ public class LoginController : ControllerBase
         {
             var subTrimmed = sub.Trim();
 
-            // Validate if user belongs to cxcsade
             var erpConnProvider = HttpContext.RequestServices.GetRequiredService<CuadreApi.Providers.IErpConnectionProvider>();
             var erpConnStr = erpConnProvider.GetConnectionString();
             using var erpConnection = new Microsoft.Data.SqlClient.SqlConnection(erpConnStr);
             await erpConnection.OpenAsync();
 
+            // Read client id from header
+            string clientId = Request.Headers.ContainsKey("X-Client-Id") ? Request.Headers["X-Client-Id"].ToString() : "";
+            string requiredGroup = "cxpsade"; // default fallback for older apps
+            string appName = "CXPAPP";
+            
+            if (clientId == "seg-sade")
+            {
+                requiredGroup = "System";
+                appName = "Seguridad SADE";
+            }
+            else if (clientId == "cuadre-caja")
+            {
+                requiredGroup = "cxcsade";
+                appName = "Cuadre de Caja";
+            }
+
             using (var cmd = erpConnection.CreateCommand())
             {
-                cmd.CommandText = "SELECT COUNT(1) FROM SegUserinGrp WHERE idSegUser = @user AND idSegGrupo = 'cxcsade'";
+                cmd.CommandText = "SELECT COUNT(1) FROM SegUserinGrp WHERE idSegUser = @user AND idSegGrupo = @grupo";
                 var pUser = cmd.CreateParameter();
                 pUser.ParameterName = "@user";
                 pUser.Value = subTrimmed;
                 cmd.Parameters.Add(pUser);
+
+                var pGrupo = cmd.CreateParameter();
+                pGrupo.ParameterName = "@grupo";
+                pGrupo.Value = requiredGroup;
+                cmd.Parameters.Add(pGrupo);
                 
                 var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
                 if (count == 0)
                 {
-                    return Ok(new { success = false, mensaje = "Su usuario no pertenece al grupo autorizado (cxcsade) para acceder al Cuadre de Caja." });
+                    return Ok(new { success = false, mensaje = $"Su usuario no pertenece al grupo autorizado ({requiredGroup}) para acceder a {appName}." });
                 }
             }
 
@@ -186,8 +208,73 @@ public class LoginController : ControllerBase
                 }
             }
 
+            int cobroStatus = 0;
+
+            // Leer CXPVencida de la BD de la EMPRESA seleccionada (no del repositorio central)
+            try { System.IO.File.AppendAllText(@"C:\inetpub\SADE\cuadre-api\publish\api_debug.log", $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [VENCIDAD START] idEmpresaStr='{idEmpresaStr}'\n"); } catch { }
+
+            if (Guid.TryParse(idEmpresaStr, out Guid idEmpresaForConn))
+            {
+                try
+                {
+                    var empForConn = await _authDb.Empresas.FirstOrDefaultAsync(e => e.IdEmpresa == idEmpresaForConn);
+                    if (empForConn != null)
+                    {
+                        var servidor = empForConn.Servidor?.Trim() ?? "localhost";
+                        if (servidor == "10.0.0.6" || servidor == "127.0.0.1" || servidor.ToLower() == "localhost")
+                            servidor = "localhost";
+                        var baseDatos = empForConn.BaseDatos?.Trim() ?? "";
+
+                        var empConnBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder();
+                        empConnBuilder.DataSource = servidor;
+                        empConnBuilder.InitialCatalog = baseDatos;
+                        empConnBuilder.TrustServerCertificate = true;
+                        empConnBuilder.Encrypt = false;
+                        empConnBuilder.MultipleActiveResultSets = true;
+
+                        // Heredar credenciales del template
+                        var templateConn = _configuration.GetConnectionString("CuadreConnection");
+                        if (!string.IsNullOrEmpty(templateConn))
+                        {
+                            var tpl = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(templateConn);
+                            if (tpl.IntegratedSecurity || string.IsNullOrEmpty(tpl.UserID))
+                                empConnBuilder.IntegratedSecurity = true;
+                            else { empConnBuilder.UserID = tpl.UserID; empConnBuilder.Password = tpl.Password; }
+                        }
+                        else empConnBuilder.IntegratedSecurity = true;
+
+                        using var empConn = new Microsoft.Data.SqlClient.SqlConnection(empConnBuilder.ConnectionString);
+                        await empConn.OpenAsync();
+                        using var cmd2 = empConn.CreateCommand();
+                        cmd2.CommandText = "SELECT TOP 1 Valor FROM defaults WHERE Clave = 'CXPVencida'";
+                        var vencidadObj = await cmd2.ExecuteScalarAsync();
+                        if (vencidadObj != null && vencidadObj != DBNull.Value)
+                            cobroStatus = Convert.ToInt32(vencidadObj);
+
+                        try { System.IO.File.AppendAllText(@"C:\inetpub\SADE\cuadre-api\publish\api_debug.log", $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [VENCIDAD] DB: '{baseDatos}' | CXPVencida = {cobroStatus}\n"); } catch { }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    try { System.IO.File.AppendAllText(@"C:\inetpub\SADE\cuadre-api\publish\api_debug.log", $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [VENCIDAD ERROR] {ex.Message}\n"); } catch { }
+                }
+            }
+
+            if (cobroStatus == 3)
+            {
+                return Ok(new { success = true, companiaNombre, cobroStatus, cobroMensaje = "Su acceso al sistema ERP SADE ha sido suspendido por falta de pago. Para reactivar el servicio comuníquese con SADE." });
+            }
+
+            string cobroMensaje = cobroStatus == 1
+                ? "Le solicitamos amablemente ponerse al día con los pagos pendientes a la mayor brevedad posible para evitar la suspensión del servicio."
+                : cobroStatus == 2
+                    ? "Aviso importante: El plazo para regularizar su cuenta está próximo a vencer. De no recibirse el pago pendiente en los próximos días, el acceso al sistema ERP SADE será bloqueado temporalmente. La reactivación del servicio tendrá un costo de US$200.00, además del pago de los valores pendientes."
+                    : "";
+
+            try { System.IO.File.AppendAllText(@"C:\inetpub\SADE\cuadre-api\api_debug.log", $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [VENCIDAD] Status read from DB: {cobroStatus} para empresa {companiaNombre}\n"); } catch { }
+
             // Para Cuadre de Caja en desarrollo local, permitimos acceso directamente
-            return Ok(new { success = true, companiaNombre });
+            return Ok(new { success = true, companiaNombre, cobroStatus, cobroMensaje });
         }
         catch (Exception ex)
         {
@@ -201,9 +288,16 @@ public class LoginController : ControllerBase
     {
         try
         {
+            var logPath = @"C:\inetpub\SADE\cuadre-api\api_debug.log";
+            try { System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [INSIDE GetEmpresas] Started execution. Authenticated: {User.Identity?.IsAuthenticated}\n"); } catch { }
+
             var sub = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            
+            try { System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [INSIDE GetEmpresas] Extracted sub: {sub ?? "NULL"}\n"); } catch { }
+
             if (string.IsNullOrEmpty(sub))
             {
+                try { System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [INSIDE GetEmpresas] Returning Unauthorized due to empty sub.\n"); } catch { }
                 return Unauthorized("No se pudo identificar al usuario en el token.");
             }
 

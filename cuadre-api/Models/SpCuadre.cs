@@ -4,6 +4,7 @@ namespace CuadreApi.Models;
 
 public class SpCuadre
 {
+    public string? Sucursal { get; set; }
     public int Orden { get; set; }
     public string? Usuario { get; set; }
     public Guid? Idfactura { get; set; }

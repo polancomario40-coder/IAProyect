@@ -43,8 +43,13 @@ export default function App() {
     setErrorMsg(null);
     try {
       const response = await api.get('/usuario/empresas');
-      setEmpresas(response.data);
-      setStep('empresa');
+      const lista = response.data;
+      setEmpresas(lista);
+      if (lista.length === 1) {
+        handleSelectEmpresa(lista[0]);
+      } else {
+        setStep('empresa');
+      }
     } catch (err: any) {
       console.error('Error fetching companies', err);
       // If token expired, clear it

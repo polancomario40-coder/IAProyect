@@ -1,4 +1,4 @@
-# Node modules
+﻿# Node modules
 node_modules/
 dist/
 dist-ssr/
@@ -41,3 +41,28 @@ yarn-error.log*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Secrets / Production configs (NEVER commit)
+**/appsettings.Development.json
+auth-center/.env.production
+
+# Temp SQL scripts
+fix*.sql
+alter_*.sql
+sp*.txt
+
+# Temp test / debug files
+test_*.cs
+fix.js
+auth_patch.js
+patch.js
+DecryptTest/
+
+# Build / publish artifacts
+APICXPExterno_Publish/
+APICXPExterno_Publish.rar
+*.rar
+*.zip
+
+# cuadre-caja dist (auto-generated)
+cuadre-caja/dist/

@@ -1,0 +1,6 @@
+@SADE_DashboardAPI_HostAddress = http://localhost:5015
+
+GET {{SADE_DashboardAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

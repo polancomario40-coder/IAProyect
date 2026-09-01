@@ -45,6 +45,10 @@ export default function DashboardView() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [showMobileDetails, setShowMobileDetails] = useState(false);
 
+  const [cobroStatus, setCobroStatus] = useState<number>(0);
+  const [cobroMensaje, setCobroMensaje] = useState<string>('');
+  const [showCobroBanner, setShowCobroBanner] = useState(true);
+
   const [empresaNombre, setEmpresaNombre] = useState('Empresa');
 
   // Dropdown states
@@ -85,14 +89,14 @@ export default function DashboardView() {
     const loadFiltersData = async () => {
       try {
         const sucResponse = await api.get('/cuadre/sucursales');
-        setSucursales(sucResponse.data || []);
+        setSucursales(Array.isArray(sucResponse.data) ? sucResponse.data : []);
       } catch (e) {
         console.error('Error loading sucursales from API', e);
       }
 
       try {
         const cajResponse = await api.get('/cuadre/cajeros');
-        setCajeros(cajResponse.data || []);
+        setCajeros(Array.isArray(cajResponse.data) ? cajResponse.data : []);
       } catch (e) {
         console.error('Error loading cajeros from API', e);
       }
@@ -110,9 +114,17 @@ export default function DashboardView() {
     const checkAccess = async () => {
       try {
         const resp = await api.post('/usuario/validar-acceso');
+        console.log('[COBRO CHECK] API response:', resp.data);
         if (resp.data && resp.data.success === false) {
           setAccessDenied(true);
           setErrorMsg(resp.data.mensaje || 'No tiene permisos para acceder al Cuadre de Caja.');
+        } else if (resp.data) {
+          const cs = resp.data.cobroStatus ?? 0;
+          console.log('[COBRO CHECK] cobroStatus:', cs, '| cobroMensaje:', resp.data.cobroMensaje);
+          if (cs > 0) {
+            setCobroStatus(cs);
+            setCobroMensaje(resp.data.cobroMensaje || '');
+          }
         }
       } catch (e) {
         console.error('Error validating access', e);
@@ -315,6 +327,89 @@ export default function DashboardView() {
 
         </div>
       </header>
+
+      {/* Modal Popup de Cobro - Status 1 (amarillo), 2 (rojo), 3 (negro bloqueante) */}
+      {(cobroStatus === 3 || (showCobroBanner && (cobroStatus === 1 || cobroStatus === 2))) && (
+        <div className="no-print" style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: cobroStatus === 3 ? 'rgba(0,0,0,0.95)' : 'rgba(0,0,0,0.75)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: cobroStatus === 1 ? '#fefce8' : cobroStatus === 2 ? '#fff1f2' : '#111111',
+            borderRadius: '16px',
+            padding: '2.5rem',
+            maxWidth: '520px',
+            width: '100%',
+            textAlign: 'center',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8)',
+            border: `3px solid ${cobroStatus === 1 ? '#f59e0b' : cobroStatus === 2 ? '#ef4444' : '#333333'}`
+          }}>
+            <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>
+              {cobroStatus === 1 ? '⚠️' : cobroStatus === 2 ? '🚨' : '🔒'}
+            </div>
+            <h2 style={{
+              color: cobroStatus === 1 ? '#92400e' : cobroStatus === 2 ? '#991b1b' : '#ffffff',
+              fontSize: '1.5rem',
+              fontWeight: 800,
+              marginBottom: '1rem'
+            }}>
+              {cobroStatus === 1 ? 'Aviso de Pago' : cobroStatus === 2 ? 'Urgente: Cuenta Vencida' : 'Acceso Bloqueado'}
+            </h2>
+            <p style={{
+              color: cobroStatus === 1 ? '#78350f' : cobroStatus === 2 ? '#7f1d1d' : '#cccccc',
+              fontSize: '1.05rem',
+              lineHeight: 1.6,
+              marginBottom: '2rem'
+            }}>
+              {cobroMensaje}
+            </p>
+            {/* Status 3 bloquea: solo botón de volver, no de continuar */}
+            {cobroStatus === 3 ? (
+              <button
+                onClick={handleLogout}
+                style={{
+                  backgroundColor: '#374151',
+                  color: '#fff',
+                  border: '1px solid #6b7280',
+                  borderRadius: '8px',
+                  padding: '0.85rem 2.5rem',
+                  fontSize: '1rem',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                ⬅️ Volver
+              </button>
+            ) : (
+              showCobroBanner && (
+                <button
+                  onClick={() => setShowCobroBanner(false)}
+                  style={{
+                    backgroundColor: cobroStatus === 1 ? '#f59e0b' : '#ef4444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.85rem 2.5rem',
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.opacity = '0.85')}
+                  onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}
+                >
+                  Entendido, Continuar
+                </button>
+              )
+            )}
+          </div>
+        </div>
+      )}
 
       {accessDenied ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '16px', padding: '3rem', textAlign: 'center' }}>

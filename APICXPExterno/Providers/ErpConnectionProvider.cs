@@ -7,6 +7,8 @@ namespace CxpApi.Providers;
 public interface IErpConnectionProvider
 {
     string GetConnectionString();
+    string GetConnectionString(Guid idEmpresa);
+    string GetConnectionString(CxpApi.Models.CfgEmpresa empresa);
 }
 
 public class ErpConnectionProvider : IErpConnectionProvider
@@ -60,6 +62,23 @@ public class ErpConnectionProvider : IErpConnectionProvider
             throw new UnauthorizedAccessException("Empresa no válida, inactiva o sin acceso web.");
         }
 
+        return GetConnectionString(empresa);
+    }
+
+    public string GetConnectionString(Guid idEmpresa)
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+        var empresa = authDb.Empresas.FirstOrDefault(e => e.IdEmpresa == idEmpresa && e.Activa && e.AccesoWeb);
+        if (empresa == null)
+        {
+            throw new UnauthorizedAccessException("Empresa no válida, inactiva o sin acceso web.");
+        }
+        return GetConnectionString(empresa);
+    }
+
+    public string GetConnectionString(CxpApi.Models.CfgEmpresa empresa)
+    {
         var servidor = empresa.Servidor?.Trim() ?? "";
         
         // Parche de Servidor Local: SADEcon a veces guarda "127.0.0.6" en BD, fallando la resolución de ADO.NET
@@ -82,9 +101,10 @@ public class ErpConnectionProvider : IErpConnectionProvider
         }
         else
         {
-            var userPwd = empresa.Encriptada ? DesencriptarPassword(empresa.UserPwd) : empresa.UserPwd;
-            builder.UserID = empresa.UserId?.Trim() ?? "";
-            builder.Password = userPwd?.Trim() ?? "";
+            var userId = empresa.Encriptada ? DesencriptarPassword(empresa.UserId?.Trim()) : empresa.UserId?.Trim();
+            var userPwd = empresa.Encriptada ? DesencriptarPassword(empresa.UserPwd?.Trim()) : empresa.UserPwd?.Trim();
+            builder.UserID = userId ?? "";
+            builder.Password = userPwd ?? "";
         }
         
         var connectionString = builder.ConnectionString;
@@ -94,7 +114,38 @@ public class ErpConnectionProvider : IErpConnectionProvider
 
     private string DesencriptarPassword(string? pass)
     {
-        // TODO: Implementar el mismo algoritmo de desencriptación de Delphi 7
-        return pass ?? string.Empty;
+        // Limpiar espacios y caracteres nulos de Delphi (muy comun en CHAR(N))
+        pass = pass?.Replace("\0", "").Trim();
+        if (string.IsNullOrWhiteSpace(pass)) return string.Empty;
+        
+        // Validar longitud par antes de procesar para evitar ArgumentOutOfRangeException
+        if (pass.Length % 2 != 0) return pass;
+
+        try
+        {
+            ushort c1 = 52845;
+            ushort c2 = 22719;
+            ushort key = 2000;
+
+            byte[] decodedBytes = new byte[pass.Length / 2];
+            for (int i = 0; i < pass.Length; i += 2)
+            {
+                decodedBytes[i / 2] = Convert.ToByte(pass.Substring(i, 2), 16);
+            }
+
+            char[] resultStr = new char[decodedBytes.Length];
+            for (int i = 0; i < decodedBytes.Length; i++)
+            {
+                resultStr[i] = (char)(decodedBytes[i] ^ (key >> 8));
+                key = (ushort)(((decodedBytes[i] + key) * c1 + c2) % 65536);
+            }
+
+            return new string(resultStr);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERROR Desencriptando Password]: {ex.Message}");
+            return pass ?? string.Empty;
+        }
     }
 }
