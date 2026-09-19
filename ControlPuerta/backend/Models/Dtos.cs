@@ -15,6 +15,8 @@ public record RegistrarEntradaRequest
     public string   Placa               { get; init; } = "";
     public string?  PlacaOcrTexto       { get; init; }
     public decimal? PlacaOcrConfianza   { get; init; }
+    public string?  FotoPlacaBase64     { get; init; }
+    public string?  FotoPlacaMime       { get; init; }
     public string?  IdTransportista     { get; init; }
     public string?  Transportista       { get; init; }
     public Guid?    IdChofer            { get; init; }
@@ -41,13 +43,11 @@ public record ConfirmarRecepcionRequest
 {
     public Guid     IdEntradaCamion     { get; init; }
     public string   Conduce             { get; init; } = "";
-    public string   ConduceTransporte   { get; init; } = "";
+    public string?  ConduceTransporte   { get; init; }
     public string?  IdSuplidor          { get; init; }
     public string?  NombreSuplidor      { get; init; }
     public string?  IdAlmacen           { get; init; }
-    public decimal  CantidadRecibida    { get; init; }
-    public string?  IdProductoReal      { get; init; }
-    public string?  NombreProductoReal  { get; init; }
+    public List<ProductoRecepcionDto> Productos { get; init; } = new();
     public string?  Notas               { get; init; }
     // Evidencias en base64
     public string?  FotoConduceBase64   { get; init; }
@@ -58,11 +58,22 @@ public record ConfirmarRecepcionRequest
     public string?  FotoCamionBase64    { get; init; }
 }
 
+public record ProductoRecepcionDto
+{
+    public string?  IdProductoReal      { get; init; }
+    public string?  NombreProductoReal  { get; init; }
+    public decimal  CantidadRecibida    { get; init; }
+    public string?  IdUnidad            { get; init; }
+    public string?  IdUnidadAlmacen     { get; init; }
+    public decimal? CantidadAlmacen     { get; init; }
+}
+
 public record ProductoDto
 {
-    public string IdProductoPuerta { get; init; } = "";
-    public string IdProducto       { get; init; } = "";
-    public string Nombre           { get; init; } = "";
+    public string  IdProductoPuerta { get; init; } = "";
+    public string  IdProducto       { get; init; } = "";
+    public string  Nombre           { get; init; } = "";
+    public string? IdUnidad         { get; init; }
 }
 
 public record SuplidorDto
@@ -137,7 +148,8 @@ public record ChoferDto
     public Guid    IdChofer     { get; init; }
     public string  Nombre       { get; init; } = "";
     public string? LicenciaNo   { get; init; }
-    public string? Celular      { get; init; }
+    public string?   TransportistaNombre { get; init; }
+    public string?   Celular          { get; init; }
 }
 
 public record EntradaCamionDto
@@ -159,6 +171,9 @@ public record EntradaCamionDto
     public string?   Suplidor            { get; init; }
     public decimal?  CantidadDeclarada   { get; init; }
     public decimal?  CantidadRecibida    { get; init; }
+    public string?   IdUnidad            { get; init; }
+    public string?   IdUnidadAlmacen     { get; init; }
+    public decimal?  CantidadAlmacen     { get; init; }
     public string?   IdAlmacen           { get; init; }
     public string    Status              { get; init; } = "";
     public Guid?     IdOrden             { get; init; }
@@ -192,4 +207,16 @@ public record ApiResponse<T>
 
     public static ApiResponse<T> Fail(string mensaje)
         => new() { Success = false, Mensaje = mensaje, Data = default };
+}
+
+public record TicketProductoDto
+{
+    public string?  IdProducto        { get; init; }
+    public string   Producto          { get; init; } = "";
+    public decimal? CantidadDeclarada { get; init; }
+    public decimal? CantidadRecibida  { get; init; }
+    public string?  IdUnidad          { get; init; }
+    public decimal? CantidadAlmacen   { get; init; }
+    public string?  IdUnidadAlmacen   { get; init; }
+    public int?     OrdenNumero       { get; init; }
 }

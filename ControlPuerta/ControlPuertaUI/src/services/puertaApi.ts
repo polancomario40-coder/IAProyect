@@ -12,13 +12,26 @@ export const puertaApi = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Interceptor de Request: adjunta el token JWT en cada llamada
+// Interceptor de Request: adjunta el token JWT y la empresa seleccionada en cada llamada
 puertaApi.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    const empresaStr = localStorage.getItem(EMPRESA_KEY);
+    if (empresaStr) {
+      try {
+        const emp = JSON.parse(empresaStr);
+        if (emp.idEmpresa) {
+          config.headers['X-Selected-Company'] = emp.idEmpresa;
+        }
+      } catch (e) {
+        console.warn('Error parseando empresa de localStorage', e);
+      }
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -59,6 +72,9 @@ export const listarProductos = () =>
 export const listarChoferes = (idTransportista: string) =>
   puertaApi.get(`/puerta/choferes/${idTransportista}`);
 
+export const buscarChoferes = (q: string) =>
+  puertaApi.get('/puerta/buscar-choferes', { params: { q } });
+
 export const registrarEntrada = (data: object) =>
   puertaApi.post('/puerta/registrar-entrada', data);
 
@@ -69,7 +85,7 @@ export const cancelarEntrada = (id: string) =>
 export interface ConfirmarRecepcionRequest {
   idEntradaCamion: string;
   conduce: string;
-  conduceTransporte: string;
+  conduceTransporte?: string;
   fotoConduceBase64?: string;
   fotoConduceMime?: string;
   firmaDigitalBase64?: string;
@@ -79,6 +95,9 @@ export interface ConfirmarRecepcionRequest {
   nombreProductoReal?: string;
   idAlmacen?: string;
   cantidadRecibida: number;
+  idUnidad?: string;
+  idUnidadAlmacen?: string;
+  cantidadAlmacen?: number;
   notas?: string;
   evidenciasBase64?: string[];
 }
@@ -97,6 +116,9 @@ export const buscarSuplidores = (q: string) =>
 
 export const listarAlmacenes = () =>
   puertaApi.get('/recepcion/almacenes');
+
+export const listarUnidades = () =>
+  puertaApi.get('/recepcion/unidades');
 
 export const confirmarRecepcion = (id: string, data: ConfirmarRecepcionRequest) =>
   puertaApi.put(`/recepcion/${id}/confirmar`, data);
@@ -125,8 +147,8 @@ export const asignarOc = (data: object) =>
 export const ejecutarCierre = (data: object) =>
   puertaApi.post('/cierre/ejecutar', data);
 
-export const buscarOrdenes = (q?: string, fecha?: string) =>
-  puertaApi.get('/cierre/ordenes', { params: { q, fecha } });
+export const buscarOrdenes = (q?: string, fecha?: string, idSuplidor?: string) =>
+  puertaApi.get('/cierre/ordenes', { params: { q, fecha, idSuplidor } });
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 export const getToken = () => localStorage.getItem(TOKEN_KEY);

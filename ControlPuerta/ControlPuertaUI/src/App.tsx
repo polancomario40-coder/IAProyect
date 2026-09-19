@@ -13,6 +13,14 @@ const NavBar = () => {
   const [compania, setCompania] = useState('SADE');
   
   useEffect(() => {
+    const empStr = localStorage.getItem('empresa');
+    if (empStr) {
+      try {
+        const emp = JSON.parse(empStr);
+        if (emp.empresa) setCompania(emp.empresa);
+      } catch {}
+    }
+
     puertaApi.get('/puerta/configuracion')
       .then(res => {
         if (res.data && res.data.data && res.data.data.companiaCorto) {

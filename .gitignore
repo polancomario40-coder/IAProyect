@@ -1,4 +1,4 @@
-﻿# Node modules
+# Node modules
 node_modules/
 dist/
 dist-ssr/
@@ -66,3 +66,35 @@ APICXPExterno_Publish.rar
 
 # cuadre-caja dist (auto-generated)
 cuadre-caja/dist/
+
+# Scratch / temporary scripts and tools
+/*.js
+/*.cs
+/*.ps1
+/*.txt
+scratch/
+search_results.txt
+Fixer/
+SmoScripter/
+APICXPExterno_Publish_SelfContained/
+APICXPExterno/test.ps1
+
+# Secrets and environment configs
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Delphi compiled
+*.dcu
+*.identcache
+*.stat
+*.local
+
+# IIS Published / Build folders
+PUBLICACION_IIS/
+

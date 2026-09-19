@@ -42,19 +42,44 @@ export const CierreDiaPage: React.FC = () => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
+  const [modalSuplidorInfo, setModalSuplidorInfo] = useState<{ idSuplidor?: string; nombre?: string; producto?: string; idProducto?: string } | null>(null);
+
   // Handle Modal Actions
-  const openModal = (ids: string[]) => {
+  const openModal = async (ids: string[]) => {
+    const items = pendientes.filter(p => ids.includes(p.idEntradaCamion));
+    const suplidoresUnicos = Array.from(new Set(items.map(p => p.idSuplidor).filter(Boolean)));
+    if (suplidoresUnicos.length > 1) {
+      alert('Las recepciones seleccionadas pertenecen a suplidores distintos. Para asignar una OC en lote, todas las recepciones deben pertenecer al mismo suplidor.');
+      return;
+    }
+
+    const first = items[0];
+    const supInfo = first ? {
+      idSuplidor: first.idSuplidor,
+      nombre: first.suplidor,
+      producto: first.producto,
+      idProducto: first.idProducto
+    } : null;
+    setModalSuplidorInfo(supInfo);
+
     setTargetIds(ids);
     setQ('');
     setOrdenes([]);
     setSelectedOc(null);
     setEvals({ calidad: 255, tiempo: 255, servicio: 255 });
     setModalOpen(true);
+
+    try {
+      const res = await buscarOrdenes('', undefined, supInfo?.idSuplidor);
+      setOrdenes(res.data.data);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const buscarOC = async () => {
     try {
-      const res = await buscarOrdenes(q);
+      const res = await buscarOrdenes(q, undefined, modalSuplidorInfo?.idSuplidor);
       setOrdenes(res.data.data);
     } catch (e) { console.error(e); }
   };
@@ -123,7 +148,7 @@ export const CierreDiaPage: React.FC = () => {
         </button>
 
         <button onClick={handleCerrarDia} style={{...btnStyle, background: '#EF4444', marginLeft: 'auto'}}>
-          Ejecutar Cierre Definitivo
+          Ejecutar Cierre
         </button>
       </div>
 
@@ -142,6 +167,7 @@ export const CierreDiaPage: React.FC = () => {
               </th>
               <th>Conduce</th>
               <th>Entrada Almacén</th>
+              <th>Suplidor</th>
               <th>Transportista</th>
               <th>Producto / Cantidad</th>
               <th>OC Asignada</th>
@@ -161,8 +187,13 @@ export const CierreDiaPage: React.FC = () => {
                 </td>
                 <td style={{ fontWeight: 500 }}>{p.conduce}</td>
                 <td style={{ color: '#10B981', fontWeight: 600 }}>{p.proMov || 'N/A'}</td>
+                <td style={{ color: '#E5E7EB', fontWeight: 500 }}>{p.suplidor || 'N/A'}</td>
                 <td>{p.transportista}</td>
-                <td>{p.producto} <br/><small style={{color: '#9CA3AF'}}>{p.cantidadRecibida} mts</small></td>
+                <td>
+                  {p.idProducto && <span style={{ color: '#60A5FA', fontSize: 11, fontWeight: 'bold', display: 'block' }}>[{p.idProducto}]</span>}
+                  {p.producto} <br/>
+                  <small style={{color: '#9CA3AF'}}>{p.cantidadRecibida} {p.idUnidad || 'Mts3'}</small>
+                </td>
                 <td>
                   {p.idOrden ? (
                     <span style={{ color: '#10B981', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -190,7 +221,7 @@ export const CierreDiaPage: React.FC = () => {
               </tr>
             ))}
             {pendientes.length === 0 && (
-              <tr><td colSpan={6} style={{ padding: 30, textAlign: 'center', color: '#9CA3AF' }}>No hay pendientes para esta fecha</td></tr>
+              <tr><td colSpan={7} style={{ padding: 30, textAlign: 'center', color: '#9CA3AF' }}>No hay pendientes para esta fecha</td></tr>
             )}
           </tbody>
         </table>
@@ -205,10 +236,20 @@ export const CierreDiaPage: React.FC = () => {
               <button onClick={() => setModalOpen(false)} style={{ background: 'transparent', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: 24, lineHeight: 1 }}>×</button>
             </div>
             
-            <div style={{ background: '#374151', padding: '10px 15px', borderRadius: 6, marginBottom: 20 }}>
-              <p style={{ margin: 0, fontSize: 14 }}>
+            <div style={{ background: '#374151', padding: '12px 15px', borderRadius: 6, marginBottom: 20 }}>
+              <p style={{ margin: '0 0 6px 0', fontSize: 14 }}>
                 Se asignará OC a <strong>{targetIds.length}</strong> recepción(es)
               </p>
+              {modalSuplidorInfo && (
+                <div style={{ fontSize: 13, color: '#D1D5DB' }}>
+                  <p style={{ margin: '3px 0' }}>
+                    <strong>Suplidor de la Recepción:</strong> <span style={{ color: '#60A5FA', fontWeight: 600 }}>{modalSuplidorInfo.nombre || 'No definido'}</span> {modalSuplidorInfo.idSuplidor ? `(ID: ${modalSuplidorInfo.idSuplidor})` : ''}
+                  </p>
+                  <p style={{ margin: '3px 0' }}>
+                    <strong>Producto a Recibir:</strong> {modalSuplidorInfo.idProducto ? `[${modalSuplidorInfo.idProducto}] ` : ''}{modalSuplidorInfo.producto || 'No definido'}
+                  </p>
+                </div>
+              )}
             </div>
 
             {!selectedOc ? (

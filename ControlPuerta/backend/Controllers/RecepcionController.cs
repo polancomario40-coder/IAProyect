@@ -82,6 +82,16 @@ public class RecepcionController : ControllerBase
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // GET /api/recepcion/unidades
+    // ──────────────────────────────────────────────────────────────────────────
+    [HttpGet("unidades")]
+    public async Task<ActionResult<ApiResponse<List<string>>>> ListarUnidades()
+    {
+        var lista = await _db.ListarUnidadesAsync();
+        return Ok(ApiResponse<List<string>>.Ok(lista));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // PUT /api/recepcion/{id}/confirmar
     // El almacenista confirma la recepción. Puede incluir evidencias directamente.
     // ──────────────────────────────────────────────────────────────────────────
@@ -92,21 +102,24 @@ public class RecepcionController : ControllerBase
         if (req.IdEntradaCamion != id)
             return BadRequest(ApiResponse<object>.Fail("El ID en la ruta y en el cuerpo no coinciden."));
 
-        // Validar 9 campos (los capturados en puerta ya están, validamos los de recepción/ajustes)
+        // Validar campos de recepción/ajustes
         if (string.IsNullOrWhiteSpace(req.Conduce) || req.Conduce.Length < 4)
             return BadRequest(ApiResponse<object>.Fail("El Número de Conduce del Agregado es obligatorio y debe tener al menos 4 caracteres."));
-        if (string.IsNullOrWhiteSpace(req.ConduceTransporte) || req.ConduceTransporte.Length < 4)
-            return BadRequest(ApiResponse<object>.Fail("El Número de Conduce del Transporte es obligatorio y debe tener al menos 4 caracteres."));
         if (string.IsNullOrWhiteSpace(req.IdSuplidor))
             return BadRequest(ApiResponse<object>.Fail("El Suplidor del Agregado es obligatorio."));
         if (string.IsNullOrWhiteSpace(req.IdAlmacen))
             return BadRequest(ApiResponse<object>.Fail("El Almacén de destino es obligatorio."));
-        if (req.CantidadRecibida <= 0)
-            return BadRequest(ApiResponse<object>.Fail("La cantidad recibida debe ser mayor a 0."));
+        if (req.Productos == null || !req.Productos.Any())
+            return BadRequest(ApiResponse<object>.Fail("Debe agregar al menos un producto a la recepción."));
+        if (req.Productos.Any(p => p.CantidadRecibida <= 0))
+            return BadRequest(ApiResponse<object>.Fail("La cantidad recibida de todos los productos debe ser mayor a 0."));
 
         var entrada = await _db.ObtenerEntradaPorIdAsync(id);
         if (entrada is null)
             return NotFound(ApiResponse<object>.Fail($"Entrada {id} no encontrada."));
+
+        if (string.IsNullOrWhiteSpace(req.FotoConduceBase64) && entrada.IdEvidencia == null)
+            return BadRequest(ApiResponse<object>.Fail("Es obligatorio tomar la foto del conduce físico."));
 
         if (entrada.Status == "CERRADO" || entrada.Status == "BLOQUEADO")
             return Conflict(ApiResponse<object>.Fail(
@@ -116,50 +129,59 @@ public class RecepcionController : ControllerBase
         var ip      = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
 
         // 1. Guardar evidencias si vienen incluidas
-        Guid idEvidencia = entrada.IdEvidencia ?? Guid.NewGuid();
         bool tieneEvidencia = !string.IsNullOrEmpty(req.FotoConduceBase64)
                            || !string.IsNullOrEmpty(req.FirmaDigitalBase64)
-                           || !string.IsNullOrEmpty(req.ImagenFirmadaBase64);
+                           || !string.IsNullOrEmpty(req.ImagenFirmadaBase64)
+                           || !string.IsNullOrEmpty(req.FotoCamionBase64);
 
-        if (tieneEvidencia && entrada.IdEvidencia is null)
+        Guid? idEvidencia = entrada.IdEvidencia;
+
+        if (tieneEvidencia)
         {
             var metadatos = new
             {
-                conduce      = req.Conduce,
-                placa        = entrada.Placa,
+                conduce       = req.Conduce,
+                placa         = entrada.Placa,
                 transportista = entrada.Transportista,
-                chofer       = entrada.NombreChofer
+                chofer        = entrada.NombreChofer
             };
 
             idEvidencia = await _evidencias.GuardarEvidenciaAsync(
-                idRefExterna:       id,
-                referencia:         req.Conduce,
-                fotoConduceBase64:  req.FotoConduceBase64,
-                fotoConduceMime:    req.FotoConduceMime ?? "image/jpeg",
-                fotoConduceNombre:  req.FotoConduceNombre,
-                firmaDigitalBase64: req.FirmaDigitalBase64,
+                idRefExterna:        id,
+                referencia:          req.Conduce,
+                fotoConduceBase64:   req.FotoConduceBase64,
+                fotoConduceMime:     req.FotoConduceMime ?? "image/jpeg",
+                fotoConduceNombre:   req.FotoConduceNombre,
+                firmaDigitalBase64:  req.FirmaDigitalBase64,
                 imagenFirmadaBase64: req.ImagenFirmadaBase64,
-                fotoCamionBase64:   req.FotoCamionBase64,
-                metadatos:          metadatos,
-                usuario:            usuario,
-                ip:                 ip);
+                fotoCamionBase64:    req.FotoCamionBase64,
+                metadatos:           metadatos,
+                usuario:             usuario,
+                ip:                  ip);
         }
 
         try
         {
-            // 2. Confirmar recepción en BD ERP
-            var ok = await _db.ConfirmarRecepcionAsync(
-                idEntradaCamion:  id,
-                fechaRecepcion:   DateTime.Now,
-                usuarioRecepcion: usuario,
-                idEvidencia:      idEvidencia,
-                req:              req);
+            // 2. Confirmar recepción en BD ERP y generar secuencia automática por almacén
+            string secuenciaGenerada = null;
+try {
+    secuenciaGenerada = await _db.ConfirmarRecepcionAsync(
+        idEntradaCamion:  id,
+        fechaRecepcion:   DateTime.Now,
+        usuarioRecepcion: usuario,
+        idEvidencia:      idEvidencia,
+        req:              req
+    );
+} catch (Exception ex) {
+    ErrorLogger.Log(ex);
+    return StatusCode(500, ApiResponse<object>.Fail("ERROR_SQL: " + ex.Message + (ex.InnerException != null ? " INNER: " + ex.InnerException.Message : "")));
+}
 
-            if (!ok)
+            if (secuenciaGenerada is null)
                 return StatusCode(500, ApiResponse<object>.Fail("No se pudo actualizar la recepción. Intente nuevamente."));
 
             return Ok(ApiResponse<object>.Ok(
-                new { idEntradaCamion = id, idEvidencia },
+                new { idEntradaCamion = id, idEvidencia, conduceTransporte = secuenciaGenerada },
                 "Recepción confirmada correctamente."));
         }
         catch (InvalidOperationException ex)
@@ -205,6 +227,8 @@ public class RecepcionController : ControllerBase
             usuario:             usuario,
             ip:                  ip);
 
+        await _db.AsignarEvidenciaAsync(id, idEvidencia);
+
         return Ok(ApiResponse<object>.Ok(new { idEvidencia }, "Evidencias guardadas correctamente."));
     }
 
@@ -227,8 +251,11 @@ public class RecepcionController : ControllerBase
             imagenFirmada = firmada;
         }
 
+        if (imagenFirmada is null)
+            return BadRequest(ApiResponse<object>.Fail("No se encontró la imagen firmada para adjuntar."));
+
         // Destinatarios CC desde configuración
-        var ccConfig = _config["ControlPuerta:NotificacionCC"] ?? "";
+        var ccConfig = _config["Email:RecepcionCC"] ?? "";
         var cc = ccConfig.Split(';', StringSplitOptions.RemoveEmptyEntries)
             .Concat(req.EmailsCC ?? Array.Empty<string>())
             .ToArray();
@@ -265,20 +292,69 @@ public class RecepcionController : ControllerBase
         if (entrada is null)
             return NotFound(ApiResponse<TicketDto>.Fail($"Entrada {id} no encontrada."));
 
+        // 1. Obtener parámetros ISO desde defaults
+        var (isoIdent, isoRev) = await _db.ObtenerParametrosIsoAsync();
+
+        // 2. Obtener nombre empresa
+        var empresaNombre = await _db.ObtenerNombreEmpresaAsync();
+
+        // 3. Obtener firma digital si existe evidencia
+        string? firmaBase64 = null;
+        if (entrada.IdEvidencia.HasValue)
+        {
+            try
+            {
+                var (_, firmaBytes, firmadaBytes, _) = await _evidencias.ObtenerBinariosAsync(entrada.IdEvidencia.Value);
+                var f = firmaBytes ?? firmadaBytes;
+                if (f != null && f.Length > 0)
+                {
+                    firmaBase64 = Convert.ToBase64String(f);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "No se pudo recuperar la firma digital para el ticket {Id}", id);
+            }
+        }
+
+        var productos = await _db.ObtenerProductosTicketAsync(
+            entrada.IdEntradaCamion,
+            entrada.ConduceTransporte,
+            entrada.Conduce,
+            entrada.Placa,
+            entrada.FechaEntrada
+        );
+
         var ticket = new TicketDto
         {
-            IdEntradaCamion  = entrada.IdEntradaCamion,
-            Conduce          = entrada.Conduce,
-            Placa            = entrada.Placa,
-            Transportista    = entrada.Transportista ?? "",
-            NombreChofer     = entrada.NombreChofer ?? "",
-            Producto         = entrada.Producto ?? "",
-            FechaEntrada     = entrada.FechaEntrada,
-            FechaRecepcion   = entrada.FechaRecepcion,
-            UsuarioRecepcion = entrada.UsuarioRecepcion ?? "",
-            Status           = entrada.Status,
-            OrdenNumero      = entrada.OrdenNumero,
-            FechaImpresion   = DateTime.Now
+            IdEntradaCamion    = entrada.IdEntradaCamion,
+            Conduce            = entrada.Conduce,
+            ConduceTransporte  = entrada.ConduceTransporte,
+            Placa              = entrada.Placa,
+            Transportista      = entrada.Transportista ?? "",
+            NombreChofer       = entrada.NombreChofer ?? "",
+            Producto           = entrada.Producto ?? "",
+            IdSuplidor         = entrada.IdSuplidor,
+            Suplidor           = entrada.Suplidor,
+            IdAlmacen          = entrada.IdAlmacen,
+            Almacen            = entrada.IdAlmacen,
+            CantidadDeclarada  = entrada.CantidadDeclarada,
+            CantidadRecibida   = entrada.CantidadRecibida,
+            IdUnidad           = entrada.IdUnidad,
+            IdUnidadAlmacen    = entrada.IdUnidadAlmacen,
+            CantidadAlmacen    = entrada.CantidadAlmacen,
+            Notas              = entrada.Notas,
+            FechaEntrada       = entrada.FechaEntrada,
+            FechaRecepcion     = entrada.FechaRecepcion,
+            UsuarioRecepcion   = entrada.UsuarioRecepcion ?? "",
+            Status             = entrada.Status,
+            OrdenNumero        = entrada.OrdenNumero,
+            FechaImpresion     = DateTime.Now,
+            IsoIdentificador   = isoIdent,
+            IsoRevision        = isoRev,
+            EmpresaNombre      = empresaNombre,
+            FirmaDigitalBase64 = firmaBase64,
+            Productos          = productos
         };
 
         return Ok(ApiResponse<TicketDto>.Ok(ticket));
@@ -297,14 +373,33 @@ public class RecepcionController : ControllerBase
 
         var (foto, firma, firmada, camion) = await _evidencias.ObtenerBinariosAsync(entrada.IdEvidencia.Value);
 
-        var (bytes, mime, nombre) = tipo.ToLower() switch
+        byte[]? bytes = null;
+        string mime = "image/jpeg";
+        string nombre = $"evidencia_{entrada.Conduce}.jpg";
+
+        switch (tipo.ToLowerInvariant())
         {
-            "foto"    => (foto,    "image/jpeg", $"foto_{entrada.Conduce}.jpg"),
-            "firma"   => (firma,   "image/png",  $"firma_{entrada.Conduce}.png"),
-            "firmada" => (firmada, "image/jpeg", $"firmado_{entrada.Conduce}.jpg"),
-            "camion"  => (camion,  "image/jpeg", $"camion_{entrada.Conduce}.jpg"),
-            _         => (null, "", "")
-        };
+            case "foto":
+                bytes = foto;
+                mime = "image/jpeg";
+                nombre = $"foto_{entrada.Conduce}.jpg";
+                break;
+            case "firma":
+                bytes = firma ?? firmada;
+                mime = firma != null ? "image/png" : "image/jpeg";
+                nombre = $"firma_{entrada.Conduce}.png";
+                break;
+            case "firmada":
+                bytes = firmada ?? firma;
+                mime = firmada != null ? "image/jpeg" : "image/png";
+                nombre = $"firmado_{entrada.Conduce}.jpg";
+                break;
+            case "camion":
+                bytes = camion;
+                mime = "image/jpeg";
+                nombre = $"camion_{entrada.Conduce}.jpg";
+                break;
+        }
 
         if (bytes is null)
             return NotFound($"No hay imagen de tipo '{tipo}' para esta entrada.");
@@ -358,18 +453,39 @@ public record NotificarRequest
     public string[]? EmailsCC        { get; init; }
 }
 
+
+
 public record TicketDto
 {
     public Guid      IdEntradaCamion   { get; init; }
     public string    Conduce           { get; init; } = "";
+    public string?   ConduceTransporte { get; init; }
     public string    Placa             { get; init; } = "";
     public string    Transportista     { get; init; } = "";
     public string    NombreChofer      { get; init; } = "";
     public string    Producto          { get; init; } = "";
+    public string?   IdSuplidor        { get; init; }
+    public string?   Suplidor          { get; init; }
+    public string?   IdAlmacen         { get; init; }
+    public string?   Almacen           { get; init; }
+    public decimal?  CantidadDeclarada { get; init; }
+    public decimal?  CantidadRecibida  { get; init; }
+    public string?   IdUnidad          { get; init; }
+    public string?   IdUnidadAlmacen   { get; init; }
+    public decimal?  CantidadAlmacen   { get; init; }
+    public string?   Notas             { get; init; }
     public DateTime  FechaEntrada      { get; init; }
     public DateTime? FechaRecepcion    { get; init; }
     public string    UsuarioRecepcion  { get; init; } = "";
     public string    Status            { get; init; } = "";
     public int?      OrdenNumero       { get; init; }
     public DateTime  FechaImpresion    { get; init; }
+    public string?   IsoIdentificador  { get; init; }
+    public string?   IsoRevision       { get; init; }
+    public string?   EmpresaNombre     { get; init; }
+    public string?   FirmaDigitalBase64 { get; init; }
+    public List<TicketProductoDto> Productos { get; init; } = new();
 }
+
+
+

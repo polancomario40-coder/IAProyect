@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import Webcam from 'react-webcam';
-import { Camera, Upload, RotateCcw, Check } from 'lucide-react';
+import { Camera, RotateCcw, Check } from 'lucide-react';
 import './CamaraCaptura.css';
 
 interface Props {
@@ -20,7 +20,6 @@ interface Props {
  */
 const CamaraCaptura: React.FC<Props> = ({ onCaptura, label = 'Capturar imagen', soloBoton = false }) => {
   const webcamRef = useRef<Webcam>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [modo, setModo] = useState<'idle' | 'camara' | 'preview'>('idle');
   const [preview, setPreview] = useState<string | null>(null);
@@ -34,21 +33,6 @@ const CamaraCaptura: React.FC<Props> = ({ onCaptura, label = 'Capturar imagen', 
       setModo('preview');
       onCaptura(img.split(',')[1], 'image/jpeg');
     }
-  };
-
-  // Subir desde archivo
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result as string;
-      setPreview(result);
-      setModo('preview');
-      onCaptura(result.split(',')[1], file.type);
-    };
-    reader.readAsDataURL(file);
   };
 
   const reiniciar = () => {
@@ -88,11 +72,6 @@ const CamaraCaptura: React.FC<Props> = ({ onCaptura, label = 'Capturar imagen', 
               <Camera size={16} />
             </button>
           )}
-          <button type="button" title="Subir imagen" onClick={() => fileInputRef.current?.click()}
-            style={{ background: '#6B7280', border: 'none', color: 'white', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-            <Upload size={16} />
-          </button>
-          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={handleFileChange} />
           {preview && (
             <button type="button" title="Reiniciar" onClick={reiniciar}
               style={{ background: '#374151', border: 'none', color: '#9CA3AF', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
@@ -127,21 +106,6 @@ const CamaraCaptura: React.FC<Props> = ({ onCaptura, label = 'Capturar imagen', 
               Usar Cámara
             </button>
           )}
-          <button
-            type="button"
-            className="btn-upload"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload size={18} />
-            Subir Imagen
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            hidden
-            onChange={handleFileChange}
-          />
         </div>
       )}
 

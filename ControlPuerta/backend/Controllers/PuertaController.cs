@@ -23,17 +23,20 @@ public class PuertaController : ControllerBase
     private readonly IPuertaDbService _db;
     private readonly ILogger<PuertaController> _logger;
     private readonly IConfiguration _config;
+    private readonly IEvidenciaService _evidencias;
 
     public PuertaController(
         IOcrService ocr,
         IPuertaDbService db,
         ILogger<PuertaController> logger,
-        IConfiguration config)
+        IConfiguration config,
+        IEvidenciaService evidencias)
     {
-        _ocr    = ocr;
-        _db     = db;
-        _logger = logger;
-        _config = config;
+        _ocr        = ocr;
+        _db         = db;
+        _logger     = logger;
+        _config     = config;
+        _evidencias = evidencias;
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -167,6 +170,15 @@ public class PuertaController : ControllerBase
         return Ok(ApiResponse<List<ChoferDto>>.Ok(choferes));
     }
 
+    // GET /api/puerta/buscar-choferes?q=...
+    // Busca choferes en TODOS los transportistas por nombre (para selector global)
+    [HttpGet("buscar-choferes")]
+    public async Task<ActionResult<ApiResponse<List<ChoferDto>>>> BuscarChoferes([FromQuery] string q)
+    {
+        var choferes = await _db.BuscarChoferesAsync(q ?? "");
+        return Ok(ApiResponse<List<ChoferDto>>.Ok(choferes));
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // POST /api/puerta/registrar-entrada
     // Guarda la entrada del camión en prtEntradaCamion (+ detalle de productos).
@@ -180,21 +192,41 @@ public class PuertaController : ControllerBase
             return BadRequest(ApiResponse<object>.Fail("El número de conduce es requerido."));
         if (string.IsNullOrWhiteSpace(req.Placa))
             return BadRequest(ApiResponse<object>.Fail("La placa del camión es requerida."));
+        if (string.IsNullOrWhiteSpace(req.FotoPlacaBase64))
+            return BadRequest(ApiResponse<object>.Fail("Es obligatorio tomar la foto de la placa/camión."));
 
         var usuario = ObtenerUsuario();
         try 
         {
             var idEntrada = await _db.RegistrarEntradaAsync(req, usuario);
+
+            // Guardar evidencia si hay foto de la placa
+            if (!string.IsNullOrWhiteSpace(req.FotoPlacaBase64))
+            {
+                var ip = HttpContext?.Connection?.RemoteIpAddress?.ToString();
+                await _evidencias.GuardarEvidenciaAsync(
+                    idRefExterna: idEntrada,
+                    referencia: req.Conduce,
+                    fotoConduceBase64: null,
+                    fotoConduceMime: null,
+                    fotoConduceNombre: null,
+                    firmaDigitalBase64: null,
+                    imagenFirmadaBase64: null,
+                    fotoCamionBase64: req.FotoPlacaBase64,
+                    metadatos: new { placa = req.Placa, transportista = req.Transportista },
+                    usuario: usuario,
+                    ip: ip
+                );
+            }
+
             return Ok(ApiResponse<object>.Ok(
                 new { idEntradaCamion = idEntrada },
                 $"Entrada del conduce '{req.Conduce}' registrada exitosamente."));
         }
         catch (Exception ex)
         {
-            if (ex.Message.Contains("Ya existe una entrada registrada"))
-                return BadRequest(ApiResponse<object>.Fail(ex.Message));
-            
-            throw;
+            _logger.LogError(ex, "[PUERTA] Error al registrar entrada: {Msg}", ex.Message);
+            return StatusCode(500, ApiResponse<object>.Fail($"Error al registrar entrada: {ex.Message}"));
         }
     }
 

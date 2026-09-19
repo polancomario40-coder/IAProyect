@@ -36,22 +36,21 @@ namespace SadeSecurity.API.Services
         {
             if (string.IsNullOrEmpty(inStr)) return "";
 
-            Encoding encoding = GetAnsiEncoding();
-            byte[] bytes = encoding.GetBytes(inStr);
-            byte[] resultBytes = new byte[bytes.Length];
+            byte[] resultBytes = new byte[inStr.Length];
 
-            for (int i = 0; i < bytes.Length; i++)
+            for (int i = 0; i < inStr.Length; i++)
             {
-                byte encryptedByte = (byte)(bytes[i] ^ (key >> 8));
+                byte originalByte = (byte)inStr[i];
+                byte encryptedByte = (byte)(originalByte ^ (key >> 8));
                 resultBytes[i] = encryptedByte;
                 key = (ushort)((encryptedByte + key) * C1 + C2);
             }
 
-            // Encode as UPPERCASE hex string for Delphi compatibility
+            // Encode as lowercase hex string to match Delphi Format('%.2x')
             StringBuilder sb = new StringBuilder(resultBytes.Length * 2);
             foreach (byte b in resultBytes)
             {
-                sb.Append(b.ToString("X2"));
+                sb.Append(b.ToString("x2"));
             }
 
             return sb.ToString();
@@ -69,23 +68,20 @@ namespace SadeSecurity.API.Services
             try 
             {
                 int len = inStr.Length;
-                byte[] encryptedBytes = new byte[len / 2];
+                byte[] decodedBytes = new byte[len / 2];
                 for (int i = 0; i < len; i += 2)
                 {
-                    encryptedBytes[i / 2] = Convert.ToByte(inStr.Substring(i, 2), 16);
+                    decodedBytes[i / 2] = Convert.ToByte(inStr.Substring(i, 2), 16);
                 }
 
-                byte[] decryptedBytes = new byte[encryptedBytes.Length];
-
-                for (int i = 0; i < encryptedBytes.Length; i++)
+                char[] resultStr = new char[decodedBytes.Length];
+                for (int i = 0; i < decodedBytes.Length; i++)
                 {
-                    byte encryptedByte = encryptedBytes[i];
-                    decryptedBytes[i] = (byte)(encryptedByte ^ (key >> 8));
-                    key = (ushort)((encryptedByte + key) * C1 + C2);
+                    resultStr[i] = (char)(decodedBytes[i] ^ (key >> 8));
+                    key = (ushort)(((decodedBytes[i] + key) * C1 + C2) % 65536);
                 }
 
-                Encoding encoding = GetAnsiEncoding();
-                return encoding.GetString(decryptedBytes);
+                return new string(resultStr);
             }
             catch (Exception ex)
             {

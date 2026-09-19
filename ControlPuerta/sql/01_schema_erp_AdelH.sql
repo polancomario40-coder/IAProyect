@@ -188,19 +188,28 @@ CREATE OR ALTER PROCEDURE prtRegistrarEntrada
     @idAlmacen          VARCHAR(20),
     @idPuerta           VARCHAR(16),
     @Notas              NVARCHAR(500),
-    @Usuario            NVARCHAR(50)
+    @Usuario            NVARCHAR(50),
+    @CantidadDeclarada  DECIMAL(18,4) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
     BEGIN TRY
+        IF EXISTS(SELECT 1 FROM prtEntradaCamion WHERE Placa = @Placa AND Conduce = @Conduce AND Status != 'CANCELADO')
+        BEGIN
+            SELECT 'ERROR' AS Resultado, 'Ya existe una entrada registrada para esta Placa y Conduce.' AS Mensaje;
+            RETURN;
+        END
+
         INSERT INTO prtEntradaCamion (
             idEntradaCamion, Conduce, Placa, PlacaOcrTexto, PlacaOcrConfianza,
             idTransportista, Transportista, idChofer, NombreChofer,
-            idProducto, Producto, idAlmacen, idPuerta, Notas, Usuario, Status
+            idProducto, Producto, idAlmacen, idPuerta, Notas, Usuario, Status, CantidadDeclarada,
+            FechaEntrada, FechaCreacion
         ) VALUES (
             @idEntradaCamion, @Conduce, @Placa, @PlacaOcrTexto, @PlacaOcrConfianza,
             @idTransportista, @Transportista, @idChofer, @NombreChofer,
-            @idProducto, @Producto, @idAlmacen, @idPuerta, @Notas, @Usuario, 'PENDIENTE'
+            @idProducto, @Producto, @idAlmacen, @idPuerta, @Notas, @Usuario, 'PENDIENTE', @CantidadDeclarada,
+            GETDATE(), GETDATE()
         );
         SELECT 'OK' AS Resultado, @idEntradaCamion AS idEntradaCamion;
     END TRY

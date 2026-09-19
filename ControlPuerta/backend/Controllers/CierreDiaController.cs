@@ -41,9 +41,9 @@ public class CierreDiaController : ControllerBase
     [HttpGet("recepciones")]
     public async Task<ActionResult<ApiResponse<object>>> ConsultarRecepciones([FromQuery] ConsultaFiltros filtros)
     {
-        var usuario = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
-                      ?? User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
-        filtros.UsuarioPermiso = usuario;
+        // var usuario = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+        //               ?? User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
+        // filtros.UsuarioPermiso = usuario; // Comentado para que los usuarios puedan ver todas las recepciones históricas
 
         var lista = await _db.ConsultarRecepcionesAsync(filtros);
         var total = lista.FirstOrDefault()?.TotalRegistros ?? 0;
@@ -90,14 +90,21 @@ public class CierreDiaController : ControllerBase
             return BadRequest(ApiResponse<object>.Fail("IdOrden requerido."));
 
         var usuario = ObtenerUsuario();
-        var ok = await _db.AsignarOrdenAsync(req, usuario);
+        
+        try 
+        {
+            var ok = await _db.AsignarOrdenAsync(req, usuario);
+            if (!ok)
+                return NotFound(ApiResponse<object>.Fail("No se encontró la entrada especificada."));
 
-        if (!ok)
-            return NotFound(ApiResponse<object>.Fail("No se encontró la entrada especificada."));
-
-        return Ok(ApiResponse<object>.Ok(
-            new { idEntradaCamion = req.IdEntradaCamion, idOrden = req.IdOrden },
-            $"OC #{req.OrdenNumero} asignada correctamente."));
+            return Ok(ApiResponse<object>.Ok(
+                new { idEntradaCamion = req.IdEntradaCamion, idOrden = req.IdOrden },
+                $"OC #{req.OrdenNumero} asignada correctamente."));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<object>.Fail(ex.Message));
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -114,16 +121,23 @@ public class CierreDiaController : ControllerBase
         var usuario  = ObtenerUsuario();
 
         // 1. Aplicar asignaciones de OC que vengan en el request del cierre
-        foreach (var asign in req.AsignacionesOc)
+        try
         {
-            await _db.AsignarOrdenAsync(asign, usuario);
+            foreach (var asign in req.AsignacionesOc)
+            {
+                await _db.AsignarOrdenAsync(asign, usuario);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ApiResponse<CierreDiaResultDto>.Fail(ex.Message));
         }
 
-        // 2. Verificar que no haya ya un cierre para este día
-        var existeCierre = await ExisteCierreParaDiaAsync(fechaDia);
-        if (existeCierre)
-            return Conflict(ApiResponse<CierreDiaResultDto>.Fail(
-                $"Ya existe un cierre registrado para el día {fechaDia:dd/MM/yyyy}."));
+        // 2. Verificar que existan recepciones pendientes de cierre
+        var pendientes = await _db.ObtenerPendientesCierreAsync(fechaDia);
+        if (pendientes.Count == 0)
+            return BadRequest(ApiResponse<CierreDiaResultDto>.Fail(
+                $"No hay recepciones recibidas pendientes de cierre para el día {fechaDia:dd/MM/yyyy}."));
 
         // 3. Ejecutar cierre
         var resultado = await _db.EjecutarCierreDiaAsync(fechaDia, usuario, req.Notas);
@@ -147,7 +161,7 @@ public class CierreDiaController : ControllerBase
     // ──────────────────────────────────────────────────────────────────────────
     [HttpGet("ordenes")]
     public async Task<ActionResult<ApiResponse<List<object>>>> BuscarOrdenes(
-        [FromQuery] string? q, [FromQuery] DateOnly? fecha)
+        [FromQuery] string? q, [FromQuery] DateOnly? fecha, [FromQuery] string? idSuplidor)
     {
         await using var conn = _cf.CreateErpConnection();
         await conn.OpenAsync();
@@ -165,12 +179,14 @@ public class CierreDiaController : ControllerBase
             FROM ocOrdenes o
             LEFT JOIN cxpSuplidores s ON s.IdSuplidor = o.idSuplidor
             WHERE o.Status IN ('A','P')
+              AND (@idSuplidor IS NULL OR CAST(o.idSuplidor AS VARCHAR(50)) = @idSuplidor)
               AND (@q IS NULL OR
                    CAST(o.Numero AS VARCHAR) LIKE '%' + @q + '%' OR
                    s.Nombre LIKE '%' + @q + '%')
               AND (@fecha IS NULL OR CAST(o.Fecha AS DATE) = @fecha)
             ORDER BY o.Numero DESC";
 
+        cmd.Parameters.AddWithValue("@idSuplidor", (object?)idSuplidor ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@q",     (object?)q     ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@fecha", (object?)(fecha.HasValue ? fecha.Value.ToDateTime(TimeOnly.MinValue) : null) ?? DBNull.Value);
 
@@ -200,14 +216,4 @@ public class CierreDiaController : ControllerBase
         ?? User.FindFirst("sub")?.Value
         ?? User.FindFirst("idSegUserGrp")?.Value
         ?? "SISTEMA";
-
-    private async Task<bool> ExisteCierreParaDiaAsync(DateOnly fechaDia)
-    {
-        await using var conn = _cf.CreateErpConnection();
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(1) FROM prtCierreDia WHERE FechaDia = @f";
-        cmd.Parameters.AddWithValue("@f", fechaDia.ToDateTime(TimeOnly.MinValue));
-        return (int)(await cmd.ExecuteScalarAsync() ?? 0) > 0;
-    }
 }

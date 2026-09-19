@@ -1,0 +1,77 @@
+program Proyectos2K7;
+
+uses
+  Forms,
+  UUtiles in '..\Common\UUtiles.pas',
+  uAutorizaciones in '..\Common\uAutorizaciones.pas' {Autorizaciones},
+  uBusqueda in '..\Common\uBusqueda.pas' {Busqueda},
+  UCierreDiario in '..\Common\UCierreDiario.pas' {CierreDiario},
+  uConfiguracion in '..\Common\uConfiguracion.pas' {Configuracion},
+  Udata in '..\Common\Udata.pas' {dm: TDataModule},
+  ueMails7 in '..\Common\ueMails7.pas' {eMail},
+  uform in '..\Common\uform.pas' {FForm},
+  uformmant1 in '..\Common\uformmant1.pas' {fformmant1},
+  uformmant2 in '..\Common\uformmant2.pas' {fformmant2},
+  uformx in '..\Common\uformx.pas' {FFormx},
+  Upassword in '..\Common\Upassword.pas' {Password},
+  USeguridad in '..\Common\USeguridad.pas' {Seguridad},
+  uSetup in '..\Common\uSetup.pas' {Setup},
+  uBusquedaBasica in '..\Common\uBusquedaBasica.pas' {frmBusquedaBasica},
+  uMantConf in '..\Common\uMantConf.pas' {MantConf},
+  uProyecto in 'uProyecto.pas' {Proyecto},
+  UCSMainForm in '..\Common\UCSMainForm.pas' {CSMainForm},
+  uformmant3 in '..\Common\uformmant3.pas' {fformmant3},
+  uOrdenTrab in 'uOrdenTrab.pas' {OrdenTrab},
+  uCentroCosto in '..\Ventas\uCentroCosto.pas' {CentroCosto},
+  uCentroCostoFind in '..\Ventas\uCentroCostoFind.pas' {FindCentroCosto},
+  uProMov in '..\Ventas\uProMov.pas' {ProMov},
+  ProMovFind in '..\Ventas\ProMovFind.pas' {FindProMov},
+  ProductoFind in '..\Ventas\ProductoFind.pas' {FindProducto},
+  Udb in '..\Ventas\Udb.pas' {DataM: TDataModule},
+  udmCentroCosto in '..\Ventas\udmCentroCosto.pas' {dmCentroCosto: TDataModule},
+  ProyOrdenTrabFind in 'ProyOrdenTrabFind.pas' {FindProyOrdenTrab},
+  uMantCubicacion in 'uMantCubicacion.pas' {MantCubicacion},
+  uArbolProyectos in 'uArbolProyectos.pas' {ArbolProyectos: TFrame},
+  uLoginForm in '..\Common\JMB\uLoginForm.pas' {LoginForm},
+  uMantClass in '..\Common\JMB\uMantClass.pas' {MantClass},
+  uMantPresupuesto in 'uMantPresupuesto.pas' {MantPresupuesto},
+  uMantClassRS in '..\Common\JMB\uMantClassRS.pas' {MantClassRS},
+  uMantPartidas in 'uMantPartidas.pas' {MantPartidas},
+  ufrArbol in '..\Common\JMB\ufrArbol.pas' {frArbol: TFrame},
+  uMainForm in 'uMainForm.pas' {MainForm},
+  uUnidad in '..\Ventas\uUnidad.pas' {Unidad},
+  uDistribuirCosto in 'uDistribuirCosto.pas' {DistribuirCosto},
+  uMantClassMD in '..\Common\JMB\uMantClassMD.pas' {MantClassMD},
+  uLogView in '..\Common\uLogView.pas' {LogsView},
+  uImageView in '..\Common\uImageView.pas' {ImageView},
+  uScanner in '..\Common\scanner\uScanner.pas' {Scanner},
+  uCentroCostoFindTree in '..\Ventas\uCentroCostoFindTree.pas' {FindCentroCostoTree},
+  uInvReqInv in '..\Ventas\uInvReqInv.pas',
+  uFacturaDetEspec in '..\Ventas\uFacturaDetEspec.pas' {FacturaDetEspec},
+  uProductoEspec in '..\Ventas\uProductoEspec.pas' {ProductoEspec},
+  InvReqFind in '..\Ventas\InvReqFind.pas' {FindInvReq},
+  ProductoFindFoto in '..\Ventas\ProductoFindFoto.pas' {FindProductoFoto},
+  ubusquedaBase in '..\Common\ubusquedaBase.pas' {BusquedaBase},
+  uBusquedaDX in '..\Common\uBusquedaDX.pas' {BusquedaDX},
+  uBusquedaRangoDX in '..\Common\uBusquedaRangoDX.pas' {BusquedaRangoDX},
+  udmRepository in '..\Common\udmRepository.pas' {dmRepository: TDataModule},
+  uSelEmpresa in '..\Common\uSelEmpresa.pas' {SelEmpresa},
+  uMultiLogin in '..\Common\uMultiLogin.pas' {MultiLogin},
+  uProductoFindDX in '..\Ventas\uProductoFindDX.pas' {ProductoFindDX},
+  uProducto in '..\Ventas\uProducto.pas' {Producto},
+  uMarca in '..\Ventas\uMarca.pas' {Marca},
+  uAlmacen in '..\Ventas\uAlmacen.pas' {Almacen},
+  uProductoCostoBase in '..\Ventas\uProductoCostoBase.pas' {ProductoCostoBase},
+  uProductoDetalle in '..\Ventas\uProductoDetalle.pas' {ProductoDetalle},
+  uVerImagen in '..\Common\uVerImagen.pas' {VerImagen},
+  uLicenseManager in '..\Common\uLicenseManager.pas';
+
+{$R *.res}
+
+begin
+  Application.Initialize;
+  Application.CreateForm(TdmRepository, dmRepository);
+  Application.CreateForm(Tdm, dm);
+  Application.CreateForm(TMainForm, MainForm);
+  Application.Run;
+end.

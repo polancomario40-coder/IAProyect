@@ -47,7 +47,7 @@ builder.Services.AddHttpClient("AzureDocIntelligence", client =>
 });
 
 // ─── Servicios de negocio ────────────────────────────────────────────────────
-builder.Services.AddSingleton<IConnectionFactory, ConnectionFactory>();
+builder.Services.AddScoped<IConnectionFactory, ConnectionFactory>();
 builder.Services.AddScoped<IPuertaDbService, PuertaDbService>();
 builder.Services.AddScoped<IEvidenciaService, EvidenciaService>();
 builder.Services.AddScoped<IOcrService, OcrService>();
