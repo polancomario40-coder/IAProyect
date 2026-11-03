@@ -22,6 +22,8 @@ export interface EntradaRow {
   idUnidadAlmacen?: string;
   cantidadAlmacen?: number;
   suplidor?: string;
+  idAlmacen?: string;
+  almacen?: string;
 }
 
 interface Props {
@@ -71,6 +73,7 @@ const RecepcionDataTable: React.FC<Props> = ({ filtros, onVerDetalle }) => {
         <thead>
           <tr style={{ borderBottom: '1px solid #374151', background: '#111827' }}>
             <th style={{ padding: 10, textAlign: 'left', fontWeight: 'bold' }}>Fecha</th>
+            <th style={{ padding: 10, textAlign: 'left', fontWeight: 'bold' }}>Planta</th>
             <th style={{ padding: 10, textAlign: 'left', fontWeight: 'bold' }}>Conduce</th>
             <th style={{ padding: 10, textAlign: 'left', fontWeight: 'bold' }}>Entrada Alm.</th>
             <th style={{ padding: 10, textAlign: 'left', fontWeight: 'bold' }}>Recepción OC</th>
@@ -87,6 +90,7 @@ const RecepcionDataTable: React.FC<Props> = ({ filtros, onVerDetalle }) => {
           {data.map(row => (
             <tr key={row.idEntradaCamion} style={{ borderBottom: '1px solid #374151' }}>
               <td style={{ padding: 10 }}>{new Date(row.fechaEntrada).toLocaleString()}</td>
+              <td style={{ padding: 10, color: '#38BDF8', fontWeight: 500 }}>{row.almacen || row.idAlmacen || '-'}</td>
               <td style={{ padding: 10, fontWeight: 600 }}>
                 {row.conduce}
                 {row.conduceTransporte && (

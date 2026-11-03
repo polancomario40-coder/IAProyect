@@ -115,12 +115,20 @@ public class PuertaController : ControllerBase
         if (string.IsNullOrWhiteSpace(placa))
             return BadRequest(ApiResponse<TransportistaDto>.Fail("El número de placa es requerido."));
 
-        var transportista = await _db.BuscarTransportistaPorPlacaAsync(placa.Trim().ToUpper());
+        var placaNorm = placa.Trim().ToUpper();
+        if (placaNorm == "GENERICA" || placaNorm == "S/P" || placaNorm == "SIN PLACA" || placaNorm.Contains("GENERIC"))
+            return BadRequest(ApiResponse<TransportistaDto>.Fail("No se permiten placas genéricas ni comodines. Debe ingresar una placa real registrada en el sistema."));
+
+        var transportista = await _db.BuscarTransportistaPorPlacaAsync(placaNorm);
 
         if (transportista is null)
             return NotFound(ApiResponse<TransportistaDto>.Fail(
                 $"No se encontró ningún transportista activo con la placa '{placa.ToUpper()}'. " +
                 "Verifique la placa o registre el transportista en el sistema."));
+
+        if (transportista.IdTransportista.Equals("GENERICO", StringComparison.OrdinalIgnoreCase) ||
+            transportista.Nombre.Contains("GENERIC", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(ApiResponse<TransportistaDto>.Fail("No se permiten transportistas genéricos. Debe ingresar un transportista real."));
 
         return Ok(ApiResponse<TransportistaDto>.Ok(transportista,
             $"Transportista '{transportista.Nombre}' encontrado. Puede proceder con la entrada."));
@@ -192,6 +200,19 @@ public class PuertaController : ControllerBase
             return BadRequest(ApiResponse<object>.Fail("El número de conduce es requerido."));
         if (string.IsNullOrWhiteSpace(req.Placa))
             return BadRequest(ApiResponse<object>.Fail("La placa del camión es requerida."));
+
+        var placaNorm = req.Placa.Trim().ToUpper();
+        if (placaNorm == "GENERICA" || placaNorm == "S/P" || placaNorm == "SIN PLACA" || placaNorm.Contains("GENERIC"))
+            return BadRequest(ApiResponse<object>.Fail("No se permiten placas genéricas ni comodines. Debe ingresar una placa real registrada en el sistema."));
+
+        if (!string.IsNullOrWhiteSpace(req.IdTransportista) &&
+            (req.IdTransportista.Equals("GENERICO", StringComparison.OrdinalIgnoreCase) ||
+             (req.Transportista?.Contains("GENERIC", StringComparison.OrdinalIgnoreCase) ?? false)))
+            return BadRequest(ApiResponse<object>.Fail("No se permiten transportistas genéricos."));
+
+        if (!string.IsNullOrWhiteSpace(req.NombreChofer) && req.NombreChofer.Contains("GENERIC", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(ApiResponse<object>.Fail("No se permite chofer genérico."));
+
         if (string.IsNullOrWhiteSpace(req.FotoPlacaBase64))
             return BadRequest(ApiResponse<object>.Fail("Es obligatorio tomar la foto de la placa/camión."));
 

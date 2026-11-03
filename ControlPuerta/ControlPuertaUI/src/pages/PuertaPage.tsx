@@ -44,12 +44,19 @@ export const PuertaPage: React.FC = () => {
 
   useEffect(() => { cargarDatos(); }, []);
 
+  const esGenerico = (val?: string | null) => {
+    if (!val) return false;
+    const v = val.trim().toUpperCase();
+    return v === 'GENERICA' || v === 'S/P' || v === 'SIN PLACA' || v.includes('GENERIC');
+  };
+
   useEffect(() => {
     const timer = setTimeout(() => {
       if (placa.length >= 2 && !transportista) {
         buscarPlacas(placa).then(res => {
-          setPlacasRes(res.data.data || []);
-          setMostrarPlacasList(true);
+          const validas = (res.data.data || []).filter((p: string) => !esGenerico(p));
+          setPlacasRes(validas);
+          setMostrarPlacasList(validas.length > 0);
         }).catch(console.error);
       } else {
         setMostrarPlacasList(false);
@@ -68,8 +75,9 @@ export const PuertaPage: React.FC = () => {
       setBuscandoChofer(true);
       try {
         const res = await buscarChoferes(busquedaChofer.trim());
-        setChoferesEncontrados(res.data?.data || []);
-        setMostrarChoferes(true);
+        const validos = (res.data?.data || []).filter((c: any) => !esGenerico(c.nombre) && !esGenerico(c.transportistaNombre));
+        setChoferesEncontrados(validos);
+        setMostrarChoferes(validos.length > 0);
       } catch {
         setChoferesEncontrados([]);
       } finally {
@@ -86,11 +94,20 @@ export const PuertaPage: React.FC = () => {
     try {
       const resOcr = await ocrPlaca(base64, mime);
       if (resOcr.data.success && resOcr.data.data?.textoDetectado) {
-        const detected = resOcr.data.data.textoDetectado;
+        const detected = resOcr.data.data.textoDetectado.trim().toUpperCase();
         setPlaca(detected);
+        if (esGenerico(detected)) {
+          setTransportista(null);
+          alert('No se permiten placas genéricas ni comodines. Debe capturar o digitar una placa real existente.');
+          return;
+        }
         try {
           const res = await validarTransportista(detected);
-          if (res.data.success) { setTransportista(res.data.data); setIdChoferSel(''); setBusquedaChofer(''); }
+          if (res.data.success && !esGenerico(res.data.data?.nombre) && !esGenerico(res.data.data?.idTransportista)) {
+            setTransportista(res.data.data); setIdChoferSel(''); setBusquedaChofer('');
+          } else {
+            setTransportista(null); setIdChoferSel(''); setBusquedaChofer('');
+          }
         } catch { setTransportista(null); setIdChoferSel(''); setBusquedaChofer(''); }
       }
     } catch (error) { console.warn('OCR no disponible:', error); }
@@ -99,10 +116,22 @@ export const PuertaPage: React.FC = () => {
 
   const handleValidar = async () => {
     if (!placa) return alert('Ingrese la placa');
+    if (esGenerico(placa)) {
+      setTransportista(null);
+      setIdChoferSel('');
+      setBusquedaChofer('');
+      return alert('No se permiten placas genéricas ni comodines. Debe digitar una placa real registrada en el sistema.');
+    }
     setLoading(true);
     try {
       const res = await validarTransportista(placa);
-      if (res.data.success) { setTransportista(res.data.data); setIdChoferSel(''); setBusquedaChofer(''); }
+      if (res.data.success) {
+        if (esGenerico(res.data.data?.nombre) || esGenerico(res.data.data?.idTransportista)) {
+          setTransportista(null);
+          return alert('No se permite usar transportistas genéricos.');
+        }
+        setTransportista(res.data.data); setIdChoferSel(''); setBusquedaChofer('');
+      }
     } catch (error: any) {
       setTransportista(null); setIdChoferSel(''); setBusquedaChofer('');
       alert(error.response?.data?.mensaje || 'Transportista no encontrado');
@@ -112,6 +141,12 @@ export const PuertaPage: React.FC = () => {
   const handleGuardar = async () => {
     if (!fotoPlacaBase64) return alert('Es obligatorio tomar la foto de la placa/camion antes de registrar la entrada.');
     if (!conduce || !producto || !transportista) return alert('Complete todos los campos');
+    if (esGenerico(placa) || esGenerico(transportista.nombre) || esGenerico(transportista.idTransportista)) {
+      return alert('No se permite registrar entradas con transportista o placa genérica.');
+    }
+    if (busquedaChofer && esGenerico(busquedaChofer)) {
+      return alert('No se permite ingresar un chofer genérico.');
+    }
     setLoading(true);
     try {
       const payload = {

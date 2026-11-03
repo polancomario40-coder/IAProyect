@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 export const exportarExcelAgregados = (items: any[], fechaDesde: string, fechaHasta: string) => {
   const data = items.map(item => ({
     'Fecha': item.fechaEntrada ? new Date(item.fechaEntrada).toLocaleString() : '-',
+    'Planta': item.almacen || item.idAlmacen || '-',
     'Entrada Almacén': item.proMov || '-',
     'Recepción': item.numRecepcionOC || item.conduceTransporte || '-',
     'OC': item.ordenNumero ? `#${item.ordenNumero}` : 'Sin OC',
@@ -14,7 +15,6 @@ export const exportarExcelAgregados = (items: any[], fechaDesde: string, fechaHa
     'Unidad': item.idUnidad || 'Mts3',
     'Cant. Almacén': Number(item.cantidadAlmacen || item.cantidadRecibida || item.cantidadDeclarada || 0),
     'Unidad Almacén': item.idUnidadAlmacen || item.idUnidad || 'Mts3',
-    'Planta': item.idAlmacen || '-',
     'Status': item.status || '-'
   }));
 
@@ -22,6 +22,7 @@ export const exportarExcelAgregados = (items: any[], fechaDesde: string, fechaHa
 
   ws['!cols'] = [
     { wch: 19 },
+    { wch: 20 },
     { wch: 16 },
     { wch: 16 },
     { wch: 12 },
@@ -32,7 +33,6 @@ export const exportarExcelAgregados = (items: any[], fechaDesde: string, fechaHa
     { wch: 16 },
     { wch: 12 },
     { wch: 16 },
-    { wch: 14 },
     { wch: 14 },
     { wch: 14 }
   ];
@@ -47,6 +47,7 @@ export const exportarExcelAgregados = (items: any[], fechaDesde: string, fechaHa
 export const exportarExcelTransporte = (items: any[], fechaDesde: string, fechaHasta: string) => {
   const data = items.map(item => ({
     'Fecha': item.fechaEntrada ? new Date(item.fechaEntrada).toLocaleString() : '-',
+    'Planta': item.almacen || item.idAlmacen || '-',
     'Entrada Almacén': item.proMov || '-',
     'Recepción': item.numRecepcionOC || item.conduceTransporte || '-',
     'OC': item.ordenNumero ? `#${item.ordenNumero}` : 'Sin OC',
@@ -64,6 +65,7 @@ export const exportarExcelTransporte = (items: any[], fechaDesde: string, fechaH
 
   ws['!cols'] = [
     { wch: 19 },
+    { wch: 20 },
     { wch: 16 },
     { wch: 16 },
     { wch: 12 },
@@ -73,6 +75,7 @@ export const exportarExcelTransporte = (items: any[], fechaDesde: string, fechaH
     { wch: 28 },
     { wch: 28 },
     { wch: 15 },
+    { wch: 14 },
     { wch: 14 }
   ];
 

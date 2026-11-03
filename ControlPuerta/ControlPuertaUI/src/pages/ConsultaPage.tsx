@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import RecepcionDataTable from '../components/RecepcionDataTable';
-import { consultarRecepciones } from '../services/puertaApi';
+import { consultarRecepciones, listarAlmacenes } from '../services/puertaApi';
 import { exportarExcelAgregados, exportarExcelTransporte } from '../utils/excelExport';
 
 export const ConsultaPage: React.FC = () => {
@@ -16,14 +16,22 @@ export const ConsultaPage: React.FC = () => {
     conduce: '',
     placa: '',
     transportista: '',
+    idAlmacen: '',
     status: '',
     pageNumber: 1,
     pageSize: 50
   });
 
   const [filtrosActivos, setFiltrosActivos] = useState(filtros);
+  const [almacenes, setAlmacenes] = useState<any[]>([]);
   const [exportando, setExportando] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    listarAlmacenes()
+      .then(res => setAlmacenes(res.data?.data || []))
+      .catch(() => {});
+  }, []);
 
   const handleBuscar = () => {
     let nuevosFiltros = { ...filtros };
@@ -138,6 +146,16 @@ export const ConsultaPage: React.FC = () => {
           <input placeholder="Buscar placa..." value={filtros.placa} onChange={e=>setFiltros({...filtros, placa: e.target.value})} style={inputStyle} />
         </div>
         
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 140px' }}>
+          <label style={{ fontSize: '11px', color: '#9CA3AF' }}>Planta:</label>
+          <select value={filtros.idAlmacen} onChange={e=>setFiltros({...filtros, idAlmacen: e.target.value})} style={inputStyle}>
+            <option value="">-- Todas las Plantas --</option>
+            {almacenes.map(a => (
+              <option key={a.idAlmacen} value={a.idAlmacen}>{a.nombre || a.idAlmacen}</option>
+            ))}
+          </select>
+        </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 140px' }}>
           <label style={{ fontSize: '11px', color: '#9CA3AF' }}>Estado:</label>
           <select value={filtros.status} onChange={e=>setFiltros({...filtros, status: e.target.value})} style={inputStyle}>

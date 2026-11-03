@@ -97,7 +97,7 @@ public class PuertaDbService : IPuertaDbService
             SELECT TOP 20 e.PlacaNo 
             FROM lgTransportistaEquipo e
             INNER JOIN lgTransportista t ON e.idTransportista = t.idTransportista
-            WHERE e.PlacaNo LIKE '%' + @q + '%' AND t.Status = 'ACTIVO'
+            WHERE e.PlacaNo LIKE '%' + @q + '%' AND t.Status = 'ACTIVO' AND e.Status = 'ACTIVO' AND UPPER(LTRIM(RTRIM(e.PlacaNo))) NOT IN ('GENERICA', 'S/P', 'SIN PLACA') AND t.idTransportista <> 'GENERICO' AND t.Transportista NOT LIKE '%GENERIC%'
         ";
         cmd.CommandType = System.Data.CommandType.Text;
         cmd.Parameters.AddWithValue("@q", q.Trim());
@@ -526,6 +526,7 @@ public class PuertaDbService : IPuertaDbService
         cmd.Parameters.AddWithValue("@Status",        (object?)filtros.Status         ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@PageNumber",    filtros.PageNumber);
         cmd.Parameters.AddWithValue("@PageSize",      filtros.PageSize);
+        cmd.Parameters.AddWithValue("@idAlmacen",       (object?)filtros.IdAlmacen      ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@UsuarioPermiso",(object?)filtros.UsuarioPermiso ?? DBNull.Value);
 
         await using var reader = await cmd.ExecuteReaderAsync();
@@ -670,6 +671,7 @@ public class PuertaDbService : IPuertaDbService
             Suplidor         = GetStr(r, "Suplidor"),
             CantidadRecibida = Get<decimal>(r, "CantidadRecibida"),
             IdAlmacen        = GetStr(r, "idAlmacen"),
+            Almacen          = HasColumn(r, "Almacen") ? GetStr(r, "Almacen") : GetStr(r, "idAlmacen"),
             Status           = r.GetString(r.GetOrdinal("Status")),
             IdOrden          = Get<Guid>(r, "idOrden"),
             OrdenNumero      = Get<int>(r, "OrdenNumero"),
@@ -813,7 +815,7 @@ public class PuertaDbService : IPuertaDbService
             FROM lgTransportistaChofer c
             LEFT JOIN lgTransportista t ON c.idTransportista = t.idTransportista
             WHERE c.TransportistaChofer LIKE '%' + @q + '%'
-              AND c.Status = 'ACTIVO'
+              AND c.Status = 'ACTIVO' AND c.TransportistaChofer NOT LIKE '%GENERIC%' AND ISNULL(c.idTransportista, '') <> 'GENERICO' AND ISNULL(t.Transportista, '') NOT LIKE '%GENERIC%'
             ORDER BY c.TransportistaChofer";
         cmd.Parameters.AddWithValue("@q", q.Trim());
         await using var reader = await cmd.ExecuteReaderAsync();

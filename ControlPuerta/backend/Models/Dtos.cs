@@ -113,6 +113,7 @@ public record ConsultaFiltros
     public string?   Placa          { get; init; }
     public string?   Transportista  { get; init; }
     public string?   Status         { get; init; }
+    public string?   IdAlmacen      { get; init; }
     public int       PageNumber     { get; init; } = 1;
     public int       PageSize       { get; init; } = 50;
     
@@ -175,6 +176,7 @@ public record EntradaCamionDto
     public string?   IdUnidadAlmacen     { get; init; }
     public decimal?  CantidadAlmacen     { get; init; }
     public string?   IdAlmacen           { get; init; }
+    public string?   Almacen             { get; init; }
     public string    Status              { get; init; } = "";
     public Guid?     IdOrden             { get; init; }
     public int?      OrdenNumero         { get; init; }

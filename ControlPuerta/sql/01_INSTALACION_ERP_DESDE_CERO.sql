@@ -155,19 +155,7 @@ BEGIN
 END;
 GO
 
--- 1.6 Tabla de Choferes Genéricos
-IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'prtChoferesGenericos')
-BEGIN
-    CREATE TABLE prtChoferesGenericos (
-        idChoferGenerico    INT IDENTITY(1,1) PRIMARY KEY,
-        idTransportista     VARCHAR(20)  NOT NULL,
-        NombreChofer        VARCHAR(150) NOT NULL,
-        Licencia            VARCHAR(50)  NULL,
-        Activo              BIT          NOT NULL DEFAULT 1,
-        FechaCreacion       DATETIME     NOT NULL DEFAULT GETDATE()
-    );
-    PRINT 'Tabla prtChoferesGenericos creada.';
-END;
+-- 1.6 Tabla de Choferes Genéricos (DESCONTINUADA - Se exige chofer real)
 GO
 
 
@@ -195,6 +183,13 @@ CREATE OR ALTER PROCEDURE prtBuscarTransportistaPorPlaca
 AS
 BEGIN
     SET NOCOUNT ON;
+    DECLARE @PlacaLimpia VARCHAR(20) = UPPER(LTRIM(RTRIM(@Placa)));
+
+    IF @PlacaLimpia IN ('GENERICA', 'S/P', 'SIN PLACA') OR @PlacaLimpia LIKE '%GENERIC%'
+    BEGIN
+        RETURN;
+    END;
+
     SELECT
         t.idTransportista,
         t.Transportista,
@@ -208,8 +203,11 @@ BEGIN
         e.idUnidad
     FROM lgTransportista t
     INNER JOIN lgTransportistaEquipo e ON e.idTransportista = t.idTransportista
-    WHERE e.PlacaNo = @Placa
-      AND t.Status = 'ACTIVO';
+    WHERE UPPER(LTRIM(RTRIM(e.PlacaNo))) = @PlacaLimpia
+      AND t.Status = 'ACTIVO'
+      AND e.Status = 'ACTIVO'
+      AND t.idTransportista <> 'GENERICO'
+      AND t.Transportista NOT LIKE '%GENERIC%';
 END;
 GO
 
@@ -291,6 +289,44 @@ BEGIN
             SET @idAlmacen = 'GENERAL';
     END
 
+    -- Calcular costo si tiene orden de compra asociada
+    DECLARE @CostoTotal DECIMAL(18,2) = 0.00;
+    IF @idOrden IS NOT NULL
+    BEGIN
+        DECLARE @CostoOC DECIMAL(18,4) = 0.00, @DescOC DECIMAL(18,4) = 0.00, @ItbisOC DECIMAL(18,4) = 0.00;
+        SELECT TOP 1 
+            @CostoOC = ISNULL(od.Costo, 0.00),
+            @DescOC = ISNULL(od.Descuento, 0.00),
+            @ItbisOC = ISNULL(od.ITBIS, 0.00)
+        FROM ocDetalleOrden od
+        WHERE od.idOrden = @idOrden 
+          AND (od.idProducto = @idProducto OR LTRIM(RTRIM(od.idProducto)) = LTRIM(RTRIM(@idProducto)));
+
+        IF @CostoOC = 0.00
+        BEGIN
+            SELECT TOP 1 
+                @CostoOC = ISNULL(od.Costo, 0.00),
+                @DescOC = ISNULL(od.Descuento, 0.00),
+                @ItbisOC = ISNULL(od.ITBIS, 0.00)
+            FROM ocDetalleOrden od
+            WHERE od.idOrden = @idOrden;
+        END
+
+        DECLARE @idMonedaOC INT = 1;
+        SELECT TOP 1 @idMonedaOC = ISNULL(idMoneda, 1) FROM ocOrdenes WHERE idOrden = @idOrden;
+
+        DECLARE @itbisOpt BIT = CONVERT(BIT, (SELECT Valor FROM Defaults WHERE clave = 'ITBIS_ENT_RECEP'));
+        DECLARE @TasaOC DECIMAL(18,4) = ISNULL(dbo.fTasaActual(@idMonedaOC, @Fecha), 1.00);
+        IF @TasaOC <= 0 SET @TasaOC = 1.00;
+
+        DECLARE @CantParaCosto DECIMAL(18,4);
+        SELECT @CantParaCosto = ISNULL(CantidadRecibida, @Cantidad) FROM prtEntradaCamion WHERE idEntradaCamion = @idEntradaCamion;
+
+        SET @CostoTotal = ROUND(((ISNULL(@CantParaCosto, 0.00) * @CostoOC) * (1.00 - (@DescOC / 100.00))
+                          * CASE WHEN ISNULL(@itbisOpt, 0) = 1 THEN (1.00 + (@ItbisOC / 100.00)) ELSE 1.00 END)
+                          * @TasaOC, 2);
+    END
+
     -- Si ya tiene ProMov asignado y existe en promov, actualizar y no duplicar
     DECLARE @ExistingProMov VARCHAR(20);
     SELECT @ExistingProMov = ProMov FROM prtEntradaCamion WHERE idEntradaCamion = @idEntradaCamion;
@@ -300,6 +336,15 @@ BEGIN
         SET Conduce = ISNULL(@Referencia, Conduce),
             idOrdenCompra = ISNULL(@idOrden, idOrdenCompra)
         WHERE ProMov = @ExistingProMov;
+
+        IF @CostoTotal > 0
+        BEGIN
+            UPDATE d
+            SET d.Costo = @CostoTotal
+            FROM promovdet d
+            INNER JOIN promov p ON d.idProMov = p.idProMov
+            WHERE p.ProMov = @ExistingProMov AND (d.Costo = 0 OR d.Costo IS NULL);
+        END
         RETURN;
     END
 
@@ -333,7 +378,7 @@ BEGIN
         idProMovDet, idProMov, idProducto, Producto, Cantidad, Costo, idUnidad, Posteado
     )
     VALUES (
-        @idProMovDet, @idProMov, @idProducto, @Producto, @Cantidad, 0, @idUnidad, 0
+        @idProMovDet, @idProMov, @idProducto, @Producto, @Cantidad, @CostoTotal, @idUnidad, 0
     );
 
     UPDATE Almacen 
@@ -514,7 +559,7 @@ BEGIN
             FROM ocDetalleOrden od
             WHERE od.idOrden = @idOrden;
 
-            -- 7. Vincular promov con formato unificado: "Entrada por Conduce: {Conduce} - O/C: {OrdenNumero} (REC:#{RecepcionSeq})"
+            -- 7. Vincular promov con formato unificado y actualizar Costo en promovdet
             IF @ProMov IS NOT NULL AND @ProMov <> ''
             BEGIN
                 UPDATE promov SET 
@@ -523,6 +568,21 @@ BEGIN
                     idOrdenCompra = @idOrden,
                     Concepto      = 'Entrada por Conduce: ' + ISNULL(@Conduce, ISNULL(Conduce, '')) + ' - O/C: ' + CAST(@OrdenNumero AS VARCHAR(20)) + ' (REC:#' + @RecepcionSeq + ')'
                 WHERE ProMov = @ProMov;
+
+                -- Cálculo y actualización de costo idéntico a ocRecepcion2ProMov
+                DECLARE @itbisOptCierre BIT = CONVERT(BIT, (SELECT Valor FROM Defaults WHERE clave = 'ITBIS_ENT_RECEP'));
+
+                UPDATE d
+                SET d.Costo = ROUND(((ISNULL(@CantidadRecibida, 0.00) * ISNULL(od.Costo, 0.00)) 
+                              * (1.00 - (ISNULL(od.Descuento, 0.00) / 100.00)) 
+                              * CASE WHEN ISNULL(@itbisOptCierre, 0) = 1 THEN (1.00 + (ISNULL(od.ITBIS, 0.00) / 100.00)) ELSE 1.00 END)
+                              * ISNULL(dbo.fTasaActual(oc.idMoneda, CAST(@FechaDia AS DATE)), 1.00), 2)
+                FROM promovdet d
+                INNER JOIN promov p ON d.idProMov = p.idProMov
+                LEFT JOIN ocDetalleOrden od ON od.idDetalleOrden = @MatchedDetId
+                LEFT JOIN ocOrdenes oc ON oc.idOrden = @idOrden
+                WHERE p.ProMov = @ProMov
+                  AND (d.Costo = 0 OR d.Costo IS NULL);
             END
 
             -- 8. Actualizar entrada a CERRADO
@@ -555,6 +615,7 @@ CREATE OR ALTER PROCEDURE prtConsultarRecepciones
     @Placa          NVARCHAR(20)    = NULL,
     @Transportista  NVARCHAR(200)   = NULL,
     @Status         VARCHAR(20)     = NULL,
+    @idAlmacen      VARCHAR(20)     = NULL,
     @PageNumber     INT             = 1,
     @PageSize       INT             = 50
 AS
@@ -589,8 +650,10 @@ BEGIN
         e.idTransportista,
         e.idChofer,
         e.idAlmacen,
+        ISNULL(a.Almacen, ISNULL(e.idAlmacen, '-')) AS Almacen,
         COUNT(*) OVER() AS TotalRegistros
     FROM prtEntradaCamion e
+    LEFT JOIN Almacen a ON a.idAlmacen = e.idAlmacen
     WHERE
         (@FechaDesde    IS NULL OR e.FechaEntrada >= @FechaDesde)
         AND (@FechaHasta IS NULL OR e.FechaEntrada <= @FechaHasta)
@@ -598,6 +661,7 @@ BEGIN
         AND (@Placa      IS NULL OR e.Placa LIKE '%' + @Placa + '%')
         AND (@Transportista IS NULL OR e.Transportista LIKE '%' + @Transportista + '%')
         AND (@Status     IS NULL OR e.Status = @Status)
+        AND (@idAlmacen  IS NULL OR e.idAlmacen = @idAlmacen)
     ORDER BY e.FechaEntrada DESC
     OFFSET (@PageNumber - 1) * @PageSize ROWS
     FETCH NEXT @PageSize ROWS ONLY;
