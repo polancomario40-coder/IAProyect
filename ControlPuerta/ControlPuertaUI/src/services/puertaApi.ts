@@ -151,6 +151,15 @@ export const buscarOrdenes = (q?: string, fecha?: string, idSuplidor?: string) =
   puertaApi.get('/cierre/ordenes', { params: { q, fecha, idSuplidor } });
 
 // ─── Conciliación de Suplidores y Pagos ───────────────────────────────────────
+export const extraerConducesDocumento = (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return puertaApi.post('/conciliacion/extraer-documento', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 60000,
+  });
+};
+
 export const compararConciliacion = (data: object) =>
   puertaApi.post('/conciliacion/comparar', data);
 

@@ -15,11 +15,13 @@ namespace ControlPuertaAPI.Controllers;
 public class ConciliacionController : ControllerBase
 {
     private readonly IPuertaDbService _db;
+    private readonly IOcrService _ocr;
     private readonly ILogger<ConciliacionController> _logger;
 
-    public ConciliacionController(IPuertaDbService db, ILogger<ConciliacionController> logger)
+    public ConciliacionController(IPuertaDbService db, IOcrService ocr, ILogger<ConciliacionController> logger)
     {
         _db     = db;
+        _ocr    = ocr;
         _logger = logger;
     }
 
@@ -28,6 +30,64 @@ public class ConciliacionController : ControllerBase
         ?? User.FindFirst("sub")?.Value
         ?? User.Identity?.Name
         ?? "SISTEMA";
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // POST /api/conciliacion/extraer-documento
+    // Extrae conduces desde un PDF escaneado o Imagen mediante Azure AI OCR
+    // ──────────────────────────────────────────────────────────────────────────
+    [HttpPost("extraer-documento")]
+    [RequestSizeLimit(30_000_000)]
+    public async Task<ActionResult<ApiResponse<List<ItemConciliacionInputDto>>>> ExtraerDocumento()
+    {
+        byte[] fileBytes;
+        string mimeType = "application/pdf";
+        string fileName = "documento";
+
+        try
+        {
+            if (Request.HasFormContentType && Request.Form.Files.Count > 0)
+            {
+                var file = Request.Form.Files[0];
+                fileName = file.FileName;
+                mimeType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/pdf" : file.ContentType;
+                using var ms = new MemoryStream();
+                await file.CopyToAsync(ms);
+                fileBytes = ms.ToArray();
+            }
+            else
+            {
+                using var reader = new StreamReader(Request.Body);
+                var bodyStr = await reader.ReadToEndAsync();
+                if (string.IsNullOrWhiteSpace(bodyStr))
+                    return BadRequest(ApiResponse<List<ItemConciliacionInputDto>>.Fail("No se recibió ningún archivo o cuerpo de solicitud."));
+
+                var docReq = System.Text.Json.JsonSerializer.Deserialize<ExtraerDocumentoRequest>(
+                    bodyStr, 
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                );
+
+                if (docReq == null || string.IsNullOrWhiteSpace(docReq.Base64))
+                    return BadRequest(ApiResponse<List<ItemConciliacionInputDto>>.Fail("Contenido del archivo no provisto."));
+
+                fileBytes = Convert.FromBase64String(docReq.Base64);
+                mimeType = docReq.MimeType ?? "application/pdf";
+                fileName = docReq.NombreArchivo ?? "documento.pdf";
+            }
+
+            if (fileBytes == null || fileBytes.Length == 0)
+                return BadRequest(ApiResponse<List<ItemConciliacionInputDto>>.Fail("El archivo enviado está vacío."));
+
+            var items = await _ocr.ExtraerConducesDeDocumentoAsync(fileBytes, mimeType);
+            return Ok(ApiResponse<List<ItemConciliacionInputDto>>.Ok(
+                items, 
+                $"Se extrajeron {items.Count} conduces del documento '{fileName}'."));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extrayendo conduces del documento");
+            return StatusCode(500, ApiResponse<List<ItemConciliacionInputDto>>.Fail("Error procesando OCR del documento: " + ex.Message));
+        }
+    }
 
     // ──────────────────────────────────────────────────────────────────────────
     // POST /api/conciliacion/comparar

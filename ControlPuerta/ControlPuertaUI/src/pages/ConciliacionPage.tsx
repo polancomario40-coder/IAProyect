@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   buscarSuplidores, 
+  extraerConducesDocumento,
   compararConciliacion, 
   guardarConciliacion, 
   listarLotesConciliacion, 
@@ -28,6 +29,9 @@ export const ConciliacionPage: React.FC = () => {
   const [filasLeidas, setFilasLeidas] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [escaneandoOcr, setEscaneandoOcr] = useState(false);
+  const [tipoArchivo, setTipoArchivo] = useState<'EXCEL' | 'PDF_SCAN' | null>(null);
+  const [ocrMensaje, setOcrMensaje] = useState<string | null>(null);
 
   // Resultado de Conciliación
   const [resultado, setResultado] = useState<any | null>(null);
@@ -80,15 +84,52 @@ export const ConciliacionPage: React.FC = () => {
     }
   }, [vista]);
 
-  // Manejo de lectura de Excel
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Manejo de lectura de Excel o Documento Escaneado (PDF/Imagen)
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setArchivoNombre(file.name);
     setResultado(null);
     setGuardadoExitoso(null);
+    setOcrMensaje(null);
 
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+    const isScanDoc = /\.(pdf|png|jpe?g)$/i.test(file.name);
+
+    if (!isExcel && !isScanDoc) {
+      alert('Formato no soportado. Por favor suba un archivo Excel (.xlsx, .xls) o un documento escaneado (.pdf, .png, .jpg).');
+      return;
+    }
+
+    if (isScanDoc) {
+      setTipoArchivo('PDF_SCAN');
+      setEscaneandoOcr(true);
+      setOcrMensaje('📄 Procesando documento escaneado con OCR inteligente... Reconociendo conduces...');
+
+      try {
+        const resp = await extraerConducesDocumento(file);
+        const data = resp.data?.data || [];
+        if (!data.length) {
+          alert('No se detectaron conduces en el documento escaneado. Asegúrese de que la imagen sea legible o utilice la plantilla Excel.');
+          setFilasLeidas([]);
+          setOcrMensaje(null);
+        } else {
+          setFilasLeidas(data);
+          setOcrMensaje(`✅ Se extrajeron exitosamente ${data.length} conduces del documento escaneado.`);
+        }
+      } catch (err: any) {
+        console.error('Error al escanear documento OCR:', err);
+        const msg = err.response?.data?.message || err.message || 'Error al comunicarse con el servicio de OCR.';
+        alert(`Error al procesar documento con OCR: ${msg}`);
+        setOcrMensaje(null);
+      } finally {
+        setEscaneandoOcr(false);
+      }
+      return;
+    }
+
+    setTipoArchivo('EXCEL');
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
@@ -424,30 +465,45 @@ export const ConciliacionPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Selector Archivo Excel */}
+              {/* Selector Archivo Excel o Hoja Escaneada */}
               <div>
                 <label style={{ display: 'block', fontSize: 12, color: '#9CA3AF', marginBottom: 5 }}>
-                  Archivo Excel del Suplidor (.xlsx, .xls):
+                  Plantilla Excel o Hoja Escaneada (.xlsx, .pdf, .png, .jpg):
                 </label>
                 <input
                   type="file"
-                  accept=".xlsx, .xls"
+                  accept=".xlsx, .xls, .pdf, .png, .jpg, .jpeg"
                   ref={fileInputRef}
                   onChange={handleFileChange}
                   style={{ display: 'none' }}
                 />
-                <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    style={{ ...btnSecundario, background: '#374151', border: '1px dashed #6B7280', flex: 1, justifyContent: 'center' }}
+                    disabled={escaneandoOcr}
+                    style={{ 
+                      ...btnSecundario, 
+                      background: escaneandoOcr ? '#1F2937' : '#374151', 
+                      border: '1px dashed #6B7280', 
+                      flex: 1, 
+                      justifyContent: 'center',
+                      opacity: escaneandoOcr ? 0.7 : 1
+                    }}
                   >
-                    📂 {archivoNombre ? archivoNombre : 'Seleccionar Archivo Excel'}
+                    {escaneandoOcr 
+                      ? '⏳ Escaneando con OCR...' 
+                      : (archivoNombre ? `📄 ${archivoNombre}` : '📂 Cargar Excel o PDF / Foto Escaneada')}
                   </button>
                   {filasLeidas.length > 0 && (
-                    <span style={{ display: 'flex', alignItems: 'center', color: '#10B981', fontSize: 12, fontWeight: 'bold' }}>
-                      ✓ {filasLeidas.length} conduces
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                      <span style={{ color: '#10B981', fontSize: 12, fontWeight: 'bold' }}>
+                        ✓ {filasLeidas.length} conduces
+                      </span>
+                      <span style={{ fontSize: 10, color: '#9CA3AF' }}>
+                        {tipoArchivo === 'PDF_SCAN' ? '🔍 OCR Escáner' : '📊 Excel'}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -457,14 +513,14 @@ export const ConciliacionPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleEjecutarConciliacion}
-                  disabled={loading || !filasLeidas.length}
+                  disabled={loading || escaneandoOcr || !filasLeidas.length}
                   style={{
                     ...btnPrincipal,
                     width: '100%',
                     padding: '11px',
                     fontSize: 14,
-                    background: (!filasLeidas.length || loading) ? '#4B5563' : '#2563EB',
-                    cursor: (!filasLeidas.length || loading) ? 'not-allowed' : 'pointer'
+                    background: (!filasLeidas.length || loading || escaneandoOcr) ? '#4B5563' : '#2563EB',
+                    cursor: (!filasLeidas.length || loading || escaneandoOcr) ? 'not-allowed' : 'pointer'
                   }}
                 >
                   {loading ? 'Analizando Conduces...' : '⚡ Ejecutar Conciliación'}
@@ -472,7 +528,63 @@ export const ConciliacionPage: React.FC = () => {
               </div>
 
             </div>
+
+            {/* Mensaje de estado OCR */}
+            {ocrMensaje && (
+              <div style={{ marginTop: 15, padding: '10px 14px', borderRadius: 6, background: '#1E3A8A', border: '1px solid #3B82F6', fontSize: 13, color: '#DBEAFE', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>ℹ️</span> {ocrMensaje}
+              </div>
+            )}
           </div>
+
+          {/* PREVIEW DE CONDUCES EXTRAÍDOS ANTES DE CONCILIAR */}
+          {filasLeidas.length > 0 && !resultado && (
+            <div style={{ background: '#1F2937', padding: 15, borderRadius: 8, marginBottom: 20, border: '1px solid #374151' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 'bold', color: '#60A5FA' }}>
+                  📋 Vista Previa de Conduces Extraídos ({filasLeidas.length} filas detectadas)
+                </span>
+                <span style={{ fontSize: 12, color: '#9CA3AF' }}>
+                  Origen: {tipoArchivo === 'PDF_SCAN' ? '🔍 Documento Escaneado (OCR)' : '📊 Plantilla Excel'}
+                </span>
+              </div>
+              <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#111827', color: '#9CA3AF', textAlign: 'left', borderBottom: '1px solid #374151' }}>
+                      <th style={{ padding: '6px 10px' }}>Fecha</th>
+                      <th style={{ padding: '6px 10px' }}>No. Conduce</th>
+                      <th style={{ padding: '6px 10px' }}>Producto</th>
+                      <th style={{ padding: '6px 10px' }}>Mina</th>
+                      <th style={{ padding: '6px 10px' }}>Planta</th>
+                      <th style={{ padding: '6px 10px', textAlign: 'right' }}>Cantidad</th>
+                      <th style={{ padding: '6px 10px', textAlign: 'right' }}>Precio</th>
+                      <th style={{ padding: '6px 10px', textAlign: 'right' }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filasLeidas.slice(0, 50).map((f: any, idx: number) => (
+                      <tr key={idx} style={{ borderBottom: '1px solid #2D3748' }}>
+                        <td style={{ padding: '6px 10px' }}>{f.fecha ? new Date(f.fecha).toLocaleDateString() : '-'}</td>
+                        <td style={{ padding: '6px 10px', fontWeight: 'bold', color: '#F3F4F6' }}>{f.noConduce}</td>
+                        <td style={{ padding: '6px 10px' }}>{f.producto || '-'}</td>
+                        <td style={{ padding: '6px 10px' }}>{f.mina || '-'}</td>
+                        <td style={{ padding: '6px 10px' }}>{f.planta || '-'}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right' }}>{Number(f.cantidad || 0).toLocaleString()}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right' }}>RD$ {Number(f.precio || 0).toFixed(2)}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 'bold', color: '#34D399' }}>RD$ {Number(f.total || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {filasLeidas.length > 50 && (
+                <div style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: '#9CA3AF' }}>
+                  ... y {filasLeidas.length - 50} conduces más. Presione "⚡ Ejecutar Conciliación" para iniciar el cruce con el sistema.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* DASHBOARD DE MÉTRICAS / KPIS */}
           {resultado && (

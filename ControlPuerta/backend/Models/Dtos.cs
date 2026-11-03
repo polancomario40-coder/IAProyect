@@ -237,6 +237,13 @@ public record ItemConciliacionInputDto
     public decimal   Total            { get; init; }
 }
 
+public record ExtraerDocumentoRequest
+{
+    public string?   Base64           { get; init; }
+    public string?   MimeType         { get; init; }
+    public string?   NombreArchivo    { get; init; }
+}
+
 public record CompararConciliacionRequest
 {
     public string?   IdSuplidor       { get; init; }
