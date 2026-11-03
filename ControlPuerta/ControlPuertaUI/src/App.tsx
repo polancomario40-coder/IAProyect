@@ -5,6 +5,7 @@ import { PuertaPage } from './pages/PuertaPage';
 import { RecepcionPage } from './pages/RecepcionPage';
 import { ConsultaPage } from './pages/ConsultaPage';
 import { CierreDiaPage } from './pages/CierreDiaPage';
+import { ConciliacionPage } from './pages/ConciliacionPage';
 import AuthCallback from './pages/AuthCallback';
 import { puertaApi } from './services/puertaApi';
 
@@ -40,6 +41,7 @@ const NavBar = () => {
         <Link to="/" style={linkStyle}>Inicio</Link>
         {hasAdmin && <Link to="/consulta" style={linkStyle}>Consulta</Link>}
         {hasAdmin && <Link to="/cierre" style={linkStyle}>Cierre Diario</Link>}
+        <Link to="/conciliacion" style={linkStyle}>Conciliación Suplidores</Link>
       </div>
       <div style={{ color: 'white', display: 'flex', alignItems: 'center', gap: 15 }}>
         <span>👤 {user?.nombre}</span>
@@ -65,6 +67,7 @@ function App() {
             <Route path="/recepcion/:id" element={<RecepcionPage />} />
             <Route path="/consulta" element={<ConsultaPage />} />
             <Route path="/cierre" element={<CierreDiaPage />} />
+            <Route path="/conciliacion" element={<ConciliacionPage />} />
           </Routes>
         </div>
       </BrowserRouter>

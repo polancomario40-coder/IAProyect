@@ -150,6 +150,22 @@ export const ejecutarCierre = (data: object) =>
 export const buscarOrdenes = (q?: string, fecha?: string, idSuplidor?: string) =>
   puertaApi.get('/cierre/ordenes', { params: { q, fecha, idSuplidor } });
 
+// ─── Conciliación de Suplidores y Pagos ───────────────────────────────────────
+export const compararConciliacion = (data: object) =>
+  puertaApi.post('/conciliacion/comparar', data);
+
+export const guardarConciliacion = (data: object) =>
+  puertaApi.post('/conciliacion/guardar', data);
+
+export const listarLotesConciliacion = (filtros?: object) =>
+  puertaApi.get('/conciliacion/lotes', { params: filtros });
+
+export const obtenerLoteConciliacion = (id: string) =>
+  puertaApi.get(`/conciliacion/lotes/${id}`);
+
+export const actualizarEstadoPagoLote = (id: string, data: object) =>
+  puertaApi.put(`/conciliacion/lotes/${id}/estado-pago`, data);
+
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token);

@@ -35,6 +35,11 @@ public interface IPuertaDbService
     Task<CierreDiaResultDto> EjecutarCierreDiaAsync(DateOnly fechaDia, string usuario, string? notas);
     Task<EntradaCamionDto?> ObtenerEntradaPorIdAsync(Guid idEntradaCamion);
     Task<List<EntradaCamionDto>> ObtenerEntradasHoyAsync(string? idPuerta, string? usuarioPermiso = null);
+    Task<ResultadoConciliacionDto> CompararConducesAsync(CompararConciliacionRequest req, string usuario);
+    Task<Guid> GuardarLoteConciliacionAsync(GuardarConciliacionRequest req, string usuario);
+    Task<List<LoteConciliacionDto>> ListarLotesConciliacionAsync(string? idSuplidor, string? status);
+    Task<ResultadoConciliacionDto?> ObtenerLoteConciliacionAsync(Guid idConciliacion);
+    Task<bool> ActualizarEstadoPagoLoteAsync(Guid idConciliacion, ActualizarEstadoPagoRequest req, string usuario);
 }
 
 public class PuertaDbService : IPuertaDbService
@@ -884,5 +889,603 @@ public class PuertaDbService : IPuertaDbService
             var resultComp = await cmd.ExecuteScalarAsync();
             return resultComp?.ToString() ?? "VMO CONCRETOS";
         } catch { return "VMO CONCRETOS"; }
+    }
+
+    // ─── Módulo de Conciliación de Suplidores y Pagos ─────────────────────────────
+
+    public async Task<ResultadoConciliacionDto> CompararConducesAsync(CompararConciliacionRequest req, string usuario)
+    {
+        var itemsResult = new List<ResultadoItemConciliacionDto>();
+        await using var conn = _cf.CreateErpConnection();
+        await conn.OpenAsync();
+
+        var setConducesEnArchivo = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in req.Items)
+        {
+            var conduceNorm = (item.NoConduce ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(conduceNorm)) continue;
+
+            // 1. Validar duplicado en el mismo archivo
+            if (setConducesEnArchivo.Contains(conduceNorm))
+            {
+                itemsResult.Add(new ResultadoItemConciliacionDto
+                {
+                    FechaConduce      = item.Fecha,
+                    NoConduce         = conduceNorm,
+                    Producto          = item.Producto,
+                    Mina              = item.Mina,
+                    Planta            = item.Planta,
+                    CantidadDeclarada = item.Cantidad,
+                    PrecioUnitario    = item.Precio,
+                    TotalReclamado    = item.Total > 0 ? item.Total : Math.Round(item.Cantidad * item.Precio, 2),
+                    EstadoCuadre      = "NO_CALIFICA",
+                    MotivoRechazo     = "Conduce duplicado en el mismo archivo Excel del suplidor.",
+                    EstadoPago        = "RECHAZADO"
+                });
+                continue;
+            }
+            setConducesEnArchivo.Add(conduceNorm);
+
+            // 2. Verificar si ya fue conciliado / pagado en otro lote
+            await using var cmdVerif = conn.CreateCommand();
+            cmdVerif.CommandText = @"
+                SELECT TOP 1 l.NumeroConciliacion, d.EstadoPago, d.FechaPago
+                FROM prtConciliacionDetalle d
+                INNER JOIN prtConciliacionLote l ON d.idConciliacion = l.idConciliacion
+                WHERE d.NoConduce = @c AND d.EstadoPago IN ('APROBADO', 'PAGADO')";
+            cmdVerif.Parameters.AddWithValue("@c", conduceNorm);
+            await using var rVerif = await cmdVerif.ExecuteReaderAsync();
+            if (await rVerif.ReadAsync())
+            {
+                var numLote = rVerif["NumeroConciliacion"].ToString();
+                var estPago = rVerif["EstadoPago"].ToString();
+                rVerif.Close();
+
+                itemsResult.Add(new ResultadoItemConciliacionDto
+                {
+                    FechaConduce      = item.Fecha,
+                    NoConduce         = conduceNorm,
+                    Producto          = item.Producto,
+                    Mina              = item.Mina,
+                    Planta            = item.Planta,
+                    CantidadDeclarada = item.Cantidad,
+                    PrecioUnitario    = item.Precio,
+                    TotalReclamado    = item.Total > 0 ? item.Total : Math.Round(item.Cantidad * item.Precio, 2),
+                    EstadoCuadre      = "NO_CALIFICA",
+                    MotivoRechazo     = $"Conduce ya conciliado previamente en lote '{numLote}' con estado de pago '{estPago}'.",
+                    EstadoPago        = "RECHAZADO"
+                });
+                continue;
+            }
+            rVerif.Close();
+
+            // 3. Buscar entrada en prtEntradaCamion
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT TOP 1
+                    e.idEntradaCamion, e.Conduce, e.ConduceTransporte, e.idSuplidor, e.Suplidor,
+                    e.idProducto, e.Producto, e.CantidadRecibida, e.CantidadAlmacen, e.idUnidad, e.idUnidadAlmacen,
+                    e.idAlmacen, ISNULL(a.Almacen, e.idAlmacen) AS Almacen,
+                    e.ProMov, e.Status, e.idOrden, e.OrdenNumero,
+                    oc.Recepcion AS NumRecepcionOC,
+                    od.Costo AS CostoOC, od.Descuento AS DescuentoOC
+                FROM prtEntradaCamion e
+                LEFT JOIN Almacen a ON a.idAlmacen = e.idAlmacen
+                LEFT JOIN ocRecepcion oc ON e.ProMov = oc.Referencia AND oc.TipoReferencia = 'PRT'
+                LEFT JOIN ocDetalleOrden od ON e.idOrden = od.idOrden 
+                     AND (e.idProducto = od.idProducto OR od.idProducto = (SELECT TOP 1 p.idProducto FROM Producto p WHERE p.Producto = e.Producto))
+                WHERE (e.Conduce = @conduce OR e.ConduceTransporte = @conduce)
+                  AND (@idSuplidor IS NULL OR e.idSuplidor = @idSuplidor OR e.idSuplidor IS NULL)
+                ORDER BY CASE 
+                    WHEN e.Status = 'CERRADO' THEN 1 
+                    WHEN e.Status = 'RECIBIDO' THEN 2 
+                    WHEN e.Status = 'PENDIENTE' THEN 3 
+                    ELSE 4 END";
+            cmd.Parameters.AddWithValue("@conduce", conduceNorm);
+            cmd.Parameters.AddWithValue("@idSuplidor", (object?)req.IdSuplidor ?? DBNull.Value);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+            {
+                reader.Close();
+
+                // Verificar si existe bajo otro suplidor
+                await using var cmdOtro = conn.CreateCommand();
+                cmdOtro.CommandText = "SELECT TOP 1 Suplidor FROM prtEntradaCamion WHERE Conduce = @conduce OR ConduceTransporte = @conduce";
+                cmdOtro.Parameters.AddWithValue("@conduce", conduceNorm);
+                var otroSup = await cmdOtro.ExecuteScalarAsync();
+
+                string rechazoMsg = otroSup != null 
+                    ? $"El conduce está registrado para otro suplidor ('{otroSup}')."
+                    : "Conduce no encontrado en el sistema ni en Control de Puerta.";
+
+                itemsResult.Add(new ResultadoItemConciliacionDto
+                {
+                    FechaConduce      = item.Fecha,
+                    NoConduce         = conduceNorm,
+                    Producto          = item.Producto,
+                    Mina              = item.Mina,
+                    Planta            = item.Planta,
+                    CantidadDeclarada = item.Cantidad,
+                    PrecioUnitario    = item.Precio,
+                    TotalReclamado    = item.Total > 0 ? item.Total : Math.Round(item.Cantidad * item.Precio, 2),
+                    EstadoCuadre      = "NO_CALIFICA",
+                    MotivoRechazo     = rechazoMsg,
+                    EstadoPago        = "RECHAZADO"
+                });
+                continue;
+            }
+
+            var idEntradaCamion = reader.GetGuid(reader.GetOrdinal("idEntradaCamion"));
+            var proMov          = reader["ProMov"] as string;
+            var numRecepcionOC  = reader["NumRecepcionOC"] as string;
+            var ordenNumero     = reader.IsDBNull(reader.GetOrdinal("OrdenNumero")) ? null : (int?)reader.GetInt32(reader.GetOrdinal("OrdenNumero"));
+            var idOrden         = reader.IsDBNull(reader.GetOrdinal("idOrden")) ? null : (Guid?)reader.GetGuid(reader.GetOrdinal("idOrden"));
+            var productoSis     = reader["Producto"] as string;
+            var plantaSis       = reader["Almacen"] as string ?? reader["idAlmacen"] as string;
+            var statusSis       = reader["Status"]?.ToString() ?? "";
+            var idUnidadSis     = reader["idUnidadAlmacen"] as string ?? reader["idUnidad"] as string ?? "Mts3";
+            var cantRecibida    = reader.IsDBNull(reader.GetOrdinal("CantidadRecibida")) ? (decimal?)null : reader.GetDecimal(reader.GetOrdinal("CantidadRecibida"));
+            var cantAlmacen     = reader.IsDBNull(reader.GetOrdinal("CantidadAlmacen")) ? (decimal?)null : reader.GetDecimal(reader.GetOrdinal("CantidadAlmacen"));
+            var costoOC         = reader.IsDBNull(reader.GetOrdinal("CostoOC")) ? (decimal?)null : reader.GetDecimal(reader.GetOrdinal("CostoOC"));
+            reader.Close();
+
+            decimal cantFinalSis = cantAlmacen ?? cantRecibida ?? 0;
+            decimal precioFinal = item.Precio > 0 ? item.Precio : (costoOC ?? 0);
+            decimal totalReclamado = item.Total > 0 ? item.Total : Math.Round(item.Cantidad * item.Precio, 2);
+
+            // Validar Estado de la Recepción
+            if (statusSis.Equals("CANCELADO", StringComparison.OrdinalIgnoreCase) || statusSis.Equals("BLOQUEADO", StringComparison.OrdinalIgnoreCase))
+            {
+                itemsResult.Add(new ResultadoItemConciliacionDto
+                {
+                    FechaConduce       = item.Fecha,
+                    NoConduce          = conduceNorm,
+                    Producto           = item.Producto,
+                    Mina               = item.Mina,
+                    Planta             = item.Planta,
+                    CantidadDeclarada  = item.Cantidad,
+                    PrecioUnitario     = item.Precio,
+                    TotalReclamado     = totalReclamado,
+                    IdEntradaCamion    = idEntradaCamion,
+                    ProMov             = proMov,
+                    NumRecepcionOC     = numRecepcionOC,
+                    OrdenNumero        = ordenNumero,
+                    IdOrden            = idOrden,
+                    ProductoEncontrado = productoSis,
+                    PlantaEncontrada   = plantaSis,
+                    CantidadSistema    = cantFinalSis,
+                    UnidadSistema      = idUnidadSis,
+                    PrecioSistema      = costoOC,
+                    EstadoCuadre       = "NO_CALIFICA",
+                    MotivoRechazo      = $"La recepción fue cancelada o bloqueada en planta ({statusSis}).",
+                    EstadoPago         = "RECHAZADO"
+                });
+                continue;
+            }
+
+            if (statusSis.Equals("PENDIENTE", StringComparison.OrdinalIgnoreCase))
+            {
+                itemsResult.Add(new ResultadoItemConciliacionDto
+                {
+                    FechaConduce       = item.Fecha,
+                    NoConduce          = conduceNorm,
+                    Producto           = item.Producto,
+                    Mina               = item.Mina,
+                    Planta             = item.Planta,
+                    CantidadDeclarada  = item.Cantidad,
+                    PrecioUnitario     = item.Precio,
+                    TotalReclamado     = totalReclamado,
+                    IdEntradaCamion    = idEntradaCamion,
+                    ProductoEncontrado = productoSis,
+                    PlantaEncontrada   = plantaSis,
+                    CantidadSistema    = cantFinalSis,
+                    UnidadSistema      = idUnidadSis,
+                    PrecioSistema      = costoOC,
+                    EstadoCuadre       = "PENDIENTE_RECEPCION",
+                    MotivoRechazo      = "Registrado en puerta pero aún pendiente de confirmar recepción física en planta.",
+                    EstadoPago         = "PENDIENTE"
+                });
+                continue;
+            }
+
+            // Comparar Cantidades
+            decimal diffCant = Math.Abs(item.Cantidad - cantFinalSis);
+            if (diffCant > 0.05m)
+            {
+                itemsResult.Add(new ResultadoItemConciliacionDto
+                {
+                    FechaConduce       = item.Fecha,
+                    NoConduce          = conduceNorm,
+                    Producto           = item.Producto,
+                    Mina               = item.Mina,
+                    Planta             = item.Planta,
+                    CantidadDeclarada  = item.Cantidad,
+                    PrecioUnitario     = item.Precio,
+                    TotalReclamado     = totalReclamado,
+                    IdEntradaCamion    = idEntradaCamion,
+                    ProMov             = proMov,
+                    NumRecepcionOC     = numRecepcionOC,
+                    OrdenNumero        = ordenNumero,
+                    IdOrden            = idOrden,
+                    ProductoEncontrado = productoSis,
+                    PlantaEncontrada   = plantaSis,
+                    CantidadSistema    = cantFinalSis,
+                    UnidadSistema      = idUnidadSis,
+                    PrecioSistema      = costoOC,
+                    TotalAprobado      = Math.Round(cantFinalSis * precioFinal, 2),
+                    EstadoCuadre       = "NO_CALIFICA",
+                    MotivoRechazo      = $"Discrepancia en cantidad: Suplidor declara {item.Cantidad:N2} {idUnidadSis}, Planta recibió {cantFinalSis:N2} {idUnidadSis} (Diferencia: {diffCant:N2}).",
+                    EstadoPago         = "RECHAZADO"
+                });
+                continue;
+            }
+
+            // Advertencia suave si la planta especificada no coincide
+            string notasPlanta = "";
+            if (!string.IsNullOrWhiteSpace(item.Planta) && !string.IsNullOrWhiteSpace(plantaSis))
+            {
+                if (!plantaSis.Contains(item.Planta.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                    !item.Planta.Contains(plantaSis.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    notasPlanta = $" (Nota: Planta declarada '{item.Planta}' vs Planta recibida '{plantaSis}')";
+                }
+            }
+
+            // ¡Califica para Pago!
+            decimal totalAprobado = Math.Round(cantFinalSis * (precioFinal > 0 ? precioFinal : 1), 2);
+            itemsResult.Add(new ResultadoItemConciliacionDto
+            {
+                FechaConduce       = item.Fecha,
+                NoConduce          = conduceNorm,
+                Producto           = item.Producto,
+                Mina               = item.Mina,
+                Planta             = item.Planta,
+                CantidadDeclarada  = item.Cantidad,
+                PrecioUnitario     = item.Precio,
+                TotalReclamado     = totalReclamado,
+                IdEntradaCamion    = idEntradaCamion,
+                ProMov             = proMov,
+                NumRecepcionOC     = numRecepcionOC,
+                OrdenNumero        = ordenNumero,
+                IdOrden            = idOrden,
+                ProductoEncontrado = productoSis,
+                PlantaEncontrada   = plantaSis,
+                CantidadSistema    = cantFinalSis,
+                UnidadSistema      = idUnidadSis,
+                PrecioSistema      = precioFinal,
+                TotalAprobado      = totalAprobado,
+                EstadoCuadre       = "CALIFICA_PAGO",
+                MotivoRechazo      = "Conduce verificado y recibido en planta." + notasPlanta,
+                EstadoPago         = "CALIFICA_PAGO"
+            });
+        }
+
+        var totalCalifican = itemsResult.Count(i => i.EstadoCuadre == "CALIFICA_PAGO");
+        var totalRechazados = itemsResult.Count(i => i.EstadoCuadre == "NO_CALIFICA");
+        var totalPendientes = itemsResult.Count(i => i.EstadoCuadre == "PENDIENTE_RECEPCION");
+        var montoReclamado  = itemsResult.Sum(i => i.TotalReclamado);
+        var montoCalifica   = itemsResult.Where(i => i.EstadoCuadre == "CALIFICA_PAGO").Sum(i => i.TotalAprobado ?? i.TotalReclamado);
+
+        return new ResultadoConciliacionDto
+        {
+            IdSuplidor          = req.IdSuplidor,
+            Suplidor            = req.Suplidor,
+            NombreArchivo       = req.NombreArchivo,
+            Usuario             = usuario,
+            TotalConduces       = itemsResult.Count,
+            TotalCalifican      = totalCalifican,
+            TotalRechazados     = totalRechazados,
+            TotalPendientes     = totalPendientes,
+            MontoTotalReclamado = montoReclamado,
+            MontoTotalCalifica  = montoCalifica,
+            Items               = itemsResult
+        };
+    }
+
+    public async Task<Guid> GuardarLoteConciliacionAsync(GuardarConciliacionRequest req, string usuario)
+    {
+        await using var conn = _cf.CreateErpConnection();
+        await conn.OpenAsync();
+        await using var tran = conn.BeginTransaction();
+
+        try
+        {
+            var idConciliacion = Guid.NewGuid();
+
+            // Generar número de conciliación secuencial: CONC-YYYYMM-XXXX
+            var prefix = $"CONC-{DateTime.Now:yyyyMM}-";
+            await using var cmdSeq = conn.CreateCommand();
+            cmdSeq.Transaction = tran;
+            cmdSeq.CommandText = "SELECT COUNT(*) + 1 FROM prtConciliacionLote WHERE NumeroConciliacion LIKE @pref + '%'";
+            cmdSeq.Parameters.AddWithValue("@pref", prefix);
+            var nextSeq = Convert.ToInt32(await cmdSeq.ExecuteScalarAsync() ?? 1);
+            var numConciliacion = $"{prefix}{nextSeq:D4}";
+
+            var totalCalifican  = req.Items.Count(i => i.EstadoCuadre == "CALIFICA_PAGO");
+            var totalRechazados = req.Items.Count(i => i.EstadoCuadre == "NO_CALIFICA");
+            var totalPendientes = req.Items.Count(i => i.EstadoCuadre == "PENDIENTE_RECEPCION");
+            var montoReclamado  = req.Items.Sum(i => i.TotalReclamado);
+            var montoCalifica   = req.Items.Where(i => i.EstadoCuadre == "CALIFICA_PAGO").Sum(i => i.TotalAprobado ?? i.TotalReclamado);
+
+            // 1. Insertar Lote
+            await using var cmdLote = conn.CreateCommand();
+            cmdLote.Transaction = tran;
+            cmdLote.CommandText = @"
+                INSERT INTO prtConciliacionLote (
+                    idConciliacion, NumeroConciliacion, idSuplidor, Suplidor,
+                    FechaCarga, Usuario, NombreArchivo, TotalConduces, TotalCalifican,
+                    TotalRechazados, TotalPendientes, MontoTotalReclamado, MontoTotalCalifica,
+                    Status, Notas
+                )
+                VALUES (
+                    @id, @num, @idSup, @sup, GETDATE(), @usr, @archivo, @tot, @cal,
+                    @rech, @pend, @montoRec, @montoCal, 'REVISADO', @notas
+                )";
+            cmdLote.Parameters.AddWithValue("@id", idConciliacion);
+            cmdLote.Parameters.AddWithValue("@num", numConciliacion);
+            cmdLote.Parameters.AddWithValue("@idSup", (object?)req.IdSuplidor ?? DBNull.Value);
+            cmdLote.Parameters.AddWithValue("@sup", req.Suplidor);
+            cmdLote.Parameters.AddWithValue("@usr", usuario);
+            cmdLote.Parameters.AddWithValue("@archivo", (object?)req.NombreArchivo ?? DBNull.Value);
+            cmdLote.Parameters.AddWithValue("@tot", req.Items.Count);
+            cmdLote.Parameters.AddWithValue("@cal", totalCalifican);
+            cmdLote.Parameters.AddWithValue("@rech", totalRechazados);
+            cmdLote.Parameters.AddWithValue("@pend", totalPendientes);
+            cmdLote.Parameters.AddWithValue("@montoRec", montoReclamado);
+            cmdLote.Parameters.AddWithValue("@montoCal", montoCalifica);
+            cmdLote.Parameters.AddWithValue("@notas", (object?)req.Notas ?? DBNull.Value);
+            await cmdLote.ExecuteNonQueryAsync();
+
+            // 2. Insertar Detalles
+            foreach (var item in req.Items)
+            {
+                await using var cmdDet = conn.CreateCommand();
+                cmdDet.Transaction = tran;
+                cmdDet.CommandText = @"
+                    INSERT INTO prtConciliacionDetalle (
+                        idDetalle, idConciliacion, FechaConduce, NoConduce, Producto, Mina, Planta,
+                        CantidadDeclarada, PrecioUnitario, TotalReclamado, idEntradaCamion, ProMov,
+                        NumRecepcionOC, OrdenNumero, idOrden, ProductoEncontrado, PlantaEncontrada,
+                        CantidadSistema, UnidadSistema, PrecioSistema, TotalAprobado, EstadoCuadre,
+                        MotivoRechazo, EstadoPago, Notas
+                    )
+                    VALUES (
+                        NEWID(), @idLote, @fecha, @conduce, @prod, @mina, @planta,
+                        @cantDec, @precio, @totRec, @idEntrada, @promov,
+                        @numRec, @ordNum, @idOrd, @prodEnc, @plantaEnc,
+                        @cantSis, @uSis, @precioSis, @totAprob, @estCuadre,
+                        @motivo, @estPago, @notas
+                    )";
+                cmdDet.Parameters.AddWithValue("@idLote", idConciliacion);
+                cmdDet.Parameters.AddWithValue("@fecha", (object?)item.FechaConduce ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@conduce", item.NoConduce);
+                cmdDet.Parameters.AddWithValue("@prod", (object?)item.Producto ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@mina", (object?)item.Mina ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@planta", (object?)item.Planta ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@cantDec", item.CantidadDeclarada);
+                cmdDet.Parameters.AddWithValue("@precio", item.PrecioUnitario);
+                cmdDet.Parameters.AddWithValue("@totRec", item.TotalReclamado);
+                cmdDet.Parameters.AddWithValue("@idEntrada", (object?)item.IdEntradaCamion ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@promov", (object?)item.ProMov ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@numRec", (object?)item.NumRecepcionOC ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@ordNum", (object?)item.OrdenNumero ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@idOrd", (object?)item.IdOrden ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@prodEnc", (object?)item.ProductoEncontrado ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@plantaEnc", (object?)item.PlantaEncontrada ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@cantSis", (object?)item.CantidadSistema ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@uSis", (object?)item.UnidadSistema ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@precioSis", (object?)item.PrecioSistema ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@totAprob", (object?)item.TotalAprobado ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@estCuadre", item.EstadoCuadre);
+                cmdDet.Parameters.AddWithValue("@motivo", (object?)item.MotivoRechazo ?? DBNull.Value);
+                cmdDet.Parameters.AddWithValue("@estPago", item.EstadoPago);
+                cmdDet.Parameters.AddWithValue("@notas", (object?)item.Notas ?? DBNull.Value);
+                await cmdDet.ExecuteNonQueryAsync();
+            }
+
+            await tran.CommitAsync();
+            return idConciliacion;
+        }
+        catch
+        {
+            await tran.RollbackAsync();
+            throw;
+        }
+    }
+
+    public async Task<List<LoteConciliacionDto>> ListarLotesConciliacionAsync(string? idSuplidor, string? status)
+    {
+        var lista = new List<LoteConciliacionDto>();
+        await using var conn = _cf.CreateErpConnection();
+        await conn.OpenAsync();
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "prtListarLotesConciliacion";
+        cmd.CommandType = System.Data.CommandType.StoredProcedure;
+        cmd.Parameters.AddWithValue("@idSuplidor", (object?)idSuplidor ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Status", (object?)status ?? DBNull.Value);
+
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            lista.Add(new LoteConciliacionDto
+            {
+                IdConciliacion      = r.GetGuid(r.GetOrdinal("idConciliacion")),
+                NumeroConciliacion  = r["NumeroConciliacion"].ToString()!,
+                IdSuplidor          = r["idSuplidor"] as string,
+                Suplidor            = r["Suplidor"].ToString()!,
+                FechaCarga          = r.GetDateTime(r.GetOrdinal("FechaCarga")),
+                Usuario             = r["Usuario"].ToString()!,
+                NombreArchivo       = r["NombreArchivo"] as string,
+                TotalConduces       = r.GetInt32(r.GetOrdinal("TotalConduces")),
+                TotalCalifican      = r.GetInt32(r.GetOrdinal("TotalCalifican")),
+                TotalRechazados     = r.GetInt32(r.GetOrdinal("TotalRechazados")),
+                TotalPendientes     = r.GetInt32(r.GetOrdinal("TotalPendientes")),
+                MontoTotalReclamado = r.GetDecimal(r.GetOrdinal("MontoTotalReclamado")),
+                MontoTotalCalifica  = r.GetDecimal(r.GetOrdinal("MontoTotalCalifica")),
+                Status              = r["Status"].ToString()!,
+                FechaAprobacion     = r.IsDBNull(r.GetOrdinal("FechaAprobacion")) ? null : r.GetDateTime(r.GetOrdinal("FechaAprobacion")),
+                UsuarioAprobacion   = r["UsuarioAprobacion"] as string,
+                Notas               = r["Notas"] as string
+            });
+        }
+        return lista;
+    }
+
+    public async Task<ResultadoConciliacionDto?> ObtenerLoteConciliacionAsync(Guid idConciliacion)
+    {
+        await using var conn = _cf.CreateErpConnection();
+        await conn.OpenAsync();
+
+        // 1. Obtener cabecera
+        await using var cmdLote = conn.CreateCommand();
+        cmdLote.CommandText = "SELECT * FROM prtConciliacionLote WHERE idConciliacion = @id";
+        cmdLote.Parameters.AddWithValue("@id", idConciliacion);
+        await using var rLote = await cmdLote.ExecuteReaderAsync();
+        if (!await rLote.ReadAsync()) return null;
+
+        var dto = new ResultadoConciliacionDto
+        {
+            IdConciliacion      = rLote.GetGuid(rLote.GetOrdinal("idConciliacion")),
+            NumeroConciliacion  = rLote["NumeroConciliacion"].ToString()!,
+            IdSuplidor          = rLote["idSuplidor"] as string,
+            Suplidor            = rLote["Suplidor"].ToString()!,
+            FechaCarga          = rLote.GetDateTime(rLote.GetOrdinal("FechaCarga")),
+            Usuario             = rLote["Usuario"].ToString()!,
+            NombreArchivo       = rLote["NombreArchivo"] as string,
+            TotalConduces       = rLote.GetInt32(rLote.GetOrdinal("TotalConduces")),
+            TotalCalifican      = rLote.GetInt32(rLote.GetOrdinal("TotalCalifican")),
+            TotalRechazados     = rLote.GetInt32(rLote.GetOrdinal("TotalRechazados")),
+            TotalPendientes     = rLote.GetInt32(rLote.GetOrdinal("TotalPendientes")),
+            MontoTotalReclamado = rLote.GetDecimal(rLote.GetOrdinal("MontoTotalReclamado")),
+            MontoTotalCalifica  = rLote.GetDecimal(rLote.GetOrdinal("MontoTotalCalifica")),
+            Status              = rLote["Status"].ToString()!,
+            FechaAprobacion     = rLote.IsDBNull(rLote.GetOrdinal("FechaAprobacion")) ? null : rLote.GetDateTime(rLote.GetOrdinal("FechaAprobacion")),
+            UsuarioAprobacion   = rLote["UsuarioAprobacion"] as string,
+            Notas               = rLote["Notas"] as string
+        };
+        rLote.Close();
+
+        // 2. Obtener detalles
+        await using var cmdDet = conn.CreateCommand();
+        cmdDet.CommandText = "prtObtenerDetalleConciliacion";
+        cmdDet.CommandType = System.Data.CommandType.StoredProcedure;
+        cmdDet.Parameters.AddWithValue("@idConciliacion", idConciliacion);
+
+        await using var rDet = await cmdDet.ExecuteReaderAsync();
+        var items = new List<ResultadoItemConciliacionDto>();
+        while (await rDet.ReadAsync())
+        {
+            items.Add(new ResultadoItemConciliacionDto
+            {
+                IdDetalle          = rDet.GetGuid(rDet.GetOrdinal("idDetalle")),
+                FechaConduce       = rDet.IsDBNull(rDet.GetOrdinal("FechaConduce")) ? null : rDet.GetDateTime(rDet.GetOrdinal("FechaConduce")),
+                NoConduce          = rDet["NoConduce"].ToString()!,
+                Producto           = rDet["Producto"] as string,
+                Mina               = rDet["Mina"] as string,
+                Planta             = rDet["Planta"] as string,
+                CantidadDeclarada  = rDet.GetDecimal(rDet.GetOrdinal("CantidadDeclarada")),
+                PrecioUnitario     = rDet.GetDecimal(rDet.GetOrdinal("PrecioUnitario")),
+                TotalReclamado     = rDet.GetDecimal(rDet.GetOrdinal("TotalReclamado")),
+                IdEntradaCamion    = rDet.IsDBNull(rDet.GetOrdinal("idEntradaCamion")) ? null : rDet.GetGuid(rDet.GetOrdinal("idEntradaCamion")),
+                ProMov             = rDet["ProMov"] as string,
+                NumRecepcionOC     = rDet["NumRecepcionOC"] as string,
+                OrdenNumero        = rDet.IsDBNull(rDet.GetOrdinal("OrdenNumero")) ? null : rDet.GetInt32(rDet.GetOrdinal("OrdenNumero")),
+                IdOrden            = rDet.IsDBNull(rDet.GetOrdinal("idOrden")) ? null : rDet.GetGuid(rDet.GetOrdinal("idOrden")),
+                ProductoEncontrado = rDet["ProductoEncontrado"] as string,
+                PlantaEncontrada   = rDet["PlantaEncontrada"] as string,
+                CantidadSistema    = rDet.IsDBNull(rDet.GetOrdinal("CantidadSistema")) ? null : rDet.GetDecimal(rDet.GetOrdinal("CantidadSistema")),
+                UnidadSistema      = rDet["UnidadSistema"] as string,
+                PrecioSistema      = rDet.IsDBNull(rDet.GetOrdinal("PrecioSistema")) ? null : rDet.GetDecimal(rDet.GetOrdinal("PrecioSistema")),
+                TotalAprobado      = rDet.IsDBNull(rDet.GetOrdinal("TotalAprobado")) ? null : rDet.GetDecimal(rDet.GetOrdinal("TotalAprobado")),
+                EstadoCuadre       = rDet["EstadoCuadre"].ToString()!,
+                MotivoRechazo      = rDet["MotivoRechazo"] as string,
+                EstadoPago         = rDet["EstadoPago"].ToString()!,
+                FechaPago          = rDet.IsDBNull(rDet.GetOrdinal("FechaPago")) ? null : rDet.GetDateTime(rDet.GetOrdinal("FechaPago")),
+                ReferenciaPago     = rDet["ReferenciaPago"] as string,
+                Notas              = rDet["Notas"] as string
+            });
+        }
+        return dto with { Items = items };
+    }
+
+    public async Task<bool> ActualizarEstadoPagoLoteAsync(Guid idConciliacion, ActualizarEstadoPagoRequest req, string usuario)
+    {
+        await using var conn = _cf.CreateErpConnection();
+        await conn.OpenAsync();
+        await using var tran = conn.BeginTransaction();
+
+        try
+        {
+            // 1. Actualizar detalles específicos o todos los que califican
+            await using var cmdDet = conn.CreateCommand();
+            cmdDet.Transaction = tran;
+
+            string idsFilter = "";
+            if (req.IdsDetalle != null && req.IdsDetalle.Count > 0)
+            {
+                var idStrings = string.Join(",", req.IdsDetalle.Select(id => $"'{id}'"));
+                idsFilter = $"AND idDetalle IN ({idStrings})";
+            }
+            else
+            {
+                // Si no se pasaron IDs específicos, aplica a los que califican para pago
+                idsFilter = "AND EstadoCuadre = 'CALIFICA_PAGO'";
+            }
+
+            cmdDet.CommandText = $@"
+                UPDATE prtConciliacionDetalle
+                SET EstadoPago = @est,
+                    ReferenciaPago = ISNULL(@ref, ReferenciaPago),
+                    FechaPago = CASE WHEN @est = 'PAGADO' THEN GETDATE() ELSE FechaPago END,
+                    Notas = CASE WHEN @notas IS NOT NULL THEN ISNULL(Notas, '') + ' ' + @notas ELSE Notas END
+                WHERE idConciliacion = @idLote {idsFilter}";
+            cmdDet.Parameters.AddWithValue("@est", req.NuevoEstadoPago);
+            cmdDet.Parameters.AddWithValue("@ref", (object?)req.ReferenciaPago ?? DBNull.Value);
+            cmdDet.Parameters.AddWithValue("@notas", (object?)req.Notas ?? DBNull.Value);
+            cmdDet.Parameters.AddWithValue("@idLote", idConciliacion);
+            await cmdDet.ExecuteNonQueryAsync();
+
+            // 2. Actualizar estado general del Lote
+            await using var cmdLote = conn.CreateCommand();
+            cmdLote.Transaction = tran;
+            if (req.NuevoEstadoPago == "APROBADO")
+            {
+                cmdLote.CommandText = @"
+                    UPDATE prtConciliacionLote
+                    SET Status = 'APROBADO_PAGO',
+                        FechaAprobacion = GETDATE(),
+                        UsuarioAprobacion = @usr
+                    WHERE idConciliacion = @idLote";
+            }
+            else if (req.NuevoEstadoPago == "PAGADO")
+            {
+                cmdLote.CommandText = @"
+                    UPDATE prtConciliacionLote
+                    SET Status = 'PAGADO'
+                    WHERE idConciliacion = @idLote";
+            }
+            else
+            {
+                cmdLote.CommandText = @"
+                    UPDATE prtConciliacionLote
+                    SET Status = @est
+                    WHERE idConciliacion = @idLote";
+                cmdLote.Parameters.AddWithValue("@est", req.NuevoEstadoPago);
+            }
+            cmdLote.Parameters.AddWithValue("@usr", usuario);
+            cmdLote.Parameters.AddWithValue("@idLote", idConciliacion);
+            await cmdLote.ExecuteNonQueryAsync();
+
+            await tran.CommitAsync();
+            return true;
+        }
+        catch
+        {
+            await tran.RollbackAsync();
+            throw;
+        }
     }
 }

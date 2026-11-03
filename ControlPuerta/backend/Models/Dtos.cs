@@ -222,3 +222,119 @@ public record TicketProductoDto
     public string?  IdUnidadAlmacen   { get; init; }
     public int?     OrdenNumero       { get; init; }
 }
+
+// ─── Módulo de Conciliación de Suplidores y Pagos ─────────────────────────────
+
+public record ItemConciliacionInputDto
+{
+    public DateTime? Fecha            { get; init; }
+    public string    NoConduce        { get; init; } = "";
+    public string?   Producto         { get; init; }
+    public string?   Mina             { get; init; }
+    public string?   Planta           { get; init; }
+    public decimal   Cantidad         { get; init; }
+    public decimal   Precio           { get; init; }
+    public decimal   Total            { get; init; }
+}
+
+public record CompararConciliacionRequest
+{
+    public string?   IdSuplidor       { get; init; }
+    public string    Suplidor         { get; init; } = "";
+    public string?   NombreArchivo    { get; init; }
+    public List<ItemConciliacionInputDto> Items { get; init; } = new();
+}
+
+public record ResultadoItemConciliacionDto
+{
+    public Guid?     IdDetalle               { get; init; }
+    public DateTime? FechaConduce            { get; init; }
+    public string    NoConduce               { get; init; } = "";
+    public string?   Producto                { get; init; }
+    public string?   Mina                    { get; init; }
+    public string?   Planta                  { get; init; }
+    public decimal   CantidadDeclarada       { get; init; }
+    public decimal   PrecioUnitario          { get; init; }
+    public decimal   TotalReclamado          { get; init; }
+    
+    // Cruce con el sistema
+    public Guid?     IdEntradaCamion         { get; init; }
+    public string?   ProMov                  { get; init; }
+    public string?   NumRecepcionOC          { get; init; }
+    public int?      OrdenNumero             { get; init; }
+    public Guid?     IdOrden                 { get; init; }
+    public string?   ProductoEncontrado      { get; init; }
+    public string?   PlantaEncontrada        { get; init; }
+    public decimal?  CantidadSistema         { get; init; }
+    public string?   UnidadSistema           { get; init; }
+    public decimal?  PrecioSistema           { get; init; }
+    public decimal?  TotalAprobado           { get; init; }
+    
+    // Resultados
+    public string    EstadoCuadre            { get; init; } = "NO_CALIFICA"; // CALIFICA_PAGO, NO_CALIFICA, PENDIENTE_RECEPCION
+    public string?   MotivoRechazo           { get; init; }
+    public string    EstadoPago              { get; init; } = "PENDIENTE";   // PENDIENTE, CALIFICA_PAGO, RECHAZADO, APROBADO, PAGADO
+    public DateTime? FechaPago               { get; init; }
+    public string?   ReferenciaPago          { get; init; }
+    public string?   Notas                   { get; init; }
+}
+
+public record ResultadoConciliacionDto
+{
+    public Guid?     IdConciliacion          { get; init; }
+    public string?   NumeroConciliacion      { get; init; }
+    public string?   IdSuplidor              { get; init; }
+    public string    Suplidor                { get; init; } = "";
+    public DateTime  FechaCarga              { get; init; } = DateTime.Now;
+    public string?   Usuario                 { get; init; }
+    public string?   NombreArchivo           { get; init; }
+    public int       TotalConduces           { get; init; }
+    public int       TotalCalifican          { get; init; }
+    public int       TotalRechazados         { get; init; }
+    public int       TotalPendientes         { get; init; }
+    public decimal   MontoTotalReclamado     { get; init; }
+    public decimal   MontoTotalCalifica      { get; init; }
+    public string    Status                  { get; init; } = "REVISADO";
+    public DateTime? FechaAprobacion         { get; init; }
+    public string?   UsuarioAprobacion       { get; init; }
+    public string?   Notas                   { get; init; }
+    public List<ResultadoItemConciliacionDto> Items { get; init; } = new();
+}
+
+public record GuardarConciliacionRequest
+{
+    public string?   IdSuplidor              { get; init; }
+    public string    Suplidor                { get; init; } = "";
+    public string?   NombreArchivo           { get; init; }
+    public string?   Notas                   { get; init; }
+    public List<ResultadoItemConciliacionDto> Items { get; init; } = new();
+}
+
+public record LoteConciliacionDto
+{
+    public Guid      IdConciliacion          { get; init; }
+    public string    NumeroConciliacion      { get; init; } = "";
+    public string?   IdSuplidor              { get; init; }
+    public string    Suplidor                { get; init; } = "";
+    public DateTime  FechaCarga              { get; init; }
+    public string    Usuario                 { get; init; } = "";
+    public string?   NombreArchivo           { get; init; }
+    public int       TotalConduces           { get; init; }
+    public int       TotalCalifican          { get; init; }
+    public int       TotalRechazados         { get; init; }
+    public int       TotalPendientes         { get; init; }
+    public decimal   MontoTotalReclamado     { get; init; }
+    public decimal   MontoTotalCalifica      { get; init; }
+    public string    Status                  { get; init; } = "";
+    public DateTime? FechaAprobacion         { get; init; }
+    public string?   UsuarioAprobacion       { get; init; }
+    public string?   Notas                   { get; init; }
+}
+
+public record ActualizarEstadoPagoRequest
+{
+    public string    NuevoEstadoPago         { get; init; } = ""; // APROBADO, PAGADO, RECHAZADO, PENDIENTE
+    public string?   ReferenciaPago          { get; init; }
+    public string?   Notas                   { get; init; }
+    public List<Guid>? IdsDetalle            { get; init; }
+}
