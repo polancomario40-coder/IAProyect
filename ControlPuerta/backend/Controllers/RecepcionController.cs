@@ -348,7 +348,7 @@ try {
             FechaRecepcion     = entrada.FechaRecepcion,
             UsuarioRecepcion   = entrada.UsuarioRecepcion ?? "",
             Status             = entrada.Status,
-            OrdenNumero        = entrada.OrdenNumero,
+            OrdenNumero        = entrada.OrdenNumero ?? productos.FirstOrDefault(p => p.OrdenNumero.HasValue)?.OrdenNumero,
             FechaImpresion     = DateTime.Now,
             IsoIdentificador   = isoIdent,
             IsoRevision        = isoRev,

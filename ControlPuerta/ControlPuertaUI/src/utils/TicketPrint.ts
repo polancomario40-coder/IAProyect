@@ -79,6 +79,18 @@ export const generarTicketPDF = async (ticket: any) => {
         <div style="font-size: 16px; font-weight: bold; word-break: break-word;">${ticket.conduceTransporte || ticket.conduce}</div>
       </div>
 
+      <!-- ORDEN DE COMPRA (OC) -->
+      <div style="margin: 4px 0; padding: 4px 6px; border: 1.5px solid black; border-radius: 4px; text-align: center; background-color: #fafafa;">
+        <div style="font-size: 11px; font-weight: bold; color: #333; text-transform: uppercase;">ORDEN DE COMPRA (OC):</div>
+        <div style="font-size: 18px; font-weight: 900; letter-spacing: 0.5px;">
+          ${ticket.ordenNumero 
+            ? `OC #${ticket.ordenNumero}` 
+            : (ticket.productos?.find((p: any) => p.ordenNumero)?.ordenNumero 
+                ? `OC #${ticket.productos.find((p: any) => p.ordenNumero).ordenNumero}` 
+                : 'PENDIENTE DE ASIGNAR')}
+        </div>
+      </div>
+
       <div style="margin: 3px 0;">
         <div style="font-size: 11px; font-weight: bold; color: #444; text-transform: uppercase;">PLANTA DE DESTINO:</div>
         <div style="font-size: 15px; font-weight: bold; word-break: break-word;">${ticket.almacen || ticket.idAlmacen || '-'}</div>
@@ -154,11 +166,10 @@ export const generarTicketPDF = async (ticket: any) => {
         <span style="font-size: 13px; font-weight: bold;">${ticket.status || '-'}</span>
       </div>
 
-      ${ticket.ordenNumero && (!ticket.productos || ticket.productos.length <= 1) ? `
       <div style="margin: 3px 0; display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 11px; font-weight: bold; color: #444; text-transform: uppercase;">OC ASIGNADA:</span>
-        <span style="font-size: 13px; font-weight: bold;">#${ticket.ordenNumero}</span>
-      </div>` : ''}
+        <span style="font-size: 11px; font-weight: bold; color: #444; text-transform: uppercase;">ORDEN DE COMPRA:</span>
+        <span style="font-size: 13px; font-weight: bold;">${ticket.ordenNumero ? `OC #${ticket.ordenNumero}` : (ticket.productos?.find((p: any) => p.ordenNumero)?.ordenNumero ? `OC #${ticket.productos.find((p: any) => p.ordenNumero).ordenNumero}` : 'Sin OC')}</span>
+      </div>
 
       ${ticket.notas ? `
       <div style="margin: 3px 0;">

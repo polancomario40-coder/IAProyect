@@ -615,6 +615,12 @@ public class PuertaDbService : IPuertaDbService
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"SELECT e.*, 
+                COALESCE(
+                    e.OrdenNumero,
+                    (SELECT TOP 1 o.Numero FROM ocOrdenes o WHERE o.idOrden = e.idOrden),
+                    (SELECT TOP 1 r.OrdenNo FROM ocRecepcion r WHERE r.Recepcion = e.ProMov),
+                    (SELECT TOP 1 r.OrdenNo FROM ocRecepcion r WHERE r.Nota = e.Conduce OR r.Referencia = e.Conduce)
+                ) AS OrdenNumeroResolvido,
                 ISNULL(e.idUnidad, (SELECT TOP 1 p.idUnidad FROM Producto p WHERE RTRIM(LTRIM(p.idProducto)) = RTRIM(LTRIM(e.idProducto)))) AS idUnidadFallback,
                 0 AS TotalRegistros
             FROM prtEntradaCamion e WHERE e.idEntradaCamion = @id";
@@ -679,7 +685,7 @@ public class PuertaDbService : IPuertaDbService
             Almacen          = HasColumn(r, "Almacen") ? GetStr(r, "Almacen") : GetStr(r, "idAlmacen"),
             Status           = r.GetString(r.GetOrdinal("Status")),
             IdOrden          = Get<Guid>(r, "idOrden"),
-            OrdenNumero      = Get<int>(r, "OrdenNumero"),
+            OrdenNumero      = HasColumn(r, "OrdenNumeroResolvido") ? (Get<int>(r, "OrdenNumeroResolvido") ?? Get<int>(r, "OrdenNumero")) : Get<int>(r, "OrdenNumero"),
             IdEvidencia      = Get<Guid>(r, "idEvidencia"),
             Notas            = GetStr(r, "Notas"),
             Usuario          = GetStr(r, "Usuario") ?? "",
@@ -742,7 +748,13 @@ public class PuertaDbService : IPuertaDbService
         if (!string.IsNullOrWhiteSpace(conduceTransporte))
         {
             cmd.CommandText = @"
-                SELECT idEntradaCamion, idProducto, Producto, CantidadRecibida, idUnidad, CantidadDeclarada, CantidadAlmacen, idUnidadAlmacen, OrdenNumero
+                SELECT idEntradaCamion, idProducto, Producto, CantidadRecibida, idUnidad, CantidadDeclarada, CantidadAlmacen, idUnidadAlmacen,
+                       COALESCE(
+                           OrdenNumero,
+                           (SELECT TOP 1 o.Numero FROM ocOrdenes o WHERE o.idOrden = prtEntradaCamion.idOrden),
+                           (SELECT TOP 1 r.OrdenNo FROM ocRecepcion r WHERE r.Recepcion = prtEntradaCamion.ProMov),
+                           (SELECT TOP 1 r.OrdenNo FROM ocRecepcion r WHERE r.Nota = prtEntradaCamion.Conduce OR r.Referencia = prtEntradaCamion.Conduce)
+                       ) AS OrdenNumero
                 FROM prtEntradaCamion
                 WHERE ConduceTransporte = @ct AND Status != 'CANCELADO'
                 ORDER BY FechaCreacion, idEntradaCamion";
@@ -751,7 +763,13 @@ public class PuertaDbService : IPuertaDbService
         else
         {
             cmd.CommandText = @"
-                SELECT idEntradaCamion, idProducto, Producto, CantidadRecibida, idUnidad, CantidadDeclarada, CantidadAlmacen, idUnidadAlmacen, OrdenNumero
+                SELECT idEntradaCamion, idProducto, Producto, CantidadRecibida, idUnidad, CantidadDeclarada, CantidadAlmacen, idUnidadAlmacen,
+                       COALESCE(
+                           OrdenNumero,
+                           (SELECT TOP 1 o.Numero FROM ocOrdenes o WHERE o.idOrden = prtEntradaCamion.idOrden),
+                           (SELECT TOP 1 r.OrdenNo FROM ocRecepcion r WHERE r.Recepcion = prtEntradaCamion.ProMov),
+                           (SELECT TOP 1 r.OrdenNo FROM ocRecepcion r WHERE r.Nota = prtEntradaCamion.Conduce OR r.Referencia = prtEntradaCamion.Conduce)
+                       ) AS OrdenNumero
                 FROM prtEntradaCamion
                 WHERE (idEntradaCamion = @id OR (Conduce = @c AND (@placa IS NULL OR Placa = @placa) AND CAST(FechaEntrada AS DATE) = CAST(@fe AS DATE)))
                   AND Status != 'CANCELADO'
