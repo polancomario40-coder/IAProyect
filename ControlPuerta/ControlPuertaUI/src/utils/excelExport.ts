@@ -87,7 +87,68 @@ export const exportarExcelTransporte = (items: any[], fechaDesde: string, fechaH
 };
 
 export const descargarPlantillaSuplidorExcel = () => {
-  const data = [
+  // Hoja 1: PLANTILLA OFICIAL EN BLANCO (Directa desde Fila 1 para que el suplidor la llene)
+  const headers = [
+    'Fecha', 
+    'No. conduce', 
+    'Producto', 
+    'Mina', 
+    'Planta', 
+    'Cantidad', 
+    'Precio', 
+    'Total'
+  ];
+
+  // Matriz vacía con solo la fila de encabezados
+  const wsData = [headers];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  ws['!cols'] = [
+    { wch: 15 }, // Fecha
+    { wch: 18 }, // No. conduce
+    { wch: 28 }, // Producto
+    { wch: 24 }, // Mina
+    { wch: 20 }, // Planta
+    { wch: 16 }, // Cantidad
+    { wch: 16 }, // Precio
+    { wch: 18 }  // Total
+  ];
+
+  // Hoja 2: CATÁLOGOS DE CONSULTA
+  const catData = [
+    { 'PRODUCTOS AUTORIZADOS': 'GRAVA DE 3/4"', 'PLANTAS DE ENTREGA': 'Metaldom', 'MINAS Y CANTERAS RECURRENTES': 'Cantera San Cristóbal' },
+    { 'PRODUCTOS AUTORIZADOS': 'ARENA GRIS', 'PLANTAS DE ENTREGA': 'Haina', 'MINAS Y CANTERAS RECURRENTES': 'Cantera Bisonó' },
+    { 'PRODUCTOS AUTORIZADOS': 'ARENA LAVADA', 'PLANTAS DE ENTREGA': 'Circunvalacion', 'MINAS Y CANTERAS RECURRENTES': 'Cantera Haina' },
+    { 'PRODUCTOS AUTORIZADOS': 'GRAVILLA DE 3/8"', 'PLANTAS DE ENTREGA': 'Esperanza', 'MINAS Y CANTERAS RECURRENTES': 'Cantera Baní' },
+    { 'PRODUCTOS AUTORIZADOS': 'CEMENTO GRIS PORTLAND', 'PLANTAS DE ENTREGA': 'Barahona', 'MINAS Y CANTERAS RECURRENTES': 'Cantera Nizao' },
+    { 'PRODUCTOS AUTORIZADOS': 'CASCAJO', 'PLANTAS DE ENTREGA': 'Punta Cana', 'MINAS Y CANTERAS RECURRENTES': 'Cantera Palenque' },
+    { 'PRODUCTOS AUTORIZADOS': 'CORALINA', 'PLANTAS DE ENTREGA': 'Agua Clara', 'MINAS Y CANTERAS RECURRENTES': 'Otras Canteras' },
+    { 'PRODUCTOS AUTORIZADOS': 'BASE', 'PLANTAS DE ENTREGA': 'SanIsidro', 'MINAS Y CANTERAS RECURRENTES': '' },
+    { 'PRODUCTOS AUTORIZADOS': 'SUB-BASE', 'PLANTAS DE ENTREGA': 'UveroAlto', 'MINAS Y CANTERAS RECURRENTES': '' },
+    { 'PRODUCTOS AUTORIZADOS': 'CALICHE', 'PLANTAS DE ENTREGA': 'Miches', 'MINAS Y CANTERAS RECURRENTES': '' }
+  ];
+  const wsCat = XLSX.utils.json_to_sheet(catData);
+  wsCat['!cols'] = [{ wch: 30 }, { wch: 24 }, { wch: 30 }];
+
+  // Hoja 3: GUÍA Y REGLAS DE LLENADO
+  const insData = [
+    { 'REGLA': '1. Estado de Plantilla', 'INSTRUCCIÓN': 'Esta hoja se suministra en blanco para ser completada con sus conduces entregados en planta.' },
+    { 'REGLA': '2. Encabezados', 'INSTRUCCIÓN': 'No modifique el nombre ni el orden de las columnas de la hoja "PLANTILLA".' },
+    { 'REGLA': '3. Fecha', 'INSTRUCCIÓN': 'Indique la fecha de entrega en formato AAAA-MM-DD (ej: 2026-11-04) o formato de fecha de Excel.' },
+    { 'REGLA': '4. No. conduce', 'INSTRUCCIÓN': 'Digite el número exacto del conduce físico entregado al chofer/planta.' },
+    { 'REGLA': '5. Producto', 'INSTRUCCIÓN': 'Escriba o elija el producto según la lista de "CATALOGOS" (ej: GRAVA DE 3/4", ARENA GRIS).' },
+    { 'REGLA': '6. Mina', 'INSTRUCCIÓN': 'Indique la cantera o mina de origen donde se extrajo el material.' },
+    { 'REGLA': '7. Planta', 'INSTRUCCIÓN': 'Indique la planta de destino donde se descargó (ej: Metaldom, Haina, Circunvalacion).' },
+    { 'REGLA': '8. Cantidad', 'INSTRUCCIÓN': 'Cantidad en M3 o toneladas recibidas.' },
+    { 'REGLA': '9. Precio', 'INSTRUCCIÓN': 'Precio unitario pactado sin signos de pesos ni letras.' },
+    { 'REGLA': '10. Total', 'INSTRUCCIÓN': 'Multiplicación de Cantidad x Precio.' },
+    { 'REGLA': '11. Validación', 'INSTRUCCIÓN': 'Cada conduce será conciliado de manera automática contra las recepciones de báscula/puerta antes de autorizar el pago.' }
+  ];
+  const wsIns = XLSX.utils.json_to_sheet(insData);
+  wsIns['!cols'] = [{ wch: 24 }, { wch: 90 }];
+
+  // Hoja 4: EJEMPLO ILUSTRATIVO (Para que el suplidor vea cómo debe verse su reporte)
+  const ejemploData = [
     {
       'Fecha': '2026-11-04',
       'No. conduce': '672867',
@@ -100,62 +161,25 @@ export const descargarPlantillaSuplidorExcel = () => {
     },
     {
       'Fecha': '2026-11-04',
-      'No. conduce': '363021',
+      'No. conduce': '672812',
       'Producto': 'ARENA GRIS',
-      'Mina': 'Cantera Bisonó',
+      'Mina': 'Cantera San Cristóbal',
       'Planta': 'Metaldom',
-      'Cantidad': 25.21,
+      'Cantidad': 26.61,
       'Precio': 700.00,
-      'Total': 17647.00
+      'Total': 18627.00
     }
   ];
-
-  const ws = XLSX.utils.json_to_sheet(data);
-
-  ws['!cols'] = [
-    { wch: 15 }, // Fecha
-    { wch: 18 }, // No. conduce
-    { wch: 26 }, // Producto
-    { wch: 24 }, // Mina
-    { wch: 20 }, // Planta
-    { wch: 16 }, // Cantidad
-    { wch: 16 }, // Precio
-    { wch: 18 }  // Total
+  const wsEjemplo = XLSX.utils.json_to_sheet(ejemploData);
+  wsEjemplo['!cols'] = [
+    { wch: 15 }, { wch: 18 }, { wch: 28 }, { wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 18 }
   ];
-
-  const catData = [
-    { 'PRODUCTOS AUTORIZADOS': 'ARENA GRIS', 'PLANTAS DESTINO': 'Metaldom', 'MINAS / CANTERAS': 'Cantera San Cristóbal' },
-    { 'PRODUCTOS AUTORIZADOS': 'ARENA LAVADA', 'PLANTAS DESTINO': 'Haina', 'MINAS / CANTERAS': 'Cantera Bisonó' },
-    { 'PRODUCTOS AUTORIZADOS': 'GRAVA DE 3/4"', 'PLANTAS DESTINO': 'Circunvalacion', 'MINAS / CANTERAS': 'Cantera Haina' },
-    { 'PRODUCTOS AUTORIZADOS': 'GRAVILLA DE 3/8"', 'PLANTAS DESTINO': 'Esperanza', 'MINAS / CANTERAS': 'Cantera Baní' },
-    { 'PRODUCTOS AUTORIZADOS': 'CEMENTO GRIS PORTLAND', 'PLANTAS DESTINO': 'Barahona', 'MINAS / CANTERAS': 'Cantera Nizao' },
-    { 'PRODUCTOS AUTORIZADOS': 'CASCAJO', 'PLANTAS DESTINO': 'Punta Cana', 'MINAS / CANTERAS': 'Cantera Palenque' },
-    { 'PRODUCTOS AUTORIZADOS': 'CORALINA', 'PLANTAS DESTINO': 'Agua Clara', 'MINAS / CANTERAS': 'Otra' },
-    { 'PRODUCTOS AUTORIZADOS': 'BASE', 'PLANTAS DESTINO': '', 'MINAS / CANTERAS': '' },
-    { 'PRODUCTOS AUTORIZADOS': 'SUB-BASE', 'PLANTAS DESTINO': '', 'MINAS / CANTERAS': '' },
-    { 'PRODUCTOS AUTORIZADOS': 'CALICHE', 'PLANTAS DESTINO': '', 'MINAS / CANTERAS': '' }
-  ];
-  const wsCat = XLSX.utils.json_to_sheet(catData);
-  wsCat['!cols'] = [{ wch: 28 }, { wch: 22 }, { wch: 26 }];
-
-  const insData = [
-    { 'REGLA': '1. Fecha', 'INSTRUCCION': 'Coloque la fecha en formato AAAA-MM-DD (ej: 2026-11-04).' },
-    { 'REGLA': '2. No. conduce', 'INSTRUCCION': 'Digite el número exacto del conduce físico sin caracteres adicionales.' },
-    { 'REGLA': '3. Producto', 'INSTRUCCION': 'Escriba o elija el producto autorizado según la pestaña CATALOGOS.' },
-    { 'REGLA': '4. Mina', 'INSTRUCCION': 'Indique la cantera o mina de procedencia del material.' },
-    { 'REGLA': '5. Planta', 'INSTRUCCION': 'Indique la planta donde se entregó la mercancía (ej: Metaldom, Haina).' },
-    { 'REGLA': '6. Cantidad', 'INSTRUCCION': 'Digite la cantidad en metros cúbicos o toneladas recibidas.' },
-    { 'REGLA': '7. Precio', 'INSTRUCCION': 'Precio unitario pactado sin símbolos de moneda.' },
-    { 'REGLA': '8. Total', 'INSTRUCCION': 'Se calcula automáticamente (Cantidad x Precio).' },
-    { 'REGLA': '9. Auditoría', 'INSTRUCCION': 'Los conduces serán validados con el sistema de control de entrada para calificar pago.' }
-  ];
-  const wsIns = XLSX.utils.json_to_sheet(insData);
-  wsIns['!cols'] = [{ wch: 18 }, { wch: 80 }];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'PLANTILLA');
   XLSX.utils.book_append_sheet(wb, wsCat, 'CATALOGOS');
   XLSX.utils.book_append_sheet(wb, wsIns, 'INSTRUCCIONES');
+  XLSX.utils.book_append_sheet(wb, wsEjemplo, 'EJEMPLO_LLENADO');
 
   XLSX.writeFile(wb, 'PLANTILLA_CONDUCES_SUPLIDOR.xlsx');
 };

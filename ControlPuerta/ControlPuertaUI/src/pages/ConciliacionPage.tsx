@@ -149,27 +149,114 @@ export const ConciliacionPage: React.FC = () => {
         const wb = XLSX.read(bstr, { type: 'binary' });
         const wsName = wb.SheetNames[0];
         const ws = wb.Sheets[wsName];
-        const rawJson: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        
+        // Leer hoja como matriz de filas [fila][columna]
+        const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
 
-        if (!rawJson.length) {
-          alert('El archivo Excel está vacío o no contiene filas con datos.');
+        if (!rows.length) {
+          alert('El archivo Excel está vacío o no contiene filas.');
           return;
         }
 
-        // Mapeo flexible de columnas para soportar cualquier variante
-        const items = rawJson.map(row => {
-          const keys = Object.keys(row);
+        // 1. Detección dinámica de la fila de encabezados
+        let headerRowIdx = -1;
+        let colFecha = -1;
+        let colConduce = -1;
+        let colProducto = -1;
+        let colMina = -1;
+        let colPlanta = -1;
+        let colCantidad = -1;
+        let colPrecio = -1;
+        let colTotal = -1;
 
-          const getVal = (patterns: string[]) => {
-            const foundKey = keys.find(k => patterns.some(p => k.trim().toLowerCase().includes(p)));
-            return foundKey ? row[foundKey] : '';
-          };
+        for (let r = 0; r < Math.min(rows.length, 20); r++) {
+          const row = rows[r];
+          if (!Array.isArray(row)) continue;
 
-          const fechaRaw = getVal(['fecha']);
+          const strRow = row.map(cell => String(cell || '').trim().toLowerCase());
+          
+          const cIdx = strRow.findIndex(c => 
+            c === 'no. conduce' || c === 'conduce' || c === 'no conduce' || c === 'ticket' || 
+            (c.startsWith('no.') && !c.includes('orden')) || c === 'numero conduce'
+          );
+          const fIdx = strRow.findIndex(c => c.includes('fecha'));
+          const pIdx = strRow.findIndex(c => c.includes('producto') || c.includes('material') || c.includes('descripcion'));
+          const cantIdx = strRow.findIndex(c => c.includes('cantidad') || c.includes('cant') || c.includes('m3') || c.includes('ton'));
+
+          // La fila de encabezados debe contener al menos Conduce y alguna otra columna representativa
+          if (cIdx !== -1 && (fIdx !== -1 || pIdx !== -1 || cantIdx !== -1)) {
+            headerRowIdx = r;
+            colConduce = cIdx;
+            colFecha = fIdx;
+            colProducto = pIdx;
+            colMina = strRow.findIndex(c => c.includes('mina') || c.includes('origen') || c.includes('cantera'));
+            colPlanta = strRow.findIndex(c => c.includes('planta') || c.includes('destino') || c.includes('almacen'));
+            colCantidad = cantIdx;
+            colPrecio = strRow.findIndex(c => c.includes('precio') || c.includes('costo'));
+            colTotal = strRow.findIndex(c => c.includes('total') || c.includes('monto') || c.includes('importe'));
+            break;
+          }
+        }
+
+        // Si no se detectó fila con encabezados específicos, usar mapeo por posición estándar (0..7)
+        if (headerRowIdx === -1) {
+          headerRowIdx = 0;
+          colFecha = 0;
+          colConduce = 1;
+          colProducto = 2;
+          colMina = 3;
+          colPlanta = 4;
+          colCantidad = 5;
+          colPrecio = 6;
+          colTotal = 7;
+        }
+
+        // 2. Extraer filas de datos posteriores al encabezado
+        const items: any[] = [];
+        const parseNum = (val: any): number => {
+          if (val === null || val === undefined || val === '') return 0;
+          if (typeof val === 'number') return isNaN(val) ? 0 : val;
+          const clean = String(val).replace(/[^0-9.-]/g, '');
+          const res = parseFloat(clean);
+          return isNaN(res) ? 0 : res;
+        };
+
+        for (let i = headerRowIdx + 1; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || !Array.isArray(row) || row.length === 0) continue;
+
+          let rawConduce = colConduce >= 0 && row[colConduce] !== undefined ? String(row[colConduce]).trim() : '';
+
+          // Si viene con formato flotante como "672867.0", dejarlo entero
+          if (/^\d+\.0+$/.test(rawConduce)) {
+            rawConduce = rawConduce.split('.')[0];
+          }
+
+          if (!rawConduce) continue;
+
+          const lowerC = rawConduce.toLowerCase();
+          // Descartar encabezados repetidos, títulos, o notas explicativas
+          if (
+            lowerC === 'conduce' ||
+            lowerC === 'no. conduce' ||
+            lowerC === 'no conduce' ||
+            lowerC === 'no.' ||
+            lowerC === 'fecha' ||
+            lowerC.includes('complete las columnas') ||
+            lowerC.includes('plantilla oficial') ||
+            lowerC.includes('instruccion') ||
+            lowerC.includes('total') ||
+            (rawConduce.length > 35 && !/\d/.test(rawConduce))
+          ) {
+            continue;
+          }
+
+          // Fecha
+          const fechaRaw = colFecha >= 0 ? row[colFecha] : '';
           let fechaParsed: string | null = null;
           if (fechaRaw) {
             if (typeof fechaRaw === 'number') {
-              // Serial de fecha de Excel
+              // Serial Excel
               const d = new Date((fechaRaw - (25567 + 2)) * 86400 * 1000);
               fechaParsed = !isNaN(d.getTime()) ? d.toISOString() : null;
             } else {
@@ -178,28 +265,27 @@ export const ConciliacionPage: React.FC = () => {
             }
           }
 
-          const conduceRaw = String(getVal(['conduce', 'ticket', 'numero', 'no'])).trim();
-          const productoRaw = String(getVal(['producto', 'material', 'descripcion'])).trim();
-          const minaRaw = String(getVal(['mina', 'origen', 'cantera'])).trim();
-          const plantaRaw = String(getVal(['planta', 'destino', 'almacen'])).trim();
-          const cantRaw = parseFloat(String(getVal(['cantidad', 'cant', 'm3', 'ton'])).replace(/,/g, '')) || 0;
-          const precioRaw = parseFloat(String(getVal(['precio', 'costo'])).replace(/,/g, '')) || 0;
-          const totalRaw = parseFloat(String(getVal(['total', 'monto', 'importe'])).replace(/,/g, '')) || 0;
+          const productoRaw = colProducto >= 0 && row[colProducto] !== undefined ? String(row[colProducto]).trim() : '';
+          const minaRaw     = colMina >= 0 && row[colMina] !== undefined ? String(row[colMina]).trim() : '';
+          const plantaRaw   = colPlanta >= 0 && row[colPlanta] !== undefined ? String(row[colPlanta]).trim() : '';
+          const cantRaw     = colCantidad >= 0 ? parseNum(row[colCantidad]) : 0;
+          const precioRaw   = colPrecio >= 0 ? parseNum(row[colPrecio]) : 0;
+          const totalRaw    = colTotal >= 0 ? parseNum(row[colTotal]) : 0;
 
-          return {
+          items.push({
             fecha: fechaParsed,
-            noConduce: conduceRaw,
+            noConduce: rawConduce,
             producto: productoRaw,
             mina: minaRaw,
             planta: plantaRaw,
             cantidad: cantRaw,
             precio: precioRaw,
             total: totalRaw > 0 ? totalRaw : Math.round(cantRaw * precioRaw * 100) / 100
-          };
-        }).filter(item => item.noConduce !== '');
+          });
+        }
 
         if (!items.length) {
-          alert('No se encontraron conduces válidos. Verifique que la columna "No. conduce" contenga datos.');
+          alert('No se encontraron filas con conduces válidos en el archivo Excel. Asegúrese de que la columna "No. conduce" contenga los números de conduce.');
           return;
         }
 
