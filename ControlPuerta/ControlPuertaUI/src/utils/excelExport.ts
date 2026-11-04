@@ -89,24 +89,24 @@ export const exportarExcelTransporte = (items: any[], fechaDesde: string, fechaH
 export const descargarPlantillaSuplidorExcel = () => {
   const data = [
     {
-      'Fecha': '2026-11-03',
-      'No. conduce': '672764',
-      'Producto': 'GRAVA DE 3/4',
-      'Mina': 'Mina Haina',
+      'Fecha': '2026-11-04',
+      'No. conduce': '672867',
+      'Producto': 'GRAVA DE 3/4"',
+      'Mina': 'Cantera San Cristóbal',
       'Planta': 'Metaldom',
-      'Cantidad': 27.43,
+      'Cantidad': 26.46,
       'Precio': 850.00,
-      'Total': 23315.50
+      'Total': 22491.00
     },
     {
-      'Fecha': '2026-11-03',
-      'No. conduce': '362953',
+      'Fecha': '2026-11-04',
+      'No. conduce': '363021',
       'Producto': 'ARENA GRIS',
-      'Mina': 'Mina San Cristobal',
+      'Mina': 'Cantera Bisonó',
       'Planta': 'Metaldom',
-      'Cantidad': 25.70,
+      'Cantidad': 25.21,
       'Precio': 700.00,
-      'Total': 17990.00
+      'Total': 17647.00
     }
   ];
 
@@ -115,16 +115,47 @@ export const descargarPlantillaSuplidorExcel = () => {
   ws['!cols'] = [
     { wch: 15 }, // Fecha
     { wch: 18 }, // No. conduce
-    { wch: 25 }, // Producto
-    { wch: 22 }, // Mina
+    { wch: 26 }, // Producto
+    { wch: 24 }, // Mina
     { wch: 20 }, // Planta
-    { wch: 15 }, // Cantidad
-    { wch: 15 }, // Precio
-    { wch: 16 }  // Total
+    { wch: 16 }, // Cantidad
+    { wch: 16 }, // Precio
+    { wch: 18 }  // Total
   ];
+
+  const catData = [
+    { 'PRODUCTOS AUTORIZADOS': 'ARENA GRIS', 'PLANTAS DESTINO': 'Metaldom', 'MINAS / CANTERAS': 'Cantera San Cristóbal' },
+    { 'PRODUCTOS AUTORIZADOS': 'ARENA LAVADA', 'PLANTAS DESTINO': 'Haina', 'MINAS / CANTERAS': 'Cantera Bisonó' },
+    { 'PRODUCTOS AUTORIZADOS': 'GRAVA DE 3/4"', 'PLANTAS DESTINO': 'Circunvalacion', 'MINAS / CANTERAS': 'Cantera Haina' },
+    { 'PRODUCTOS AUTORIZADOS': 'GRAVILLA DE 3/8"', 'PLANTAS DESTINO': 'Esperanza', 'MINAS / CANTERAS': 'Cantera Baní' },
+    { 'PRODUCTOS AUTORIZADOS': 'CEMENTO GRIS PORTLAND', 'PLANTAS DESTINO': 'Barahona', 'MINAS / CANTERAS': 'Cantera Nizao' },
+    { 'PRODUCTOS AUTORIZADOS': 'CASCAJO', 'PLANTAS DESTINO': 'Punta Cana', 'MINAS / CANTERAS': 'Cantera Palenque' },
+    { 'PRODUCTOS AUTORIZADOS': 'CORALINA', 'PLANTAS DESTINO': 'Agua Clara', 'MINAS / CANTERAS': 'Otra' },
+    { 'PRODUCTOS AUTORIZADOS': 'BASE', 'PLANTAS DESTINO': '', 'MINAS / CANTERAS': '' },
+    { 'PRODUCTOS AUTORIZADOS': 'SUB-BASE', 'PLANTAS DESTINO': '', 'MINAS / CANTERAS': '' },
+    { 'PRODUCTOS AUTORIZADOS': 'CALICHE', 'PLANTAS DESTINO': '', 'MINAS / CANTERAS': '' }
+  ];
+  const wsCat = XLSX.utils.json_to_sheet(catData);
+  wsCat['!cols'] = [{ wch: 28 }, { wch: 22 }, { wch: 26 }];
+
+  const insData = [
+    { 'REGLA': '1. Fecha', 'INSTRUCCION': 'Coloque la fecha en formato AAAA-MM-DD (ej: 2026-11-04).' },
+    { 'REGLA': '2. No. conduce', 'INSTRUCCION': 'Digite el número exacto del conduce físico sin caracteres adicionales.' },
+    { 'REGLA': '3. Producto', 'INSTRUCCION': 'Escriba o elija el producto autorizado según la pestaña CATALOGOS.' },
+    { 'REGLA': '4. Mina', 'INSTRUCCION': 'Indique la cantera o mina de procedencia del material.' },
+    { 'REGLA': '5. Planta', 'INSTRUCCION': 'Indique la planta donde se entregó la mercancía (ej: Metaldom, Haina).' },
+    { 'REGLA': '6. Cantidad', 'INSTRUCCION': 'Digite la cantidad en metros cúbicos o toneladas recibidas.' },
+    { 'REGLA': '7. Precio', 'INSTRUCCION': 'Precio unitario pactado sin símbolos de moneda.' },
+    { 'REGLA': '8. Total', 'INSTRUCCION': 'Se calcula automáticamente (Cantidad x Precio).' },
+    { 'REGLA': '9. Auditoría', 'INSTRUCCION': 'Los conduces serán validados con el sistema de control de entrada para calificar pago.' }
+  ];
+  const wsIns = XLSX.utils.json_to_sheet(insData);
+  wsIns['!cols'] = [{ wch: 18 }, { wch: 80 }];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'PLANTILLA');
+  XLSX.utils.book_append_sheet(wb, wsCat, 'CATALOGOS');
+  XLSX.utils.book_append_sheet(wb, wsIns, 'INSTRUCCIONES');
 
   XLSX.writeFile(wb, 'PLANTILLA_CONDUCES_SUPLIDOR.xlsx');
 };
