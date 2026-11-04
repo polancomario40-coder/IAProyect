@@ -517,7 +517,4 @@ public class OcrService : IOcrService
             new() { Fecha = DateTime.Today.AddDays(-1), NoConduce = "10496", Producto = "ARENA LAVADA", Mina = "CANTERA NORTE", Planta = "PLANTA SANTO DOMINGO", Cantidad = 19.5m, Precio = 450m, Total = 8775m }
         };
     }
-            Mensaje: null
-        );
-    }
 }
