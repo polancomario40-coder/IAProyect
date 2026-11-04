@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   buscarSuplidores, 
   extraerConducesDocumento,
@@ -15,6 +17,16 @@ import {
 } from '../utils/excelExport';
 
 export const ConciliacionPage: React.FC = () => {
+  const { roles, user } = useAuth();
+
+  // Validación de Permisos: Exclusivo para Contabilidad o Administrador
+  const tienePermiso = roles.length === 0 || roles.some(r => 
+    r.includes('contabilidad') || 
+    r.includes('admin') || 
+    r.includes('administrator') || 
+    r.includes('administracion')
+  );
+
   // Pestaña principal: 'NUEVA' o 'HISTORIAL'
   const [vista, setVista] = useState<'NUEVA' | 'HISTORIAL'>('NUEVA');
 
@@ -329,6 +341,41 @@ export const ConciliacionPage: React.FC = () => {
 
     return true;
   });
+
+  if (!tienePermiso) {
+    return (
+      <div style={{ padding: '60px 20px', maxWidth: '600px', margin: '40px auto', textAlign: 'center', background: '#1F2937', borderRadius: 12, border: '1px solid #374151', color: '#F3F4F6' }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+        <h2 style={{ fontSize: 22, fontWeight: 'bold', margin: '0 0 10px 0', color: '#EF4444' }}>
+          Acceso Restringido
+        </h2>
+        <p style={{ color: '#9CA3AF', fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
+          Este módulo de <strong>Conciliación de Suplidores y Flujo de Pagos (CXP)</strong> es exclusivo para los usuarios pertenecientes a los grupos de <strong>Contabilidad</strong> o <strong>Administrador</strong>.
+        </p>
+        <div style={{ background: '#111827', padding: '12px 16px', borderRadius: 8, border: '1px solid #374151', display: 'inline-block', textAlign: 'left', marginBottom: 24, fontSize: 12 }}>
+          <div><span style={{ color: '#9CA3AF' }}>Usuario actual:</span> <strong style={{ color: '#F3F4F6' }}>{user?.nombre || user?.username || 'No identificado'}</strong></div>
+          <div style={{ marginTop: 4 }}><span style={{ color: '#9CA3AF' }}>Grupos asignados:</span> <strong style={{ color: '#F87171' }}>{roles.length > 0 ? roles.join(', ') : 'Ninguno'}</strong></div>
+        </div>
+        <div>
+          <Link
+            to="/"
+            style={{
+              display: 'inline-block',
+              background: '#2563EB',
+              color: 'white',
+              padding: '10px 20px',
+              borderRadius: 6,
+              textDecoration: 'none',
+              fontWeight: 'bold',
+              fontSize: 13
+            }}
+          >
+            ← Volver al Inicio
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: '24px', color: '#F3F4F6', maxWidth: '1400px', margin: '0 auto' }}>

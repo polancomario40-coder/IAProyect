@@ -31,8 +31,16 @@ const NavBar = () => {
       .catch(console.error);
   }, []);
 
-  // Asumiremos que consulta y cierre son para administradores o almacén
-  const hasAdmin = roles.includes('controlalmacen');
+  // Permisos: Consulta y Cierre para administradores o almacén
+  const hasAdmin = roles.includes('controlalmacen') || roles.some(r => r.includes('admin'));
+
+  // Conciliación: Exclusivo para Contabilidad o Administrador
+  const hasConciliacion = roles.some(r => 
+    r.includes('contabilidad') || 
+    r.includes('admin') || 
+    r.includes('administrator') || 
+    r.includes('administracion')
+  );
 
   return (
     <nav style={{ background: '#111827', padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #374151' }}>
@@ -41,7 +49,7 @@ const NavBar = () => {
         <Link to="/" style={linkStyle}>Inicio</Link>
         {hasAdmin && <Link to="/consulta" style={linkStyle}>Consulta</Link>}
         {hasAdmin && <Link to="/cierre" style={linkStyle}>Cierre Diario</Link>}
-        <Link to="/conciliacion" style={linkStyle}>Conciliación Suplidores</Link>
+        {hasConciliacion && <Link to="/conciliacion" style={linkStyle}>Conciliación Suplidores</Link>}
       </div>
       <div style={{ color: 'white', display: 'flex', alignItems: 'center', gap: 15 }}>
         <span>👤 {user?.nombre}</span>

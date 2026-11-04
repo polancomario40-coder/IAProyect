@@ -16,12 +16,18 @@ public class ConciliacionController : ControllerBase
 {
     private readonly IPuertaDbService _db;
     private readonly IOcrService _ocr;
+    private readonly IConnectionFactory _cf;
     private readonly ILogger<ConciliacionController> _logger;
 
-    public ConciliacionController(IPuertaDbService db, IOcrService ocr, ILogger<ConciliacionController> logger)
+    public ConciliacionController(
+        IPuertaDbService db, 
+        IOcrService ocr, 
+        IConnectionFactory cf,
+        ILogger<ConciliacionController> logger)
     {
         _db     = db;
         _ocr    = ocr;
+        _cf     = cf;
         _logger = logger;
     }
 
@@ -31,6 +37,36 @@ public class ConciliacionController : ControllerBase
         ?? User.Identity?.Name
         ?? "SISTEMA";
 
+    private async Task<bool> EsUsuarioAutorizadoAsync()
+    {
+        var usuario = ObtenerUsuario();
+        if (string.IsNullOrWhiteSpace(usuario) || usuario.Equals("SISTEMA", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        try
+        {
+            await using var conn = _cf.CreateErpConnection();
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT COUNT(1)
+                FROM SegUserinGrp
+                WHERE idSegUser = @usuario
+                  AND (
+                    LOWER(idSegGrupo) LIKE '%conta%' 
+                    OR LOWER(idSegGrupo) LIKE '%admin%'
+                  );";
+            cmd.Parameters.AddWithValue("@usuario", usuario.Trim());
+            var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            return count > 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Conciliacion] Error verificando roles de usuario {Usuario}. Permitiendo acceso por contingencia.", usuario);
+            return true;
+        }
+    }
+
     // ──────────────────────────────────────────────────────────────────────────
     // POST /api/conciliacion/extraer-documento
     // Extrae conduces desde un PDF escaneado o Imagen mediante Azure AI OCR
@@ -39,6 +75,9 @@ public class ConciliacionController : ControllerBase
     [RequestSizeLimit(30_000_000)]
     public async Task<ActionResult<ApiResponse<List<ItemConciliacionInputDto>>>> ExtraerDocumento()
     {
+        if (!await EsUsuarioAutorizadoAsync())
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<List<ItemConciliacionInputDto>>.Fail("Acceso restringido: Este módulo es exclusivo para usuarios de los grupos Contabilidad o Administrador."));
+
         byte[] fileBytes;
         string mimeType = "application/pdf";
         string fileName = "documento";
@@ -96,6 +135,9 @@ public class ConciliacionController : ControllerBase
     [HttpPost("comparar")]
     public async Task<ActionResult<ApiResponse<ResultadoConciliacionDto>>> Comparar([FromBody] CompararConciliacionRequest req)
     {
+        if (!await EsUsuarioAutorizadoAsync())
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<ResultadoConciliacionDto>.Fail("Acceso restringido: Este módulo es exclusivo para usuarios de los grupos Contabilidad o Administrador."));
+
         if (req == null || req.Items == null || req.Items.Count == 0)
             return BadRequest(ApiResponse<ResultadoConciliacionDto>.Fail("No se enviaron datos de conduces para conciliar."));
 
@@ -123,6 +165,9 @@ public class ConciliacionController : ControllerBase
     [HttpPost("guardar")]
     public async Task<ActionResult<ApiResponse<object>>> Guardar([FromBody] GuardarConciliacionRequest req)
     {
+        if (!await EsUsuarioAutorizadoAsync())
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<object>.Fail("Acceso restringido: Este módulo es exclusivo para usuarios de los grupos Contabilidad o Administrador."));
+
         if (req == null || req.Items == null || req.Items.Count == 0)
             return BadRequest(ApiResponse<object>.Fail("No hay items para guardar en la conciliación."));
 
@@ -148,6 +193,9 @@ public class ConciliacionController : ControllerBase
         [FromQuery] string? idSuplidor, 
         [FromQuery] string? status)
     {
+        if (!await EsUsuarioAutorizadoAsync())
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<List<LoteConciliacionDto>>.Fail("Acceso restringido: Este módulo es exclusivo para usuarios de los grupos Contabilidad o Administrador."));
+
         try
         {
             var lista = await _db.ListarLotesConciliacionAsync(idSuplidor, status);
@@ -167,6 +215,9 @@ public class ConciliacionController : ControllerBase
     [HttpGet("lotes/{id}")]
     public async Task<ActionResult<ApiResponse<ResultadoConciliacionDto>>> ObtenerLote(Guid id)
     {
+        if (!await EsUsuarioAutorizadoAsync())
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<ResultadoConciliacionDto>.Fail("Acceso restringido: Este módulo es exclusivo para usuarios de los grupos Contabilidad o Administrador."));
+
         try
         {
             var lote = await _db.ObtenerLoteConciliacionAsync(id);
@@ -191,6 +242,9 @@ public class ConciliacionController : ControllerBase
         Guid id, 
         [FromBody] ActualizarEstadoPagoRequest req)
     {
+        if (!await EsUsuarioAutorizadoAsync())
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<bool>.Fail("Acceso restringido: Este módulo es exclusivo para usuarios de los grupos Contabilidad o Administrador."));
+
         if (string.IsNullOrWhiteSpace(req.NuevoEstadoPago))
             return BadRequest(ApiResponse<bool>.Fail("Debe especificar el nuevo estado de pago (APROBADO, PAGADO, etc.)."));
 
