@@ -40,6 +40,7 @@ public interface IPuertaDbService
     Task<List<LoteConciliacionDto>> ListarLotesConciliacionAsync(string? idSuplidor, string? status);
     Task<ResultadoConciliacionDto?> ObtenerLoteConciliacionAsync(Guid idConciliacion);
     Task<bool> ActualizarEstadoPagoLoteAsync(Guid idConciliacion, ActualizarEstadoPagoRequest req, string usuario);
+    Task<(bool Exito, string Mensaje)> EliminarLoteConciliacionAsync(Guid idConciliacion, string usuario);
     Task<(bool Exito, string Mensaje)> EditarEntradaConAutorizacionAsync(Guid idEntradaCamion, EditarEntradaRequest req, string usuario);
 }
 
@@ -1181,11 +1182,134 @@ public class PuertaDbService : IPuertaDbService
             });
         }
 
+        // 4. Buscar conduces en sistema para este suplidor que NO fueron incluidos en el archivo
+        DateTime fechaDesde;
+        DateTime fechaHasta;
+
+        var fechasValidas = req.Items
+            .Where(i => i.Fecha.HasValue)
+            .Select(i => i.Fecha!.Value)
+            .ToList();
+
+        if (fechasValidas.Any())
+        {
+            var minF = fechasValidas.Min();
+            var maxF = fechasValidas.Max();
+            fechaDesde = minF.Date.AddDays(-1);
+            fechaHasta = maxF.Date.AddDays(1);
+        }
+        else
+        {
+            fechaDesde = DateTime.Today.AddDays(-15);
+            fechaHasta = DateTime.Today.AddDays(1);
+        }
+
+        try
+        {
+            await using var cmdOmitidos = conn.CreateCommand();
+            cmdOmitidos.CommandText = @"
+                SELECT 
+                    e.idEntradaCamion, e.Conduce, e.ConduceTransporte, e.FechaEntrada,
+                    e.idProducto, e.Producto, e.CantidadRecibida, e.CantidadAlmacen, 
+                    e.idUnidad, e.idUnidadAlmacen,
+                    e.idAlmacen, ISNULL(a.Almacen, e.idAlmacen) AS Almacen,
+                    e.ProMov, e.Status, e.idOrden, e.OrdenNumero,
+                    oc.Recepcion AS NumRecepcionOC,
+                    od.Costo AS CostoOC
+                FROM prtEntradaCamion e
+                LEFT JOIN Almacen a ON a.idAlmacen = e.idAlmacen
+                LEFT JOIN ocRecepcion oc ON e.ProMov = oc.Referencia AND oc.TipoReferencia = 'PRT'
+                LEFT JOIN ocDetalleOrden od ON e.idOrden = od.idOrden 
+                     AND (e.idProducto = od.idProducto OR od.idProducto = (SELECT TOP 1 p.idProducto FROM Producto p WHERE p.Producto = e.Producto))
+                WHERE (@idSuplidor IS NOT NULL AND e.idSuplidor = @idSuplidor 
+                       OR (@idSuplidor IS NULL AND @supNombre IS NOT NULL AND e.Suplidor LIKE '%' + @supNombre + '%'))
+                  AND e.Status NOT IN ('CANCELADO', 'BLOQUEADO')
+                  AND CAST(e.FechaEntrada AS DATE) >= @fDesde
+                  AND CAST(e.FechaEntrada AS DATE) <= @fHasta
+                ORDER BY e.FechaEntrada DESC";
+
+            cmdOmitidos.Parameters.AddWithValue("@idSuplidor", (object?)req.IdSuplidor ?? DBNull.Value);
+            cmdOmitidos.Parameters.AddWithValue("@supNombre", (object?)req.Suplidor ?? DBNull.Value);
+            cmdOmitidos.Parameters.AddWithValue("@fDesde", fechaDesde);
+            cmdOmitidos.Parameters.AddWithValue("@fHasta", fechaHasta);
+
+            await using var rOmitidos = await cmdOmitidos.ExecuteReaderAsync();
+            var listaOmitidos = new List<ResultadoItemConciliacionDto>();
+
+            while (await rOmitidos.ReadAsync())
+            {
+                var cond = rOmitidos["Conduce"]?.ToString()?.Trim() ?? "";
+                var condTransp = rOmitidos["ConduceTransporte"]?.ToString()?.Trim() ?? "";
+
+                // Si ya estaba en el archivo enviado por el suplidor, ignorar
+                if ((!string.IsNullOrEmpty(cond) && setConducesEnArchivo.Contains(cond)) ||
+                    (!string.IsNullOrEmpty(condTransp) && setConducesEnArchivo.Contains(condTransp)))
+                {
+                    continue;
+                }
+
+                var cantRec = rOmitidos.IsDBNull(rOmitidos.GetOrdinal("CantidadRecibida")) ? (decimal?)null : rOmitidos.GetDecimal(rOmitidos.GetOrdinal("CantidadRecibida"));
+                var cantAlm = rOmitidos.IsDBNull(rOmitidos.GetOrdinal("CantidadAlmacen")) ? (decimal?)null : rOmitidos.GetDecimal(rOmitidos.GetOrdinal("CantidadAlmacen"));
+                var costoOC = rOmitidos.IsDBNull(rOmitidos.GetOrdinal("CostoOC")) ? (decimal?)null : rOmitidos.GetDecimal(rOmitidos.GetOrdinal("CostoOC"));
+                var cantSis = cantAlm ?? cantRec ?? 0;
+                var precioSis = costoOC ?? 0;
+
+                listaOmitidos.Add(new ResultadoItemConciliacionDto
+                {
+                    FechaConduce       = rOmitidos.GetDateTime(rOmitidos.GetOrdinal("FechaEntrada")),
+                    NoConduce          = !string.IsNullOrEmpty(cond) ? cond : condTransp,
+                    Producto           = rOmitidos["Producto"] as string,
+                    Mina               = "-",
+                    Planta             = rOmitidos["Almacen"] as string ?? rOmitidos["idAlmacen"] as string,
+                    CantidadDeclarada  = 0, // No vino en archivo del suplidor
+                    PrecioUnitario     = precioSis,
+                    TotalReclamado     = 0,
+                    IdEntradaCamion    = rOmitidos.GetGuid(rOmitidos.GetOrdinal("idEntradaCamion")),
+                    ProMov             = rOmitidos["ProMov"] as string,
+                    NumRecepcionOC     = rOmitidos["NumRecepcionOC"] as string,
+                    OrdenNumero        = rOmitidos.IsDBNull(rOmitidos.GetOrdinal("OrdenNumero")) ? null : (int?)rOmitidos.GetInt32(rOmitidos.GetOrdinal("OrdenNumero")),
+                    IdOrden            = rOmitidos.IsDBNull(rOmitidos.GetOrdinal("idOrden")) ? null : (Guid?)rOmitidos.GetGuid(rOmitidos.GetOrdinal("idOrden")),
+                    ProductoEncontrado = rOmitidos["Producto"] as string,
+                    PlantaEncontrada   = rOmitidos["Almacen"] as string ?? rOmitidos["idAlmacen"] as string,
+                    CantidadSistema    = cantSis,
+                    UnidadSistema      = rOmitidos["idUnidadAlmacen"] as string ?? rOmitidos["idUnidad"] as string ?? "Mts3",
+                    PrecioSistema      = precioSis,
+                    TotalAprobado      = Math.Round(cantSis * precioSis, 2),
+                    EstadoCuadre       = "OMITIDO_SUPLIDOR",
+                    MotivoRechazo      = "Conduce recibido en planta pero NO fue incluido por el suplidor en su archivo.",
+                    EstadoPago         = "PENDIENTE_INCLUSION"
+                });
+            }
+            rOmitidos.Close();
+
+            // Filtrar omitidos que ya estén en otro lote aprobado o pagado
+            foreach (var om in listaOmitidos)
+            {
+                await using var cmdVerifOm = conn.CreateCommand();
+                cmdVerifOm.CommandText = @"
+                    SELECT COUNT(1) 
+                    FROM prtConciliacionDetalle 
+                    WHERE NoConduce = @c AND EstadoPago IN ('APROBADO', 'PAGADO')";
+                cmdVerifOm.Parameters.AddWithValue("@c", om.NoConduce);
+                var yaPagado = Convert.ToInt32(await cmdVerifOm.ExecuteScalarAsync()) > 0;
+                if (!yaPagado)
+                {
+                    itemsResult.Add(om);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Conciliacion] Error buscando conduces omitidos en sistema.");
+        }
+
         var totalCalifican = itemsResult.Count(i => i.EstadoCuadre == "CALIFICA_PAGO");
         var totalRechazados = itemsResult.Count(i => i.EstadoCuadre == "NO_CALIFICA");
         var totalPendientes = itemsResult.Count(i => i.EstadoCuadre == "PENDIENTE_RECEPCION");
+        var totalOmitidos   = itemsResult.Count(i => i.EstadoCuadre == "OMITIDO_SUPLIDOR");
         var montoReclamado  = itemsResult.Sum(i => i.TotalReclamado);
         var montoCalifica   = itemsResult.Where(i => i.EstadoCuadre == "CALIFICA_PAGO").Sum(i => i.TotalAprobado ?? i.TotalReclamado);
+        var montoOmitidos   = itemsResult.Where(i => i.EstadoCuadre == "OMITIDO_SUPLIDOR").Sum(i => i.TotalAprobado ?? 0);
 
         return new ResultadoConciliacionDto
         {
@@ -1197,8 +1321,10 @@ public class PuertaDbService : IPuertaDbService
             TotalCalifican      = totalCalifican,
             TotalRechazados     = totalRechazados,
             TotalPendientes     = totalPendientes,
+            TotalOmitidos       = totalOmitidos,
             MontoTotalReclamado = montoReclamado,
             MontoTotalCalifica  = montoCalifica,
+            MontoTotalOmitidos  = montoOmitidos,
             Items               = itemsResult
         };
     }
@@ -1225,6 +1351,7 @@ public class PuertaDbService : IPuertaDbService
             var totalCalifican  = req.Items.Count(i => i.EstadoCuadre == "CALIFICA_PAGO");
             var totalRechazados = req.Items.Count(i => i.EstadoCuadre == "NO_CALIFICA");
             var totalPendientes = req.Items.Count(i => i.EstadoCuadre == "PENDIENTE_RECEPCION");
+            var totalOmitidos   = req.Items.Count(i => i.EstadoCuadre == "OMITIDO_SUPLIDOR");
             var montoReclamado  = req.Items.Sum(i => i.TotalReclamado);
             var montoCalifica   = req.Items.Where(i => i.EstadoCuadre == "CALIFICA_PAGO").Sum(i => i.TotalAprobado ?? i.TotalReclamado);
 
@@ -1235,12 +1362,12 @@ public class PuertaDbService : IPuertaDbService
                 INSERT INTO prtConciliacionLote (
                     idConciliacion, NumeroConciliacion, idSuplidor, Suplidor,
                     FechaCarga, Usuario, NombreArchivo, TotalConduces, TotalCalifican,
-                    TotalRechazados, TotalPendientes, MontoTotalReclamado, MontoTotalCalifica,
+                    TotalRechazados, TotalPendientes, TotalOmitidos, MontoTotalReclamado, MontoTotalCalifica,
                     Status, Notas
                 )
                 VALUES (
                     @id, @num, @idSup, @sup, GETDATE(), @usr, @archivo, @tot, @cal,
-                    @rech, @pend, @montoRec, @montoCal, 'REVISADO', @notas
+                    @rech, @pend, @omit, @montoRec, @montoCal, 'REVISADO', @notas
                 )";
             cmdLote.Parameters.AddWithValue("@id", idConciliacion);
             cmdLote.Parameters.AddWithValue("@num", numConciliacion);
@@ -1252,6 +1379,7 @@ public class PuertaDbService : IPuertaDbService
             cmdLote.Parameters.AddWithValue("@cal", totalCalifican);
             cmdLote.Parameters.AddWithValue("@rech", totalRechazados);
             cmdLote.Parameters.AddWithValue("@pend", totalPendientes);
+            cmdLote.Parameters.AddWithValue("@omit", totalOmitidos);
             cmdLote.Parameters.AddWithValue("@montoRec", montoReclamado);
             cmdLote.Parameters.AddWithValue("@montoCal", montoCalifica);
             cmdLote.Parameters.AddWithValue("@notas", (object?)req.Notas ?? DBNull.Value);
@@ -1342,6 +1470,7 @@ public class PuertaDbService : IPuertaDbService
                 TotalCalifican      = r.GetInt32(r.GetOrdinal("TotalCalifican")),
                 TotalRechazados     = r.GetInt32(r.GetOrdinal("TotalRechazados")),
                 TotalPendientes     = r.GetInt32(r.GetOrdinal("TotalPendientes")),
+                TotalOmitidos       = HasColumn(r, "TotalOmitidos") && !r.IsDBNull(r.GetOrdinal("TotalOmitidos")) ? r.GetInt32(r.GetOrdinal("TotalOmitidos")) : 0,
                 MontoTotalReclamado = r.GetDecimal(r.GetOrdinal("MontoTotalReclamado")),
                 MontoTotalCalifica  = r.GetDecimal(r.GetOrdinal("MontoTotalCalifica")),
                 Status              = r["Status"].ToString()!,
@@ -1378,6 +1507,7 @@ public class PuertaDbService : IPuertaDbService
             TotalCalifican      = rLote.GetInt32(rLote.GetOrdinal("TotalCalifican")),
             TotalRechazados     = rLote.GetInt32(rLote.GetOrdinal("TotalRechazados")),
             TotalPendientes     = rLote.GetInt32(rLote.GetOrdinal("TotalPendientes")),
+            TotalOmitidos       = HasColumn(rLote, "TotalOmitidos") && !rLote.IsDBNull(rLote.GetOrdinal("TotalOmitidos")) ? rLote.GetInt32(rLote.GetOrdinal("TotalOmitidos")) : 0,
             MontoTotalReclamado = rLote.GetDecimal(rLote.GetOrdinal("MontoTotalReclamado")),
             MontoTotalCalifica  = rLote.GetDecimal(rLote.GetOrdinal("MontoTotalCalifica")),
             Status              = rLote["Status"].ToString()!,
@@ -1505,6 +1635,62 @@ public class PuertaDbService : IPuertaDbService
         {
             await tran.RollbackAsync();
             throw;
+        }
+    }
+
+    // ── Eliminar Lote de Conciliación ─────────────────────────────────────────
+    public async Task<(bool Exito, string Mensaje)> EliminarLoteConciliacionAsync(Guid idConciliacion, string usuario)
+    {
+        await using var conn = _cf.CreateErpConnection();
+        await conn.OpenAsync();
+        await using var tran = conn.BeginTransaction();
+
+        try
+        {
+            // 1. Verificar si existe y su estado
+            await using var cmdCheck = conn.CreateCommand();
+            cmdCheck.Transaction = tran;
+            cmdCheck.CommandText = "SELECT NumeroConciliacion, Status, Suplidor FROM prtConciliacionLote WHERE idConciliacion = @id";
+            cmdCheck.Parameters.AddWithValue("@id", idConciliacion);
+            await using var reader = await cmdCheck.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+            {
+                return (false, "El lote de conciliación no existe.");
+            }
+            var num = reader["NumeroConciliacion"].ToString();
+            var status = reader["Status"]?.ToString() ?? "";
+            var sup = reader["Suplidor"]?.ToString() ?? "";
+            reader.Close();
+
+            if (status.Equals("PAGADO", StringComparison.OrdinalIgnoreCase))
+            {
+                return (false, $"El lote '{num}' ya fue marcado como PAGADO y no puede ser eliminado por razones de auditoría.");
+            }
+
+            // 2. Eliminar detalle
+            await using var cmdDet = conn.CreateCommand();
+            cmdDet.Transaction = tran;
+            cmdDet.CommandText = "DELETE FROM prtConciliacionDetalle WHERE idConciliacion = @id";
+            cmdDet.Parameters.AddWithValue("@id", idConciliacion);
+            await cmdDet.ExecuteNonQueryAsync();
+
+            // 3. Eliminar lote
+            await using var cmdLote = conn.CreateCommand();
+            cmdLote.Transaction = tran;
+            cmdLote.CommandText = "DELETE FROM prtConciliacionLote WHERE idConciliacion = @id";
+            cmdLote.Parameters.AddWithValue("@id", idConciliacion);
+            await cmdLote.ExecuteNonQueryAsync();
+
+            await tran.CommitAsync();
+
+            _logger.LogInformation("[Conciliacion] Lote {Num} ({Suplidor}) eliminado por {Usuario}", num, sup, usuario);
+            return (true, $"Lote '{num}' eliminado exitosamente.");
+        }
+        catch (Exception ex)
+        {
+            await tran.RollbackAsync();
+            _logger.LogError(ex, "[Conciliacion] Error al eliminar lote {Id}", idConciliacion);
+            return (false, "Error al eliminar lote: " + ex.Message);
         }
     }
 

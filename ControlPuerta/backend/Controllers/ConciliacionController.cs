@@ -260,4 +260,30 @@ public class ConciliacionController : ControllerBase
             return StatusCode(500, ApiResponse<bool>.Fail(ex.Message));
         }
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // DELETE /api/conciliacion/lotes/{id}
+    // Elimina un lote de conciliación (siempre y cuando no esté PAGADO)
+    // ──────────────────────────────────────────────────────────────────────────
+    [HttpDelete("lotes/{id}")]
+    public async Task<ActionResult<ApiResponse<bool>>> EliminarLote(Guid id)
+    {
+        if (!await EsUsuarioAutorizadoAsync())
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<bool>.Fail("Acceso restringido: Este módulo es exclusivo para usuarios de los grupos Contabilidad o Administrador."));
+
+        var usuario = ObtenerUsuario();
+        try
+        {
+            var (exito, mensaje) = await _db.EliminarLoteConciliacionAsync(id, usuario);
+            if (!exito)
+                return BadRequest(ApiResponse<bool>.Fail(mensaje));
+
+            return Ok(ApiResponse<bool>.Ok(true, mensaje));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al eliminar lote {Id}", id);
+            return StatusCode(500, ApiResponse<bool>.Fail(ex.Message));
+        }
+    }
 }

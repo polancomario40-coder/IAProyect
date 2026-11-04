@@ -9,7 +9,8 @@ import {
   guardarConciliacion, 
   listarLotesConciliacion, 
   obtenerLoteConciliacion, 
-  actualizarEstadoPagoLote 
+  actualizarEstadoPagoLote,
+  eliminarLoteConciliacion
 } from '../services/puertaApi';
 import { 
   descargarPlantillaSuplidorExcel, 
@@ -376,6 +377,36 @@ export const ConciliacionPage: React.FC = () => {
     }
   };
 
+  // Eliminar Lote de Conciliación
+  const handleEliminarLote = async (id: string, numero: string, status: string) => {
+    if (status === 'PAGADO') {
+      return alert('No se puede eliminar un lote que ya ha sido marcado como PAGADO.');
+    }
+
+    if (!confirm(`¿Está seguro de que desea eliminar permanentemente el lote '${numero}'?\n\nEsta acción borrará la conciliación y liberará los conduces para que puedan conciliarse nuevamente si fuera necesario.`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await eliminarLoteConciliacion(id);
+      if (res.data?.success) {
+        alert(`Lote '${numero}' eliminado exitosamente.`);
+        if (loteActivoId === id || resultado?.idConciliacion === id) {
+          setResultado(null);
+          setLoteActivoId(null);
+        }
+        cargarHistorial();
+      } else {
+        alert(res.data?.mensaje || 'Error al eliminar el lote.');
+      }
+    } catch (e: any) {
+      alert(e.response?.data?.mensaje || 'Error al comunicarse con el servidor para eliminar el lote.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Actualizar Estado de Pago (Flujo CXP)
   const handleCambiarEstadoPago = async (nuevoEstado: string) => {
     const targetId = loteActivoId || resultado?.idConciliacion;
@@ -414,6 +445,7 @@ export const ConciliacionPage: React.FC = () => {
     if (filtroTab === 'CALIFICAN' && item.estadoCuadre !== 'CALIFICA_PAGO') return false;
     if (filtroTab === 'RECHAZADOS' && item.estadoCuadre !== 'NO_CALIFICA') return false;
     if (filtroTab === 'PENDIENTES' && item.estadoCuadre !== 'PENDIENTE_RECEPCION') return false;
+    if (filtroTab === 'OMITIDOS' && item.estadoCuadre !== 'OMITIDO_SUPLIDOR') return false;
 
     // Filtro Búsqueda
     if (busquedaTabla.trim() !== '') {
@@ -537,13 +569,29 @@ export const ConciliacionPage: React.FC = () => {
                         {l.status}
                       </span>
                     </td>
-                    <td style={{ padding: 10, textAlign: 'center' }}>
-                      <button
-                        onClick={() => handleVerLoteHistorial(l.idConciliacion)}
-                        style={{ ...btnPequeno, background: '#3B82F6' }}
-                      >
-                        Abrir Detalle
-                      </button>
+                    <td style={{ padding: 10, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                        <button
+                          onClick={() => handleVerLoteHistorial(l.idConciliacion)}
+                          style={{ ...btnPequeno, background: '#3B82F6' }}
+                          title="Ver detalle completo de este lote"
+                        >
+                          Abrir Detalle
+                        </button>
+                        <button
+                          onClick={() => handleEliminarLote(l.idConciliacion, l.numeroConciliacion, l.status)}
+                          disabled={l.status === 'PAGADO'}
+                          style={{ 
+                            ...btnPequeno, 
+                            background: l.status === 'PAGADO' ? '#4B5563' : '#DC2626',
+                            cursor: l.status === 'PAGADO' ? 'not-allowed' : 'pointer',
+                            opacity: l.status === 'PAGADO' ? 0.6 : 1
+                          }}
+                          title={l.status === 'PAGADO' ? 'No se puede eliminar un lote ya pagado' : 'Eliminar este lote de prueba o no pagado'}
+                        >
+                          🗑️ Eliminar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -756,6 +804,15 @@ export const ConciliacionPage: React.FC = () => {
                   <div style={{ fontSize: 12, color: '#FEF3C7', marginTop: 2 }}>En puerta pero no recibidos aún</div>
                 </div>
 
+                {/* Omitidos por Suplidor en Sistema */}
+                <div style={{ background: '#1E1B4B', padding: 15, borderRadius: 8, border: '1px solid #4F46E5' }}>
+                  <div style={{ fontSize: 11, color: '#C7D2FE', textTransform: 'uppercase', fontWeight: 'bold' }}>⚠️ Omitidos por Suplidor</div>
+                  <div style={{ fontSize: 24, fontWeight: 'bold', marginTop: 4, color: '#818CF8' }}>{resultado.totalOmitidos || 0}</div>
+                  <div style={{ fontSize: 12, color: '#E0E7FF', marginTop: 2 }}>
+                    En planta pero el suplidor no los facturó
+                  </div>
+                </div>
+
               </div>
 
               {/* BARRA DE HERRAMIENTAS Y ACCIONES DEL LOTE */}
@@ -785,6 +842,12 @@ export const ConciliacionPage: React.FC = () => {
                     style={tabStyle(filtroTab === 'PENDIENTES', '#F59E0B')}
                   >
                     ⏳ Pendientes ({resultado.totalPendientes})
+                  </button>
+                  <button
+                    onClick={() => setFiltroTab('OMITIDOS')}
+                    style={tabStyle(filtroTab === 'OMITIDOS', '#6366F1')}
+                  >
+                    ⚠️ Omitidos por Suplidor ({resultado.totalOmitidos || 0})
                   </button>
                 </div>
 
@@ -864,8 +927,15 @@ export const ConciliacionPage: React.FC = () => {
                       const esCalifica = item.estadoCuadre === 'CALIFICA_PAGO';
                       const esPendiente = item.estadoCuadre === 'PENDIENTE_RECEPCION';
                       const esRechazado = item.estadoCuadre === 'NO_CALIFICA';
+                      const esOmitido   = item.estadoCuadre === 'OMITIDO_SUPLIDOR';
 
-                      const rowBg = esCalifica ? 'rgba(16, 185, 129, 0.05)' : (esPendiente ? 'rgba(245, 158, 11, 0.05)' : 'rgba(239, 68, 68, 0.05)');
+                      const rowBg = esCalifica 
+                        ? 'rgba(16, 185, 129, 0.05)' 
+                        : (esPendiente 
+                          ? 'rgba(245, 158, 11, 0.05)' 
+                          : (esOmitido 
+                            ? 'rgba(99, 102, 241, 0.08)' 
+                            : 'rgba(239, 68, 68, 0.05)'));
 
                       return (
                         <tr key={idx} style={{ borderBottom: '1px solid #374151', background: rowBg }}>
@@ -904,7 +974,7 @@ export const ConciliacionPage: React.FC = () => {
                           <td style={{ padding: 10, textAlign: 'right', fontWeight: 'bold' }}>
                             RD$ {Number(item.totalReclamado).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                           </td>
-                          <td style={{ padding: 10, textAlign: 'right', fontWeight: 'bold', color: esCalifica ? '#10B981' : '#9CA3AF' }}>
+                          <td style={{ padding: 10, textAlign: 'right', fontWeight: 'bold', color: esCalifica ? '#10B981' : (esOmitido ? '#818CF8' : '#9CA3AF') }}>
                             RD$ {Number(item.totalAprobado || 0).toLocaleString('es-DO', { minimumFractionDigits: 2 })}
                           </td>
                           <td style={{ padding: 10, textAlign: 'center', whiteSpace: 'nowrap' }}>
@@ -923,8 +993,13 @@ export const ConciliacionPage: React.FC = () => {
                                 ✕ NO CALIFICA
                               </span>
                             )}
+                            {esOmitido && (
+                              <span style={{ padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 'bold', background: '#312E81', color: '#A5B4FC' }}>
+                                ⚠️ EN SISTEMA (NO FACTURADO)
+                              </span>
+                            )}
                           </td>
-                          <td style={{ padding: 10, color: esCalifica ? '#10B981' : (esPendiente ? '#FBBF24' : '#F87171'), fontSize: 11 }}>
+                          <td style={{ padding: 10, color: esCalifica ? '#10B981' : (esPendiente ? '#FBBF24' : (esOmitido ? '#818CF8' : '#F87171')), fontSize: 11 }}>
                             {item.motivoRechazo}
                           </td>
                         </tr>

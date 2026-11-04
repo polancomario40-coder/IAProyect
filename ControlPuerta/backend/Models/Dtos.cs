@@ -323,8 +323,10 @@ public record ResultadoConciliacionDto
     public int       TotalCalifican          { get; init; }
     public int       TotalRechazados         { get; init; }
     public int       TotalPendientes         { get; init; }
+    public int       TotalOmitidos           { get; init; }
     public decimal   MontoTotalReclamado     { get; init; }
     public decimal   MontoTotalCalifica      { get; init; }
+    public decimal   MontoTotalOmitidos      { get; init; }
     public string    Status                  { get; init; } = "REVISADO";
     public DateTime? FechaAprobacion         { get; init; }
     public string?   UsuarioAprobacion       { get; init; }
@@ -354,6 +356,7 @@ public record LoteConciliacionDto
     public int       TotalCalifican          { get; init; }
     public int       TotalRechazados         { get; init; }
     public int       TotalPendientes         { get; init; }
+    public int       TotalOmitidos           { get; init; }
     public decimal   MontoTotalReclamado     { get; init; }
     public decimal   MontoTotalCalifica      { get; init; }
     public string    Status                  { get; init; } = "";

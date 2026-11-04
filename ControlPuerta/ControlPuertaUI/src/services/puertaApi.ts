@@ -175,6 +175,9 @@ export const obtenerLoteConciliacion = (id: string) =>
 export const actualizarEstadoPagoLote = (id: string, data: object) =>
   puertaApi.put(`/conciliacion/lotes/${id}/estado-pago`, data);
 
+export const eliminarLoteConciliacion = (id: string) =>
+  puertaApi.delete(`/conciliacion/lotes/${id}`);
+
 export const editarEntradaConduce = (id: string, data: object) =>
   puertaApi.put(`/puerta/entradas/${id}/editar`, data);
 
