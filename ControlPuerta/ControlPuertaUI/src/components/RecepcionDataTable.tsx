@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { consultarRecepciones, obtenerTicket } from '../services/puertaApi';
 import { generarTicketPDF } from '../utils/TicketPrint';
+import EditarConduceModal from './EditarConduceModal';
 
 export interface EntradaRow {
   idEntradaCamion: string;
@@ -35,6 +36,7 @@ const RecepcionDataTable: React.FC<Props> = ({ filtros, onVerDetalle }) => {
   const [data, setData] = useState<EntradaRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [imprimiendoId, setImprimiendoId] = useState<string | null>(null);
+  const [filaAEditar, setFilaAEditar] = useState<EntradaRow | null>(null);
 
   const handleImprimir = async (id: string) => {
     try {
@@ -129,6 +131,25 @@ const RecepcionDataTable: React.FC<Props> = ({ filtros, onVerDetalle }) => {
                     Ver
                   </button>
                   <button 
+                    onClick={() => setFilaAEditar(row)}
+                    style={{ 
+                      padding: '4px 8px', 
+                      cursor: 'pointer', 
+                      background: '#2563EB', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: 4, 
+                      fontSize: '12px', 
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                    title="Editar datos del conduce con código de autorización ERP"
+                  >
+                    ✏️ Editar
+                  </button>
+                  <button 
                     onClick={() => handleImprimir(row.idEntradaCamion)}
                     disabled={imprimiendoId === row.idEntradaCamion}
                     style={{ 
@@ -157,6 +178,18 @@ const RecepcionDataTable: React.FC<Props> = ({ filtros, onVerDetalle }) => {
           )}
         </tbody>
       </table>
+
+      {filaAEditar && (
+        <EditarConduceModal
+          isOpen={!!filaAEditar}
+          entrada={filaAEditar}
+          onClose={() => setFilaAEditar(null)}
+          onSaved={() => {
+            setFilaAEditar(null);
+            cargar();
+          }}
+        />
+      )}
     </div>
   );
 };

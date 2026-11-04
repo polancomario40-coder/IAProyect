@@ -98,6 +98,30 @@ public record AsignarOcRequest
     public int    EvalServicio     { get; init; } = 255;
 }
 
+public record EditarEntradaRequest
+{
+    public string    CodigoAutorizacion { get; init; } = "";
+    public string?   Conduce            { get; init; }
+    public string?   ConduceTransporte  { get; init; }
+    public string?   Placa              { get; init; }
+    public string?   IdTransportista    { get; init; }
+    public string?   Transportista      { get; init; }
+    public Guid?     IdChofer           { get; init; }
+    public string?   NombreChofer       { get; init; }
+    public string?   IdProducto         { get; init; }
+    public string?   Producto           { get; init; }
+    public string?   IdSuplidor         { get; init; }
+    public string?   Suplidor           { get; init; }
+    public decimal?  CantidadDeclarada  { get; init; }
+    public decimal?  CantidadRecibida   { get; init; }
+    public string?   IdUnidad           { get; init; }
+    public string?   IdAlmacen          { get; init; }
+    public string?   Notas              { get; init; }
+    public DateTime? FechaEntrada       { get; init; }
+    public int?      OrdenNumero        { get; init; }
+    public Guid?     IdOrden            { get; init; }
+}
+
 public record EjecutarCierreRequest
 {
     public DateOnly FechaDia    { get; init; }

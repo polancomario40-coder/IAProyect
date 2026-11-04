@@ -175,6 +175,9 @@ export const obtenerLoteConciliacion = (id: string) =>
 export const actualizarEstadoPagoLote = (id: string, data: object) =>
   puertaApi.put(`/conciliacion/lotes/${id}/estado-pago`, data);
 
+export const editarEntradaConduce = (id: string, data: object) =>
+  puertaApi.put(`/puerta/entradas/${id}/editar`, data);
+
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token);

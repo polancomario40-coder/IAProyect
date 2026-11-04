@@ -4,6 +4,7 @@ import { obtenerRecepcion, confirmarRecepcion, notificarRecepcion, obtenerTicket
 import CamaraCaptura from '../components/CamaraCaptura';
 import FirmaCanvas from '../components/FirmaCanvas';
 import { generarTicketPDF } from '../utils/TicketPrint';
+import EditarConduceModal from '../components/EditarConduceModal';
 
 export const RecepcionPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +27,7 @@ export const RecepcionPage: React.FC = () => {
   // Nuevos campos
   const [conduceAgregado, setConduceAgregado] = useState<string>('');
   const [notas, setNotas] = useState<string>('');
+  const [mostrarModalEditar, setMostrarModalEditar] = useState(false);
   
   // OCR conduce agregado
   const [ocrConduceLoading, setOcrConduceLoading] = useState(false);
@@ -147,7 +149,7 @@ export const RecepcionPage: React.FC = () => {
     return cantidad;
   };
 
-  useEffect(() => {
+  const cargarDatos = () => {
     if (id) {
       obtenerRecepcion(id).then(res => {
         const d = res.data.data;
@@ -177,6 +179,10 @@ export const RecepcionPage: React.FC = () => {
         }
       }).catch(console.error);
     }
+  };
+
+  useEffect(() => {
+    cargarDatos();
     listarAlmacenes().then(res => {
       const lista = res.data.data;
       setAlmacenes(lista);
@@ -451,8 +457,24 @@ export const RecepcionPage: React.FC = () => {
             }} style={{ marginTop: 20, padding: '8px 16px', background: '#10B981', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
               Imprimir Ticket
             </button>
+            <button 
+              onClick={() => setMostrarModalEditar(true)} 
+              style={{ marginTop: 20, padding: '8px 16px', background: '#2563EB', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}>
+              ✏️ Modificar Conduce
+            </button>
           </div>
         </div>
+        {mostrarModalEditar && (
+          <EditarConduceModal
+            isOpen={mostrarModalEditar}
+            entrada={entrada}
+            onClose={() => setMostrarModalEditar(false)}
+            onSaved={() => {
+              setMostrarModalEditar(false);
+              cargarDatos();
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -857,6 +879,12 @@ export const RecepcionPage: React.FC = () => {
             }} style={{ marginTop: 20, padding: '8px 16px', background: '#10B981', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
               Imprimir Ticket
             </button>
+
+            <button 
+              onClick={() => setMostrarModalEditar(true)} 
+              style={{ marginTop: 20, padding: '8px 16px', background: '#2563EB', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold' }}>
+              ✏️ Modificar Conduce
+            </button>
           </div>
 
           <div style={{ marginTop: 30, paddingTop: 20, borderTop: '1px solid #4B5563' }}>
@@ -884,6 +912,18 @@ export const RecepcionPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {mostrarModalEditar && (
+        <EditarConduceModal
+          isOpen={mostrarModalEditar}
+          entrada={entrada}
+          onClose={() => setMostrarModalEditar(false)}
+          onSaved={() => {
+            setMostrarModalEditar(false);
+            cargarDatos();
+          }}
+        />
       )}
     </div>
   );

@@ -281,6 +281,22 @@ public class PuertaController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { idEntradaCamion = id }, "Entrada cancelada correctamente."));
     }
 
+    // ──────────────────────────────────────────────────────────────────────────
+    // PUT /api/puerta/entradas/{id}/editar
+    // Permite editar cualquier información de un conduce con código de autorización ERP.
+    // ──────────────────────────────────────────────────────────────────────────
+    [HttpPut("entradas/{id:guid}/editar")]
+    public async Task<ActionResult<ApiResponse<object>>> EditarEntrada(Guid id, [FromBody] EditarEntradaRequest req)
+    {
+        var usuario = ObtenerUsuario();
+        var (exito, mensaje) = await _db.EditarEntradaConAutorizacionAsync(id, req, usuario);
+
+        if (!exito)
+            return BadRequest(ApiResponse<object>.Fail(mensaje));
+
+        return Ok(ApiResponse<object>.Ok(new { idEntradaCamion = id }, mensaje));
+    }
+
     // ── Helper ────────────────────────────────────────────────────────────────
     private string ObtenerUsuario()
         => User.FindFirst(ClaimTypes.Name)?.Value

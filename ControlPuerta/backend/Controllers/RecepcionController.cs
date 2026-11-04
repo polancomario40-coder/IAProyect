@@ -191,6 +191,22 @@ try {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // PUT /api/recepcion/{id}/editar
+    // Edita cualquier información de un conduce con código de autorización ERP.
+    // ──────────────────────────────────────────────────────────────────────────
+    [HttpPut("{id:guid}/editar")]
+    public async Task<ActionResult<ApiResponse<object>>> EditarEntrada(Guid id, [FromBody] EditarEntradaRequest req)
+    {
+        var usuario = ObtenerUsuario();
+        var (exito, mensaje) = await _db.EditarEntradaConAutorizacionAsync(id, req, usuario);
+
+        if (!exito)
+            return BadRequest(ApiResponse<object>.Fail(mensaje));
+
+        return Ok(ApiResponse<object>.Ok(new { idEntradaCamion = id }, mensaje));
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // POST /api/recepcion/{id}/evidencia
     // Guarda o actualiza evidencias (foto conduce, firma, imagen firmada) sin
     // cambiar el status de la recepción. Permite agregar firma posterior.

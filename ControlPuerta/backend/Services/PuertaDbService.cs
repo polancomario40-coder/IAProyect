@@ -40,6 +40,7 @@ public interface IPuertaDbService
     Task<List<LoteConciliacionDto>> ListarLotesConciliacionAsync(string? idSuplidor, string? status);
     Task<ResultadoConciliacionDto?> ObtenerLoteConciliacionAsync(Guid idConciliacion);
     Task<bool> ActualizarEstadoPagoLoteAsync(Guid idConciliacion, ActualizarEstadoPagoRequest req, string usuario);
+    Task<(bool Exito, string Mensaje)> EditarEntradaConAutorizacionAsync(Guid idEntradaCamion, EditarEntradaRequest req, string usuario);
 }
 
 public class PuertaDbService : IPuertaDbService
@@ -1504,6 +1505,147 @@ public class PuertaDbService : IPuertaDbService
         {
             await tran.RollbackAsync();
             throw;
+        }
+    }
+
+    // ── Editar entrada de camión con código de autorización ERP ──────────────
+    public async Task<(bool Exito, string Mensaje)> EditarEntradaConAutorizacionAsync(Guid idEntradaCamion, EditarEntradaRequest req, string usuario)
+    {
+        if (string.IsNullOrWhiteSpace(req.CodigoAutorizacion))
+            return (false, "Debe proporcionar un código de autorización válido generado por el ERP.");
+
+        var codigo = req.CodigoAutorizacion.Trim();
+
+        await using var conn = _cf.CreateErpConnection();
+        await conn.OpenAsync();
+
+        // 1. Validar autorización en tabla Autorizacion
+        await using (var cmdCheck = conn.CreateCommand())
+        {
+            cmdCheck.CommandText = "SELECT idAutorizacion, UsadoPor FROM Autorizacion WHERE RTRIM(LTRIM(idAutorizacion)) = @cod";
+            cmdCheck.Parameters.AddWithValue("@cod", codigo);
+
+            await using var reader = await cmdCheck.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+            {
+                return (false, $"El código de autorización '{codigo}' no existe en el sistema.");
+            }
+
+            var usadoPor = reader["UsadoPor"] as string;
+            if (!string.IsNullOrWhiteSpace(usadoPor))
+            {
+                return (false, $"El código de autorización '{codigo}' ya fue utilizado anteriormente por '{usadoPor}'. Debe generar un nuevo código.");
+            }
+        }
+
+        // 2. Ejecutar transacción de edición
+        await using var tran = (SqlTransaction)await conn.BeginTransactionAsync();
+        try
+        {
+            // 2a. Quemar / consumir código en tabla Autorizacion
+            await using (var cmdAut = conn.CreateCommand())
+            {
+                cmdAut.Transaction = tran;
+                cmdAut.CommandText = @"
+                    UPDATE Autorizacion
+                    SET UsadoPor = @usr,
+                        Referencia = LEFT(@conduce, 16),
+                        Descripcion = LEFT('Edicion Conduce: ' + @conduce + ' por ' + @usr, 100)
+                    WHERE RTRIM(LTRIM(idAutorizacion)) = @cod";
+                cmdAut.Parameters.AddWithValue("@usr", usuario);
+                cmdAut.Parameters.AddWithValue("@conduce", req.Conduce ?? "");
+                cmdAut.Parameters.AddWithValue("@cod", codigo);
+                await cmdAut.ExecuteNonQueryAsync();
+            }
+
+            // 2b. Actualizar prtEntradaCamion
+            await using (var cmdUpd = conn.CreateCommand())
+            {
+                cmdUpd.Transaction = tran;
+                cmdUpd.CommandText = @"
+                    UPDATE prtEntradaCamion
+                    SET Conduce = @Conduce,
+                        ConduceTransporte = @ConduceTransporte,
+                        Placa = @Placa,
+                        idTransportista = @IdTransportista,
+                        Transportista = @Transportista,
+                        idChofer = @IdChofer,
+                        NombreChofer = @NombreChofer,
+                        idProducto = @IdProducto,
+                        Producto = @Producto,
+                        idSuplidor = @IdSuplidor,
+                        Suplidor = @Suplidor,
+                        CantidadDeclarada = @CantidadDeclarada,
+                        CantidadRecibida = @CantidadRecibida,
+                        idUnidad = @IdUnidad,
+                        idAlmacen = @IdAlmacen,
+                        Notas = @Notas,
+                        OrdenNumero = CASE WHEN @OrdenNumero IS NOT NULL THEN @OrdenNumero ELSE OrdenNumero END,
+                        idOrden = CASE WHEN @IdOrden IS NOT NULL THEN @IdOrden ELSE idOrden END,
+                        FechaEntrada = CASE WHEN @FechaEntrada IS NOT NULL THEN @FechaEntrada ELSE FechaEntrada END,
+                        FechaModificacion = GETDATE(),
+                        UsuarioModificacion = @usr
+                    WHERE idEntradaCamion = @id";
+
+                cmdUpd.Parameters.AddWithValue("@id", idEntradaCamion);
+                cmdUpd.Parameters.AddWithValue("@Conduce", (object?)req.Conduce ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@ConduceTransporte", (object?)req.ConduceTransporte ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@Placa", (object?)req.Placa?.Trim().ToUpper() ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@IdTransportista", (object?)req.IdTransportista ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@Transportista", (object?)req.Transportista ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@IdChofer", (object?)req.IdChofer ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@NombreChofer", (object?)req.NombreChofer ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@IdProducto", (object?)req.IdProducto ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@Producto", (object?)req.Producto ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@IdSuplidor", (object?)req.IdSuplidor ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@Suplidor", (object?)req.Suplidor ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@CantidadDeclarada", (object?)req.CantidadDeclarada ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@CantidadRecibida", (object?)req.CantidadRecibida ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@IdUnidad", (object?)req.IdUnidad ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@IdAlmacen", (object?)req.IdAlmacen ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@Notas", (object?)req.Notas ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@OrdenNumero", (object?)req.OrdenNumero ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@IdOrden", (object?)req.IdOrden ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@FechaEntrada", (object?)req.FechaEntrada ?? DBNull.Value);
+                cmdUpd.Parameters.AddWithValue("@usr", usuario);
+
+                int rows = await cmdUpd.ExecuteNonQueryAsync();
+                if (rows == 0)
+                {
+                    await tran.RollbackAsync();
+                    return (false, "No se encontró el registro de entrada para actualizar.");
+                }
+            }
+
+            // 2c. Registrar auditoría en Loging
+            await using (var cmdLog = conn.CreateCommand())
+            {
+                cmdLog.Transaction = tran;
+                cmdLog.CommandText = @"
+                    INSERT INTO Loging (idLoging, Fechahora, Usuario, Accion, Objeto, Referencia)
+                    VALUES (
+                        NEWID(),
+                        GETDATE(),
+                        @usr,
+                        'Edicion',
+                        'Control de Puerta - Conduce',
+                        LEFT('Conduce: ' + ISNULL(@Conduce, '') + ', Placa: ' + ISNULL(@Placa, '') + ', Aut: ' + @cod, 50)
+                    )";
+                cmdLog.Parameters.AddWithValue("@usr", usuario);
+                cmdLog.Parameters.AddWithValue("@Conduce", req.Conduce ?? "");
+                cmdLog.Parameters.AddWithValue("@Placa", req.Placa ?? "");
+                cmdLog.Parameters.AddWithValue("@cod", codigo);
+                await cmdLog.ExecuteNonQueryAsync();
+            }
+
+            await tran.CommitAsync();
+            return (true, "Conduce actualizado exitosamente con autorización y registro en Loging.");
+        }
+        catch (Exception ex)
+        {
+            await tran.RollbackAsync();
+            _logger.LogError(ex, "Error al editar entrada con autorización: {Msg}", ex.Message);
+            return (false, $"Error interno al guardar cambios: {ex.Message}");
         }
     }
 }
