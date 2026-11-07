@@ -4,13 +4,33 @@ const TOKEN_KEY = 'jwt_token'
 const EMPRESA_KEY = 'empresa'
 const USUARIO_KEY = 'usuario'
 
-// URL del Centro de Autenticación SSO
-// En producción: https://auth.sade.com.do (o la URL configurada en .env o window.__ENV__)
-// En desarrollo: http://localhost:5174 con fallback a la URL central
-export const AUTH_CENTER_URL =
-  import.meta.env.VITE_AUTH_CENTER_URL ||
-  (typeof window !== 'undefined' && window.__ENV__?.VITE_AUTH_CENTER_URL) ||
-  'https://auth.sade.com.do'
+// Resolución dinámica de la URL del Centro de Autenticación SSO:
+// 1. window.__ENV__?.VITE_AUTH_CENTER_URL (configurable en runtime vía /env-config.js sin recompilar)
+// 2. import.meta.env.VITE_AUTH_CENTER_URL (variable en compilación)
+// 3. Si corre en localhost:5173 (desarrollo Vite) -> http://localhost:5174
+// 4. Si corre en red local / intranet (IP privada o localhost en IIS) -> mismo host en puerto 8081
+// 5. Fallback a https://auth.sade.com.do si existe dominio público
+export const resolveAuthCenterUrl = () => {
+  if (typeof window !== 'undefined') {
+    if (window.__ENV__?.VITE_AUTH_CENTER_URL) {
+      return window.__ENV__.VITE_AUTH_CENTER_URL
+    }
+    if (import.meta.env.VITE_AUTH_CENTER_URL) {
+      return import.meta.env.VITE_AUTH_CENTER_URL
+    }
+    if (window.location.port === '5173') {
+      return 'http://localhost:5174'
+    }
+    const isLocalOrIp = /^(localhost|127\.0\.0\.1|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1]))/.test(window.location.hostname)
+    if (isLocalOrIp) {
+      return `${window.location.protocol}//${window.location.hostname}:8081`
+    }
+    return 'https://auth.sade.com.do'
+  }
+  return 'https://auth.sade.com.do'
+}
+
+export const AUTH_CENTER_URL = resolveAuthCenterUrl()
 
 export const CLIENT_ID = 'sade-financiera'
 
