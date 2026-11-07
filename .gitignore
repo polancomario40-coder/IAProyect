@@ -88,6 +88,9 @@ APICXPExterno/test.ps1
 __pycache__/
 *.py[cod]
 *$py.class
+.venv/
+venv/
+env/
 
 # Delphi compiled
 *.dcu
