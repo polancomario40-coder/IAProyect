@@ -1367,3 +1367,84 @@ export function exportarReporteClientesAtrasadosPDF({
   doc.save(`${nombreArchivo}_${new Date().toISOString().slice(0, 10)}.pdf`)
 }
 
+/**
+ * 14. Exporta el Top de Empresas / Distribución de Cartera a PDF
+ */
+export function exportarTopEmpresasPDF(porEmpresa = [], titulo = 'DISTRIBUCIÓN Y TOP DE EMPRESAS / CARTERAS') {
+  if (!porEmpresa || porEmpresa.length === 0) return
+
+  const doc = new jsPDF('portrait', 'pt', 'letter')
+
+  doc.setFontSize(14)
+  doc.setTextColor(30, 58, 95)
+  doc.text('SADE WEB — SISTEMA DE GESTIÓN FINANCIERA', 40, 38)
+
+  doc.setFontSize(11)
+  doc.setTextColor(50)
+  doc.text(titulo.toUpperCase(), 40, 54)
+
+  const totCli = porEmpresa.reduce((s, e) => s + (Number(e.totalClientes) || 0), 0)
+  const totNue = porEmpresa.reduce((s, e) => s + (Number(e.nuevos) || 0), 0)
+  const totRee = porEmpresa.reduce((s, e) => s + (Number(e.reenganchados) || 0), 0)
+  const totMor = porEmpresa.reduce((s, e) => s + (Number(e.enMora) || 0), 0)
+  const totCar = porEmpresa.reduce((s, e) => s + (Number(e.cartera) || 0), 0)
+
+  doc.setFontSize(8.5)
+  doc.setTextColor(100)
+  doc.text(
+    `Fecha de Emisión: ${new Date().toLocaleDateString('es-DO')} ${new Date().toLocaleTimeString('es-DO')}  |  Total Empresas: ${porEmpresa.length}  |  Total Clientes: ${totCli}`,
+    40,
+    68
+  )
+
+  const cols = [
+    'POS.',
+    'EMPRESA / CARTERA',
+    'CLIENTES',
+    'NUEVOS',
+    'REENGANCHADOS',
+    'EN MORA',
+    'CARTERA (RD$)',
+    '% PART.',
+  ]
+
+  const rows = porEmpresa.map((e, idx) => {
+    const pct = totCli > 0 ? ((Number(e.totalClientes) || 0) / totCli) * 100 : 0
+    return [
+      `#${idx + 1}`,
+      e.empresa || '(Sin empresa)',
+      String(e.totalClientes ?? 0),
+      String(e.nuevos ?? 0),
+      String(e.reenganchados ?? 0),
+      String(e.enMora ?? 0),
+      fmtMoney(e.cartera),
+      `${pct.toFixed(1)}%`,
+    ]
+  })
+
+  const foot = [
+    'TOTAL',
+    `${porEmpresa.length} empresas`,
+    String(totCli),
+    String(totNue),
+    String(totRee),
+    String(totMor),
+    fmtMoney(totCar),
+    '100.0%',
+  ]
+
+  autoTable(doc, {
+    head: [cols],
+    body: rows,
+    foot: [foot],
+    startY: 80,
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 4 },
+    headStyles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold' },
+    footStyles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+  })
+
+  doc.save(`Top_Empresas_SADE_${new Date().toISOString().slice(0, 10)}.pdf`)
+}
+

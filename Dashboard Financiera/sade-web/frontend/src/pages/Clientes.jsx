@@ -19,7 +19,7 @@ import KPICard from '../components/KPICard'
 import FiltrosBar from '../components/FiltrosBar'
 import ClientesTable from '../components/ClientesTable'
 import ClientePerfilModal from '../components/ClientePerfilModal'
-import { exportarClientesExcel, exportarClientesPDF } from '../utils/exportUtils'
+import { exportarClientesExcel, exportarClientesPDF, exportarTopEmpresasPDF } from '../utils/exportUtils'
 
 const FILTROS_INICIALES = {
   pagina: 1,
@@ -289,9 +289,24 @@ export default function Clientes() {
       {/* ── Gráfico Top Empresas ─────────────────────────────────────────── */}
       {porEmpresa.length > 0 && (
         <section>
-          <h2 className="text-base font-semibold text-slate-700 mb-3">
-            Top Empresas
-          </h2>
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div>
+              <h2 className="text-base font-semibold text-slate-800">
+                Top Empresas
+              </h2>
+              <p className="text-xs text-slate-400">
+                Distribución de clientes y cartera por compañía
+              </p>
+            </div>
+            <button
+              onClick={() => exportarTopEmpresasPDF(porEmpresa)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition-colors shadow-2xs"
+              title="Descargar distribución completa de Top Empresas en PDF formal"
+            >
+              <FileText size={14} />
+              <span>Generar PDF</span>
+            </button>
+          </div>
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-3">
             {porEmpresa.slice(0, 10).map((emp) => {
               const porcentaje = Math.round((emp.totalClientes / maxClientes) * 100)
