@@ -274,6 +274,7 @@ class ClienteHistorialResponse(BaseModel):
 class ReporteDetalleClienteItem(BaseModel):
     idCliente: int
     clasificacion: str
+    diasAtraso: Optional[int] = 0
     nombreCliente: str
     cedula: Optional[str] = None
     empresa: Optional[str] = None
@@ -343,4 +344,58 @@ class ReporteConsolidadoCarteraTotales(BaseModel):
 class ReporteConsolidadoCarteraResponse(BaseModel):
     totales: ReporteConsolidadoCarteraTotales
     filas: List[ReporteConsolidadoCarteraItem]
+
+
+# ─── Reporte de Clientes Atrasados / Mora por Tramos y Cartera ───────
+class ReporteMoraCarteraItem(BaseModel):
+    cartera: str
+    totalClientesMora: int
+    totalPrestamosMora: int
+    capitalMora30Dias: Decimal
+    capitalMora60DiasLegal: Decimal
+    capitalMora90MasDias: Decimal
+    totalCapitalMora: Decimal
+    otrosCargosMora: Decimal
+    totalDeudaMora: Decimal
+
+
+class ReporteMoraClienteItem(BaseModel):
+    idCliente: int
+    nombreCliente: str
+    cedula: Optional[str] = None
+    telefono: Optional[str] = None
+    empresa: Optional[str] = None
+    numeroPrestamo: str
+    montoOriginal: Decimal
+    tasa: float
+    saldoCapital: Decimal
+    capitalVencido: Decimal
+    interesVencido: Decimal
+    moraPendiente: Decimal
+    totalVencido: Decimal
+    cuotasVencidas: int
+    primeraFechaVenc: Optional[date] = None
+    diasAtraso: int
+    tramoMora: str  # "30 DIAS" | "LEGAL 60 DIAS" | "90+ DIAS"
+
+
+class ReporteMoraTotales(BaseModel):
+    totalCarteras: int
+    totalClientesMora: int
+    totalPrestamosMora: int
+    totalCapitalMora30Dias: Decimal
+    totalCapitalMora60DiasLegal: Decimal
+    totalCapitalMora90MasDias: Decimal
+    totalCapitalMora: Decimal
+    totalInteresVencido: Decimal
+    totalMoraPendiente: Decimal
+    totalDeudaMora: Decimal
+    fechaCorte: Optional[date] = None
+
+
+class ReporteClientesAtrasadosResponse(BaseModel):
+    totales: ReporteMoraTotales
+    carteras: List[ReporteMoraCarteraItem]
+    clientes: List[ReporteMoraClienteItem]
+
 

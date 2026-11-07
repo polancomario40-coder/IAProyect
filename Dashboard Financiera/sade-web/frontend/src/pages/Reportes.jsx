@@ -21,15 +21,25 @@ import {
   Layers,
   ChevronRight,
   Filter,
+  AlertTriangle,
+  Clock,
+  ExternalLink,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { useReporteDetalleClientes, useReporteConsolidadoCartera } from '../hooks/useApi'
+import { Link } from 'react-router-dom'
+import {
+  useReporteDetalleClientes,
+  useReporteConsolidadoCartera,
+  useReporteClientesAtrasados,
+} from '../hooks/useApi'
 import {
   exportarReporteDetalleExcel,
   exportarReporteDetallePDF,
   exportarReporteCarteraExcel,
   exportarReporteCarteraPDF,
   exportarReporteCompletoLibroExcel,
+  exportarReporteClientesAtrasadosExcel,
+  exportarReporteClientesAtrasadosPDF,
 } from '../utils/exportUtils'
 
 const fmt = (n) =>
@@ -50,9 +60,13 @@ const fmtCompact = (n) =>
 const BADGES = {
   'NUEVO': 'bg-amber-300 text-amber-950 font-bold border border-amber-400',
   'REENGANCHADO': 'bg-blue-100 text-blue-800 font-bold border border-blue-200',
+  'SITUACION ATRASO (15 DIAS)': 'bg-amber-100 text-amber-900 font-bold border border-amber-300',
+  'SITUACION ATRASO (30 DIAS)': 'bg-orange-100 text-orange-900 font-bold border border-orange-300',
+  'SITUACION ATRASO (45 DIAS)': 'bg-rose-100 text-rose-900 font-bold border border-rose-300',
+  'SITUACION ATRASO (60+ DIAS)': 'bg-red-100 text-red-950 font-bold border border-red-300',
   'SITUACION ATRASO': 'bg-amber-300 text-amber-950 font-bold border border-amber-400',
   'EN MORA': 'bg-red-100 text-red-700 font-bold border border-red-200',
-  'AL DIA': 'bg-slate-100 text-slate-700 border border-slate-200',
+  'AL DIA': 'bg-emerald-50 text-emerald-800 font-bold border border-emerald-200',
   'CANCELADO': 'bg-zinc-100 text-zinc-600 border border-zinc-200',
 }
 
@@ -62,6 +76,7 @@ const PESTANAS = [
   { id: 'NUEVOS',      label: '3. Clientes Nuevos',          icon: UserPlus, desc: 'Préstamos nuevos del período' },
   { id: 'REENGANCHES', label: '4. Reenganchados',            icon: RefreshCw, desc: 'Préstamos reenganchados del período' },
   { id: 'CANCELADOS',  label: '5. Cancelados',               icon: Ban, desc: 'Préstamos cancelados / saldados del período' },
+  { id: 'ATRASADOS',   label: '6. Clientes Atrasados (Mora)', icon: AlertTriangle, desc: 'Mora por compañía y tramos (30d, Legal 60d, 90+d)' },
 ]
 
 export default function Reportes() {
@@ -80,6 +95,8 @@ export default function Reportes() {
   const [filtroEmpresa, setFiltroEmpresa] = useState('')
   const [fechaDesdeCustom, setFechaDesdeCustom] = useState('')
   const [fechaHastaCustom, setFechaHastaCustom] = useState('')
+  const [filtroClasificacion, setFiltroClasificacion] = useState('TODOS')
+  const [subtabAtrasados, setSubtabAtrasados] = useState('RESUMEN') // 'RESUMEN' | 'DETALLE'
 
   // Fechas computadas
   const { fechaDesde, fechaHasta } = useMemo(() => {
@@ -137,11 +154,19 @@ export default function Reportes() {
 
   // Queries TanStack (Carga bajo demanda según pestaña activa para máxima velocidad)
   const esConsolidado = pestañaActiva === 'CONSOLIDADO'
+  const esAtrasados = pestañaActiva === 'ATRASADOS'
+
   const { data: dataCartera, isLoading: loadingCartera } = useReporteConsolidadoCartera(filtrosCartera, {
     enabled: esConsolidado,
   })
   const { data: dataDetalle, isLoading: loadingDetalle } = useReporteDetalleClientes(filtrosDetalle, {
-    enabled: !esConsolidado,
+    enabled: !esConsolidado && !esAtrasados,
+  })
+  const { data: dataAtrasados, isLoading: loadingAtrasados } = useReporteClientesAtrasados({
+    fechaCorte: fechaHasta,
+    empresa: filtroEmpresa || undefined,
+  }, {
+    enabled: esAtrasados,
   })
 
   const filasCartera = dataCartera?.filas ?? []
@@ -149,6 +174,52 @@ export default function Reportes() {
 
   const filasDetalle = dataDetalle?.filas ?? []
   const totalesDetalle = dataDetalle?.totales ?? {}
+
+  const carterasMora = dataAtrasados?.carteras ?? []
+  const clientesMora = dataAtrasados?.clientes ?? []
+  const totalesMora = dataAtrasados?.totales ?? {}
+
+  // Filtrado interactivo de Clasificación para la Pestaña Detalle
+  const filasDetalleFiltradas = useMemo(() => {
+    if (!filasDetalle || filasDetalle.length === 0) return []
+    if (pestañaActiva !== 'DETALLE' || filtroClasificacion === 'TODOS') return filasDetalle
+
+    if (filtroClasificacion === 'AL_DIA') {
+      return filasDetalle.filter(r => r.clasificacion === 'AL DIA')
+    }
+    if (filtroClasificacion === 'ATRASO_15') {
+      return filasDetalle.filter(r => r.clasificacion?.includes('15') || (r.diasAtraso > 0 && r.diasAtraso <= 15))
+    }
+    if (filtroClasificacion === 'ATRASO_30') {
+      return filasDetalle.filter(r => r.clasificacion?.includes('30') || (r.diasAtraso > 15 && r.diasAtraso <= 30))
+    }
+    if (filtroClasificacion === 'ATRASO_45') {
+      return filasDetalle.filter(r => r.clasificacion?.includes('45') || (r.diasAtraso > 30 && r.diasAtraso <= 45))
+    }
+    if (filtroClasificacion === 'ATRASO_60') {
+      return filasDetalle.filter(r => r.clasificacion?.includes('60') || r.diasAtraso > 45)
+    }
+    if (filtroClasificacion === 'ATRASO_TODOS') {
+      return filasDetalle.filter(r => r.clasificacion?.startsWith('SITUACION ATRASO') || r.clasificacion === 'EN MORA')
+    }
+    return filasDetalle.filter(r => r.clasificacion === filtroClasificacion)
+  }, [filasDetalle, filtroClasificacion, pestañaActiva])
+
+  const totalesDetalleCalculados = useMemo(() => {
+    if (pestañaActiva !== 'DETALLE' || filtroClasificacion === 'TODOS') return totalesDetalle
+    return {
+      ...totalesDetalle,
+      totalRegistros: filasDetalleFiltradas.length,
+      totalMontoPrestamo: filasDetalleFiltradas.reduce((s, r) => s + (Number(r.montoPrestamo) || 0), 0),
+      totalCapitalPagado: filasDetalleFiltradas.reduce((s, r) => s + (Number(r.capitalPagado) || 0), 0),
+      totalBalanceAntesCobro: filasDetalleFiltradas.reduce((s, r) => s + (Number(r.balanceAntesCobro) || 0), 0),
+      totalCapitalCobradoQuincena: filasDetalleFiltradas.reduce((s, r) => s + (Number(r.capitalCobradoQuincena) || 0), 0),
+      totalInteresCobradoQuincena: filasDetalleFiltradas.reduce((s, r) => s + (Number(r.interesCobradoQuincena) || 0), 0),
+      totalCapitalActualAdeudado: filasDetalleFiltradas.reduce((s, r) => s + (Number(r.capitalActualAdeudado) || 0), 0),
+      totalCobradoQuincena: filasDetalleFiltradas.reduce((s, r) => s + (Number(r.totalCobradoQuincena) || 0), 0),
+      totalBalanceActual: filasDetalleFiltradas.reduce((s, r) => s + (Number(r.balanceActual) || 0), 0),
+    }
+  }, [filasDetalleFiltradas, totalesDetalle, filtroClasificacion, pestañaActiva])
 
   // Sufijos dinámicos según filtro de cartera / empresa (ej. Clientes del Bravo)
   const empresaLimpia = (filtroEmpresa || '').trim()
@@ -170,6 +241,15 @@ export default function Reportes() {
           `Consolidado_Cartera${sufijoArchivoEmpresa}_${fechaHasta}`,
           `Informe General Consolidado por Cartera${sufijoTituloEmpresa}`
         )
+      } else if (pestañaActiva === 'ATRASADOS') {
+        exportarReporteClientesAtrasadosExcel({
+          carteras: carterasMora,
+          clientes: clientesMora,
+          totales: totalesMora,
+          nombreArchivo: `Cartera_En_Mora${sufijoArchivoEmpresa}_${fechaHasta}`,
+          titulo: `Informe Oficial de Cartera en Mora por Tramos y Compañía${sufijoTituloEmpresa}`,
+          fechaCorte: fechaHasta,
+        })
       } else {
         const titulos = {
           DETALLE: `Informe Detalle de Préstamos${sufijoTituloEmpresa}`,
@@ -177,10 +257,13 @@ export default function Reportes() {
           REENGANCHES: `Informe de Préstamos Reenganchados${sufijoTituloEmpresa}`,
           CANCELADOS: `Informe de Préstamos Cancelados / Saldados${sufijoTituloEmpresa}`,
         }
+        const sufijoFiltro = (pestañaActiva === 'DETALLE' && filtroClasificacion !== 'TODOS')
+          ? `_${filtroClasificacion}`
+          : ''
         exportarReporteDetalleExcel(
-          filasDetalle,
-          totalesDetalle,
-          `${pestañaActiva}${sufijoArchivoEmpresa}_${fechaHasta}`,
+          filasDetalleFiltradas,
+          totalesDetalleCalculados,
+          `${pestañaActiva}${sufijoFiltro}${sufijoArchivoEmpresa}_${fechaHasta}`,
           titulos[pestañaActiva] || `Informe Detalle${sufijoTituloEmpresa}`
         )
       }
@@ -201,6 +284,15 @@ export default function Reportes() {
           `Informe General Consolidado por Cartera${sufijoTituloEmpresa}`,
           `Consolidado_Cartera${sufijoArchivoEmpresa}_${fechaHasta}`
         )
+      } else if (pestañaActiva === 'ATRASADOS') {
+        exportarReporteClientesAtrasadosPDF({
+          carteras: carterasMora,
+          clientes: clientesMora,
+          totales: totalesMora,
+          titulo: `Informe Oficial de Cartera en Mora por Tramos y Compañía${sufijoTituloEmpresa}`,
+          nombreArchivo: `Cartera_En_Mora${sufijoArchivoEmpresa}_${fechaHasta}`,
+          fechaCorte: fechaHasta,
+        })
       } else {
         const titulos = {
           DETALLE: `Informe Detalle Individual de Préstamos${sufijoTituloEmpresa}`,
@@ -208,11 +300,14 @@ export default function Reportes() {
           REENGANCHES: `Informe de Préstamos Reenganchados del Período${sufijoTituloEmpresa}`,
           CANCELADOS: `Informe de Préstamos Cancelados / Saldados del Período${sufijoTituloEmpresa}`,
         }
+        const sufijoFiltro = (pestañaActiva === 'DETALLE' && filtroClasificacion !== 'TODOS')
+          ? `_${filtroClasificacion}`
+          : ''
         exportarReporteDetallePDF(
-          filasDetalle,
-          totalesDetalle,
+          filasDetalleFiltradas,
+          totalesDetalleCalculados,
           titulos[pestañaActiva] || `Informe Detalle${sufijoTituloEmpresa}`,
-          `${pestañaActiva}${sufijoArchivoEmpresa}_${fechaHasta}`
+          `${pestañaActiva}${sufijoFiltro}${sufijoArchivoEmpresa}_${fechaHasta}`
         )
       }
     } catch (err) {
@@ -228,10 +323,13 @@ export default function Reportes() {
       setExportando(true)
       const qEmpresa = empresaLimpia ? `&empresa=${encodeURIComponent(empresaLimpia)}` : ''
       // Buscar todos los datos necesarios respetando el filtro de empresa si existe
-      const resTodos = await fetch(`/api/reportes/detalle-clientes?fechaDesde=${fechaDesde || ''}&fechaHasta=${fechaHasta || ''}${qEmpresa}&tipoReporte=TODOS`).then(r => r.json())
-      const resNuevos = await fetch(`/api/reportes/detalle-clientes?fechaDesde=${fechaDesde || ''}&fechaHasta=${fechaHasta || ''}${qEmpresa}&tipoReporte=NUEVOS`).then(r => r.json())
-      const resReeng = await fetch(`/api/reportes/detalle-clientes?fechaDesde=${fechaDesde || ''}&fechaHasta=${fechaHasta || ''}${qEmpresa}&tipoReporte=REENGANCHADOS`).then(r => r.json())
-      const resCanc = await fetch(`/api/reportes/detalle-clientes?fechaDesde=${fechaDesde || ''}&fechaHasta=${fechaHasta || ''}${qEmpresa}&tipoReporte=CANCELADOS`).then(r => r.json())
+      const [resTodos, resNuevos, resReeng, resCanc, resMora] = await Promise.all([
+        fetch(`/api/reportes/detalle-clientes?fechaDesde=${fechaDesde || ''}&fechaHasta=${fechaHasta || ''}${qEmpresa}&tipoReporte=TODOS`).then(r => r.json()),
+        fetch(`/api/reportes/detalle-clientes?fechaDesde=${fechaDesde || ''}&fechaHasta=${fechaHasta || ''}${qEmpresa}&tipoReporte=NUEVOS`).then(r => r.json()),
+        fetch(`/api/reportes/detalle-clientes?fechaDesde=${fechaDesde || ''}&fechaHasta=${fechaHasta || ''}${qEmpresa}&tipoReporte=REENGANCHADOS`).then(r => r.json()),
+        fetch(`/api/reportes/detalle-clientes?fechaDesde=${fechaDesde || ''}&fechaHasta=${fechaHasta || ''}${qEmpresa}&tipoReporte=CANCELADOS`).then(r => r.json()),
+        fetch(`/api/reportes/clientes-atrasados?fechaCorte=${fechaHasta || ''}${qEmpresa}`).then(r => r.json()),
+      ])
 
       exportarReporteCompletoLibroExcel({
         carteras: filasCartera,
@@ -244,6 +342,8 @@ export default function Reportes() {
         totalesReenganches: resReeng?.totales || {},
         cancelados: resCanc?.filas || [],
         totalesCancelados: resCanc?.totales || {},
+        carteraMora: resMora?.carteras || [],
+        totalesMora: resMora?.totales || {},
         nombreArchivo: `Libro_Informes_Financieros${sufijoArchivoEmpresa}_${fechaHasta}`,
         empresa: empresaLimpia,
         fechaDesde,
@@ -256,7 +356,11 @@ export default function Reportes() {
     }
   }
 
-  const isLoading = pestañaActiva === 'CONSOLIDADO' ? loadingCartera : loadingDetalle
+  const isLoading = pestañaActiva === 'CONSOLIDADO' 
+    ? loadingCartera 
+    : pestañaActiva === 'ATRASADOS'
+    ? loadingAtrasados
+    : loadingDetalle
 
   return (
     <div className="p-4 lg:p-6 space-y-6 max-w-screen-2xl mx-auto">
@@ -540,8 +644,8 @@ export default function Reportes() {
         </section>
       )}
 
-      {/* ── CONTENIDO: DETALLE DE CLIENTES / NUEVOS / REENGANCHADOS (Plantilla Imagen 1) ── */}
-      {pestañaActiva !== 'CONSOLIDADO' && (
+      {/* ── CONTENIDO: DETALLE DE CLIENTES / NUEVOS / REENGANCHADOS / CANCELADOS (Plantilla Imagen 1) ── */}
+      {pestañaActiva !== 'CONSOLIDADO' && pestañaActiva !== 'ATRASADOS' && (
         <section className="space-y-4">
           <div className="bg-amber-100/90 border border-amber-300/80 rounded-xl p-3.5 flex items-center justify-between text-xs text-amber-950 font-medium">
             <div>
@@ -560,16 +664,68 @@ export default function Reportes() {
               </span>
             </div>
             <div className="font-bold text-amber-900">
-              Total Registros: {filasDetalle.length}
+              Total Registros: {filasDetalleFiltradas.length}
+              {filtroClasificacion !== 'TODOS' && pestañaActiva === 'DETALLE' && (
+                <span className="ml-1 text-[11px] text-amber-700 font-normal">
+                  (de {filasDetalle.length})
+                </span>
+              )}
             </div>
           </div>
+
+          {/* ── BARRA INTERACTIVA DE FILTRO DE CLASIFICACIÓN (Solo en Detalle de Clientes) ── */}
+          {pestañaActiva === 'DETALLE' && (
+            <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-xs flex items-center justify-between flex-wrap gap-2.5">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                <Filter size={15} className="text-blue-600" />
+                <span>Filtrar por Clasificación / Antigüedad:</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                {[
+                  { id: 'TODOS', label: 'Todos' },
+                  { id: 'AL_DIA', label: 'Clientes al Día', color: 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100' },
+                  { id: 'ATRASO_15', label: 'Atraso 15 días', color: 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100' },
+                  { id: 'ATRASO_30', label: 'Atraso 30 días', color: 'bg-orange-50 text-orange-900 border-orange-200 hover:bg-orange-100' },
+                  { id: 'ATRASO_45', label: 'Atraso 45 días', color: 'bg-rose-50 text-rose-900 border-rose-200 hover:bg-rose-100' },
+                  { id: 'ATRASO_60', label: 'Atraso 60 días', color: 'bg-red-50 text-red-950 border-red-200 hover:bg-red-100' },
+                  { id: 'ATRASO_TODOS', label: 'Todos en Atraso', color: 'bg-yellow-50 text-yellow-900 border-yellow-200 hover:bg-yellow-100' },
+                  { id: 'NUEVO', label: 'Nuevos', color: 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100' },
+                  { id: 'REENGANCHADO', label: 'Reenganchados', color: 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100' },
+                  { id: 'CANCELADO', label: 'Cancelados', color: 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200' },
+                ].map((b) => {
+                  const active = filtroClasificacion === b.id
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => setFiltroClasificacion(b.id)}
+                      className={clsx(
+                        'px-2.5 py-1 rounded-lg border font-medium transition-all shadow-2xs',
+                        active
+                          ? 'bg-blue-600 text-white border-blue-600 font-bold shadow-xs'
+                          : b.color || 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      )}
+                    >
+                      {b.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-amber-300 border-b border-amber-400 text-slate-900 select-none">
-                    <th className="px-3 py-3 text-left font-bold uppercase tracking-wider">Clasificación</th>
+                    <th className="px-3 py-3 text-left font-bold uppercase tracking-wider">
+                      <div className="flex items-center gap-1">
+                        <span>Clasificación</span>
+                        {filtroClasificacion !== 'TODOS' && pestañaActiva === 'DETALLE' && (
+                          <span className="w-2 h-2 rounded-full bg-blue-700 animate-pulse" title="Filtro de clasificación activo" />
+                        )}
+                      </div>
+                    </th>
                     <th className="px-3.5 py-3 text-left font-bold uppercase tracking-wider">Nombre del Cliente</th>
                     <th className="px-3 py-3 text-left font-bold uppercase tracking-wider">Empresa</th>
                     <th className="px-3 py-3 text-right font-bold uppercase tracking-wider">Monto Préstamo</th>
@@ -590,19 +746,19 @@ export default function Reportes() {
                         Cargando detalle individual de clientes...
                       </td>
                     </tr>
-                  ) : filasDetalle.length === 0 ? (
+                  ) : filasDetalleFiltradas.length === 0 ? (
                     <tr>
                       <td colSpan={11} className="px-4 py-12 text-center text-slate-400">
                         No se encontraron registros para los filtros seleccionados.
                       </td>
                     </tr>
                   ) : (
-                    filasDetalle.map((r) => {
+                    filasDetalleFiltradas.map((r) => {
                       const badgeClass = BADGES[r.clasificacion] || 'bg-slate-100 text-slate-700'
-                      const isRowYellow = r.clasificacion === 'NUEVO' || r.clasificacion === 'SITUACION ATRASO'
+                      const isRowYellow = r.clasificacion === 'NUEVO' || r.clasificacion?.startsWith('SITUACION ATRASO')
                       return (
                         <tr
-                          key={r.idCliente}
+                          key={r.numeroPrestamo || r.idCliente}
                           className={clsx(
                             'transition-colors font-medium text-slate-800',
                             isRowYellow ? 'bg-amber-50/50 hover:bg-amber-100/60' : 'hover:bg-slate-50/80'
@@ -614,7 +770,13 @@ export default function Reportes() {
                             </span>
                           </td>
                           <td className="px-3.5 py-2.5 font-bold text-slate-900 whitespace-nowrap">
-                            {r.nombreCliente}
+                            <Link
+                              to={r.numeroPrestamo ? `/prestamos/${r.numeroPrestamo}` : '#'}
+                              className="hover:text-blue-600 transition-colors"
+                              title="Consultar cliente / préstamo"
+                            >
+                              {r.nombreCliente}
+                            </Link>
                           </td>
                           <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">
                             {r.empresa || '—'}
@@ -654,36 +816,36 @@ export default function Reportes() {
                 </tbody>
 
                 {/* ── FILA FINAL DE TOTALES EN PESOS ($) ── */}
-                {!loadingDetalle && filasDetalle.length > 0 && (
+                {!loadingDetalle && filasDetalleFiltradas.length > 0 && (
                   <tfoot>
                     <tr className="bg-slate-900 text-white font-bold border-t-2 border-slate-950 text-xs">
                       <td colSpan={3} className="px-3.5 py-3 uppercase tracking-wider">
-                        TOTAL GENERAL ({totalesDetalle.totalRegistros ?? filasDetalle.length} Clientes)
+                        TOTAL ({totalesDetalleCalculados.totalRegistros ?? filasDetalleFiltradas.length} Registros)
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-amber-300">
-                        {fmt(totalesDetalle.totalMontoPrestamo)}
+                        {fmt(totalesDetalleCalculados.totalMontoPrestamo)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-slate-300">
-                        {fmt(totalesDetalle.totalCapitalPagado)}
+                        {fmt(totalesDetalleCalculados.totalCapitalPagado)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-slate-300">
-                        {fmt(totalesDetalle.totalBalanceAntesCobro)}
+                        {fmt(totalesDetalleCalculados.totalBalanceAntesCobro)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-emerald-300">
-                        {fmt(totalesDetalle.totalCapitalCobradoQuincena)}
+                        {fmt(totalesDetalleCalculados.totalCapitalCobradoQuincena)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-indigo-300">
-                        {fmt(totalesDetalle.totalInteresCobradoQuincena)}
+                        {fmt(totalesDetalleCalculados.totalInteresCobradoQuincena)}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-blue-300">
                         {fmt(
-                          (totalesDetalle.totalCapitalActualAdeudado && Number(totalesDetalle.totalCapitalActualAdeudado) !== 0)
-                            ? totalesDetalle.totalCapitalActualAdeudado
-                            : Math.max(0, Number(totalesDetalle.totalMontoPrestamo || 0) - Number(totalesDetalle.totalCapitalPagado || 0))
+                          (totalesDetalleCalculados.totalCapitalActualAdeudado && Number(totalesDetalleCalculados.totalCapitalActualAdeudado) !== 0)
+                            ? totalesDetalleCalculados.totalCapitalActualAdeudado
+                            : Math.max(0, Number(totalesDetalleCalculados.totalMontoPrestamo || 0) - Number(totalesDetalleCalculados.totalCapitalPagado || 0))
                         )}
                       </td>
                       <td className="px-2.5 py-3 text-center font-mono">
-                        {totalesDetalle.tasaPromedio}%
+                        {totalesDetalleCalculados.tasaPromedio}%
                       </td>
                       <td className="px-3 py-3 text-slate-400 text-[11px]">
                         Quincena {fechaHasta}
@@ -694,6 +856,341 @@ export default function Reportes() {
               </table>
             </div>
           </div>
+        </section>
+      )}
+
+      {/* ── CONTENIDO: NUEVO REPORTE DE CLIENTES ATRASADOS / MORA POR TRAMOS Y COMPAÑÍA ── */}
+      {pestañaActiva === 'ATRASADOS' && (
+        <section className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center justify-between text-xs text-red-950 font-medium flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={18} className="text-red-600 flex-shrink-0" />
+              <div>
+                <span className="font-bold uppercase tracking-wide">
+                  Reporte Especializado de Cartera en Mora por Tramos Oficiales
+                </span>
+                <span className="ml-2 text-red-700">
+                  (Corte: {fechaHasta || 'Fecha Actual'} — Tramos: 30 Días, Legal 60 Días y 90 Días o más)
+                </span>
+                {sufijoTituloEmpresa && (
+                  <span className="block text-red-800 font-semibold pt-0.5">{sufijoTituloEmpresa}</span>
+                )}
+              </div>
+            </div>
+            <div className="font-bold text-red-900 bg-red-100 px-3 py-1.5 rounded-lg border border-red-200">
+              Total Clientes Atrasados: {totalesMora.totalClientesMora ?? 0}
+            </div>
+          </div>
+
+          {/* ── TARJETAS KPI DE MORA POR TRAMOS ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="bg-white rounded-xl border border-red-200 p-3.5 shadow-xs">
+              <span className="text-[11px] font-bold text-red-600 uppercase tracking-wider block">
+                Total Cartera en Mora
+              </span>
+              <div className="text-xl font-extrabold font-mono text-red-700 mt-1">
+                {fmt(totalesMora.totalCapitalMora)}
+              </div>
+              <span className="text-[11px] text-slate-500 mt-0.5 block">
+                {totalesMora.totalPrestamosMora ?? 0} préstamos en atraso
+              </span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-amber-200 p-3.5 shadow-xs">
+              <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider block">
+                Mora 30 Días (1 a 30d)
+              </span>
+              <div className="text-xl font-extrabold font-mono text-amber-800 mt-1">
+                {fmt(totalesMora.totalCapitalMora30Dias)}
+              </div>
+              <span className="text-[11px] text-slate-500 mt-0.5 block">
+                Atraso reciente
+              </span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-orange-200 p-3.5 shadow-xs">
+              <span className="text-[11px] font-bold text-orange-700 uppercase tracking-wider block">
+                Legal 60 Días (31 a 60d)
+              </span>
+              <div className="text-xl font-extrabold font-mono text-orange-800 mt-1">
+                {fmt(totalesMora.totalCapitalMora60DiasLegal)}
+              </div>
+              <span className="text-[11px] text-slate-500 mt-0.5 block">
+                Fase cobranza legal
+              </span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-rose-200 p-3.5 shadow-xs">
+              <span className="text-[11px] font-bold text-rose-700 uppercase tracking-wider block">
+                90 Días o más (&gt; 60d)
+              </span>
+              <div className="text-xl font-extrabold font-mono text-rose-800 mt-1">
+                {fmt(totalesMora.totalCapitalMora90MasDias)}
+              </div>
+              <span className="text-[11px] text-slate-500 mt-0.5 block">
+                Mora crítica / alta
+              </span>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-xs">
+              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                Total Deuda en Mora
+              </span>
+              <div className="text-xl font-extrabold font-mono text-slate-900 mt-1">
+                {fmt(totalesMora.totalDeudaMora)}
+              </div>
+              <span className="text-[11px] text-slate-500 mt-0.5 block">
+                Capital + Int + Moras
+              </span>
+            </div>
+          </div>
+
+          {/* ── SELECTOR DE VISTA: RESUMEN POR COMPAÑÍA VS DETALLE INDIVIDUAL ── */}
+          <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+            <button
+              onClick={() => setSubtabAtrasados('RESUMEN')}
+              className={clsx(
+                'px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all',
+                subtabAtrasados === 'RESUMEN'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              )}
+            >
+              1. Resumen por Compañía / Cartera ({carterasMora.length})
+            </button>
+            <button
+              onClick={() => setSubtabAtrasados('DETALLE')}
+              className={clsx(
+                'px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all',
+                subtabAtrasados === 'DETALLE'
+                  ? 'bg-red-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              )}
+            >
+              2. Detalle Individual de Clientes en Mora ({clientesMora.length})
+            </button>
+          </div>
+
+          {/* ── TABLA 1: RESUMEN POR COMPAÑÍA / CARTERA ── */}
+          {subtabAtrasados === 'RESUMEN' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-red-600 border-b border-red-700 text-white select-none">
+                      <th className="px-3.5 py-3 text-left font-bold uppercase tracking-wider">Cartera / Empresa</th>
+                      <th className="px-2.5 py-3 text-center font-bold uppercase tracking-wider">Clientes</th>
+                      <th className="px-2.5 py-3 text-center font-bold uppercase tracking-wider">Préstamos</th>
+                      <th className="px-3 py-3 text-right font-bold uppercase tracking-wider">Mora 30 Días</th>
+                      <th className="px-3 py-3 text-right font-bold uppercase tracking-wider">Legal 60 Días</th>
+                      <th className="px-3 py-3 text-right font-bold uppercase tracking-wider">Mora 90+ Días</th>
+                      <th className="px-3 py-3 text-right font-bold uppercase tracking-wider">Total Capital en Mora</th>
+                      <th className="px-3 py-3 text-right font-bold uppercase tracking-wider">Otros Cargos</th>
+                      <th className="px-3 py-3 text-right font-bold uppercase tracking-wider">Total Deuda en Mora</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-100">
+                    {loadingAtrasados ? (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
+                          Analizando cartera y calculando tramos de mora...
+                        </td>
+                      </tr>
+                    ) : carterasMora.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
+                          ¡Excelente! No se registran préstamos en mora para los filtros seleccionados.
+                        </td>
+                      </tr>
+                    ) : (
+                      carterasMora.map((c, idx) => (
+                        <tr key={idx} className="hover:bg-red-50/40 transition-colors font-medium text-slate-800">
+                          <td className="px-3.5 py-2.5 font-bold text-slate-900">{c.cartera}</td>
+                          <td className="px-2.5 py-2.5 text-center font-bold text-red-700">{c.totalClientesMora}</td>
+                          <td className="px-2.5 py-2.5 text-center text-slate-600">{c.totalPrestamosMora}</td>
+                          <td className="px-3 py-2.5 text-right font-mono font-medium text-amber-800">
+                            {fmt(c.capitalMora30Dias)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono font-semibold text-orange-800">
+                            {fmt(c.capitalMora60DiasLegal)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono font-bold text-rose-800">
+                            {fmt(c.capitalMora90MasDias)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono font-bold text-red-700">
+                            {fmt(c.totalCapitalMora)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono text-slate-600">
+                            {fmt(c.otrosCargosMora)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-900">
+                            {fmt(c.totalDeudaMora)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+
+                  {!loadingAtrasados && carterasMora.length > 0 && (
+                    <tfoot>
+                      <tr className="bg-slate-900 text-white font-bold border-t-2 border-slate-950 text-xs">
+                        <td className="px-3.5 py-3 uppercase tracking-wider">
+                          TOTAL GENERAL ({totalesMora.totalCarteras ?? carterasMora.length} Compañías)
+                        </td>
+                        <td className="px-2.5 py-3 text-center text-red-300">
+                          {totalesMora.totalClientesMora}
+                        </td>
+                        <td className="px-2.5 py-3 text-center text-slate-300">
+                          {totalesMora.totalPrestamosMora}
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono text-amber-300">
+                          {fmt(totalesMora.totalCapitalMora30Dias)}
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono text-orange-300">
+                          {fmt(totalesMora.totalCapitalMora60DiasLegal)}
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono text-rose-300">
+                          {fmt(totalesMora.totalCapitalMora90MasDias)}
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono text-red-300">
+                          {fmt(totalesMora.totalCapitalMora)}
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono text-slate-300">
+                          {fmt((Number(totalesMora.totalInteresVencido) || 0) + (Number(totalesMora.totalMoraPendiente) || 0))}
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono text-emerald-300">
+                          {fmt(totalesMora.totalDeudaMora)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── TABLA 2: DETALLE INDIVIDUAL DE CLIENTES EN MORA ── */}
+          {subtabAtrasados === 'DETALLE' && (
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-red-600 border-b border-red-700 text-white select-none">
+                      <th className="px-3.5 py-3 text-left font-bold uppercase tracking-wider">Cliente</th>
+                      <th className="px-3 py-3 text-left font-bold uppercase tracking-wider">Cédula</th>
+                      <th className="px-3 py-3 text-left font-bold uppercase tracking-wider">Teléfono</th>
+                      <th className="px-3 py-3 text-left font-bold uppercase tracking-wider">Empresa</th>
+                      <th className="px-2.5 py-3 text-center font-bold uppercase tracking-wider">Préstamo</th>
+                      <th className="px-2.5 py-3 text-center font-bold uppercase tracking-wider">Días Atraso</th>
+                      <th className="px-3 py-3 text-center font-bold uppercase tracking-wider">Tramo de Mora</th>
+                      <th className="px-2 py-3 text-center font-bold uppercase tracking-wider">Cuotas</th>
+                      <th className="px-3 py-3 text-right font-bold uppercase tracking-wider">Capital Vencido</th>
+                      <th className="px-3 py-3 text-right font-bold uppercase tracking-wider">Interés Vencido</th>
+                      <th className="px-3 py-3 text-right font-bold uppercase tracking-wider">Total Vencido</th>
+                      <th className="px-3 py-3 text-right font-bold uppercase tracking-wider">Saldo Capital</th>
+                      <th className="px-2.5 py-3 text-center font-bold uppercase tracking-wider">Acción</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-slate-100">
+                    {loadingAtrasados ? (
+                      <tr>
+                        <td colSpan={13} className="px-4 py-12 text-center text-slate-400">
+                          Cargando detalle de clientes en mora...
+                        </td>
+                      </tr>
+                    ) : clientesMora.length === 0 ? (
+                      <tr>
+                        <td colSpan={13} className="px-4 py-12 text-center text-slate-400">
+                          No se encontraron clientes con mora registrada.
+                        </td>
+                      </tr>
+                    ) : (
+                      clientesMora.map((cl) => {
+                        const tramoColor = cl.tramoMora === '30 DIAS'
+                          ? 'bg-amber-100 text-amber-900 border-amber-300'
+                          : cl.tramoMora === 'LEGAL 60 DIAS'
+                          ? 'bg-orange-100 text-orange-900 border-orange-300'
+                          : 'bg-red-100 text-red-950 font-bold border-red-300'
+                        return (
+                          <tr key={cl.numeroPrestamo} className="hover:bg-red-50/30 transition-colors font-medium text-slate-800">
+                            <td className="px-3.5 py-2.5 font-bold text-slate-900 whitespace-nowrap">
+                              {cl.nombreCliente}
+                            </td>
+                            <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{cl.cedula || '—'}</td>
+                            <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap">{cl.telefono || '—'}</td>
+                            <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{cl.empresa || '—'}</td>
+                            <td className="px-2.5 py-2.5 text-center font-mono font-bold text-blue-700 whitespace-nowrap">
+                              #{cl.numeroPrestamo}
+                            </td>
+                            <td className="px-2.5 py-2.5 text-center font-bold font-mono text-red-600 whitespace-nowrap">
+                              {cl.diasAtraso} d
+                            </td>
+                            <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                              <span className={clsx('px-2 py-0.5 rounded text-[10px] font-bold border inline-block', tramoColor)}>
+                                {cl.tramoMora}
+                              </span>
+                            </td>
+                            <td className="px-2 py-2.5 text-center font-mono text-slate-700 whitespace-nowrap">
+                              {cl.cuotasVencidas}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono font-bold text-red-700 whitespace-nowrap">
+                              {fmt(cl.capitalVencido)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono text-indigo-700 whitespace-nowrap">
+                              {fmt(cl.interesVencido)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                              {fmt(cl.totalVencido)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono text-slate-600 whitespace-nowrap">
+                              {fmt(cl.saldoCapital)}
+                            </td>
+                            <td className="px-2.5 py-2.5 text-center whitespace-nowrap">
+                              <Link
+                                to={`/prestamos/${cl.numeroPrestamo}`}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                                title="Ver consulta integral del préstamo y cuotas"
+                              >
+                                Ver
+                                <ExternalLink size={10} />
+                              </Link>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+
+                  {!loadingAtrasados && clientesMora.length > 0 && (
+                    <tfoot>
+                      <tr className="bg-slate-900 text-white font-bold border-t-2 border-slate-950 text-xs">
+                        <td colSpan={4} className="px-3.5 py-3 uppercase tracking-wider">
+                          TOTAL ({clientesMora.length} Clientes)
+                        </td>
+                        <td colSpan={4} className="px-2 py-3 text-center font-mono text-slate-300">
+                          {totalesMora.totalPrestamosMora} préstamos
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono text-red-300">
+                          {fmt(totalesMora.totalCapitalMora)}
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono text-indigo-300">
+                          {fmt(totalesMora.totalInteresVencido)}
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono text-emerald-300">
+                          {fmt(totalesMora.totalDeudaMora)}
+                        </td>
+                        <td colSpan={2} className="px-3 py-3 text-slate-400 text-center text-[11px]">
+                          Corte al {fechaHasta}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          )}
         </section>
       )}
 

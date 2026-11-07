@@ -18,6 +18,10 @@ from models.schemas import (
     ReporteConsolidadoCarteraResponse,
     ReporteConsolidadoCarteraTotales,
     ReporteConsolidadoCarteraItem,
+    ReporteClientesAtrasadosResponse,
+    ReporteMoraTotales,
+    ReporteMoraCarteraItem,
+    ReporteMoraClienteItem,
 )
 
 router = APIRouter(prefix="/api/reportes", tags=["Reportes"])
@@ -152,3 +156,53 @@ def get_reporte_consolidado_cartera(
     totales = ReporteConsolidadoCarteraTotales(**totales_dict)
 
     return ReporteConsolidadoCarteraResponse(totales=totales, filas=filas)
+
+
+@router.get(
+    "/clientes-atrasados",
+    response_model=ReporteClientesAtrasadosResponse,
+    summary="Informe 3: Clientes Atrasados / Mora por Tramos (30d, Legal 60d, 90+d) y Compañía",
+)
+def get_reporte_clientes_atrasados(
+    fechaCorte: Optional[date] = Query(None, description="Fecha de corte consultada (por defecto hoy)"),
+    empresa:    Optional[str]  = Query(None, description="Filtrar por Cartera / Empresa específica"),
+):
+    try:
+        empresa_param = empresa.strip() if empresa and empresa.strip() else None
+
+        result_sets = execute_sp_multi(
+            "cxcReporteClientesAtrasados",
+            fechaCorte,
+            empresa_param,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error al ejecutar cxcReporteClientesAtrasados: {exc}") from exc
+
+    if len(result_sets) < 3:
+        raise HTTPException(
+            status_code=500,
+            detail=f"El procedimiento devolvió {len(result_sets)} result sets; se esperaban 3.",
+        )
+
+    rs_carteras, rs_clientes, rs_totales = result_sets[0], result_sets[1], result_sets[2]
+
+    totales_dict = rs_totales[0] if rs_totales else {
+        "totalCarteras": 0,
+        "totalClientesMora": 0,
+        "totalPrestamosMora": 0,
+        "totalCapitalMora30Dias": 0,
+        "totalCapitalMora60DiasLegal": 0,
+        "totalCapitalMora90MasDias": 0,
+        "totalCapitalMora": 0,
+        "totalInteresVencido": 0,
+        "totalMoraPendiente": 0,
+        "totalDeudaMora": 0,
+        "fechaCorte": fechaCorte,
+    }
+
+    carteras = [ReporteMoraCarteraItem(**r) for r in rs_carteras]
+    clientes = [ReporteMoraClienteItem(**r) for r in rs_clientes]
+    totales = ReporteMoraTotales(**totales_dict)
+
+    return ReporteClientesAtrasadosResponse(totales=totales, carteras=carteras, clientes=clientes)
+

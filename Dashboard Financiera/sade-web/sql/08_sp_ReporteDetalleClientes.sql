@@ -164,6 +164,7 @@ BEGIN
         totalCobradoQuincena    DECIMAL(18,2),
         balanceActual           DECIMAL(18,2),
         clasificacion           VARCHAR(50),
+        diasAtraso              INT,
         comentario              VARCHAR(250),
         totalPrestamosHist      INT,
         esNuevoEnPeriodo        BIT,
@@ -216,7 +217,8 @@ BEGIN
             dp.dp_id_prestamos,
             ISNULL(SUM(dp.dp_saldo_capital), 0) AS balanceCapital,
             ISNULL(SUM(dp.dp_saldo_capital + dp.dp_saldo_interes), 0) AS balanceTotalCuotas,
-            SUM(CASE WHEN dp.dp_estado = 1 AND CAST(dp.dp_fecha_venc AS DATE) < @Hoy AND (ISNULL(dp.dp_saldo_capital, 0) + ISNULL(dp.dp_saldo_interes, 0)) > 0 THEN 1 ELSE 0 END) AS cuotasVencidas
+            SUM(CASE WHEN dp.dp_estado = 1 AND CAST(dp.dp_fecha_venc AS DATE) < @Hoy AND (ISNULL(dp.dp_saldo_capital, 0) + ISNULL(dp.dp_saldo_interes, 0)) > 0 THEN 1 ELSE 0 END) AS cuotasVencidas,
+            MIN(CASE WHEN dp.dp_estado = 1 AND CAST(dp.dp_fecha_venc AS DATE) < @Hoy AND (ISNULL(dp.dp_saldo_capital, 0) + ISNULL(dp.dp_saldo_interes, 0)) > 0 THEN CAST(dp.dp_fecha_venc AS DATE) END) AS minFechaVencida
         FROM dbsolonegocios.dbo.tb_detalle_prestamos dp WITH (NOLOCK)
         INNER JOIN #PrestamosCandidatos pc 
             ON pc.pr_id_prestamos = dp.dp_id_prestamos AND pc.pr_id_oficina = dp.dp_id_oficina
@@ -252,6 +254,11 @@ BEGIN
             ISNULL(cq.totalCobrado, 0)       AS totalCobradoQuincena,
             ISNULL(ci.cuotasVencidas, 0)     AS cuotasVencidas,
             ISNULL(hc.totalPrestamos, 1)     AS totalPrestamosHist,
+            CASE 
+                WHEN ISNULL(ci.cuotasVencidas, 0) > 0 AND ci.minFechaVencida IS NOT NULL
+                THEN DATEDIFF(day, ci.minFechaVencida, @Hoy)
+                ELSE 0 
+            END AS diasAtraso,
             
             CASE 
                 WHEN pc.pr_estado = 1 
@@ -368,9 +375,16 @@ BEGIN
             WHEN pe.otorgadoEnQuincena = 1 AND pe.totalPrestamosHist > 1
                 THEN 'REENGANCHADO'
             WHEN pe.cuotasVencidas > 0 AND pe.esActivo = 1
-                THEN 'SITUACION ATRASO'
+                THEN CASE 
+                    WHEN pe.diasAtraso <= 15 THEN 'SITUACION ATRASO (15 DIAS)'
+                    WHEN pe.diasAtraso <= 30 THEN 'SITUACION ATRASO (30 DIAS)'
+                    WHEN pe.diasAtraso <= 45 THEN 'SITUACION ATRASO (45 DIAS)'
+                    ELSE 'SITUACION ATRASO (60+ DIAS)'
+                END
             ELSE 'AL DIA'
         END AS clasificacion,
+
+        pe.diasAtraso,
 
         -- Comentario descriptivo:
         CASE 
@@ -383,7 +397,7 @@ BEGIN
             WHEN pe.otorgadoEnQuincena = 1 AND pe.totalPrestamosHist > 1
                 THEN 'Reenganche otorgado en período'
             WHEN pe.cuotasVencidas > 0 AND pe.esActivo = 1
-                THEN 'Presenta cuotas con atraso'
+                THEN 'Presenta cuotas con ' + CAST(pe.diasAtraso AS VARCHAR(10)) + ' días de atraso'
             WHEN pe.totalCobradoQuincena > 0
                 THEN 'Cobro quincenal aplicado'
             ELSE ''
@@ -410,15 +424,24 @@ BEGIN
         DELETE FROM #ReporteDetalle WHERE clasificacion <> 'REENGANCHADO';
     ELSE IF @tipoReporte = 'CANCELADOS'
         DELETE FROM #ReporteDetalle WHERE clasificacion <> 'CANCELADO';
-    ELSE IF @tipoReporte = 'EN MORA' OR @tipoReporte = 'ATRASO'
-        DELETE FROM #ReporteDetalle WHERE clasificacion <> 'SITUACION ATRASO';
     ELSE IF @tipoReporte = 'AL DIA'
         DELETE FROM #ReporteDetalle WHERE clasificacion <> 'AL DIA';
+    ELSE IF @tipoReporte IN ('ATRASO 15', 'ATRASO 15 DIAS', '15 DIAS', '15')
+        DELETE FROM #ReporteDetalle WHERE clasificacion <> 'SITUACION ATRASO (15 DIAS)';
+    ELSE IF @tipoReporte IN ('ATRASO 30', 'ATRASO 30 DIAS', '30 DIAS', '30')
+        DELETE FROM #ReporteDetalle WHERE clasificacion <> 'SITUACION ATRASO (30 DIAS)';
+    ELSE IF @tipoReporte IN ('ATRASO 45', 'ATRASO 45 DIAS', '45 DIAS', '45')
+        DELETE FROM #ReporteDetalle WHERE clasificacion <> 'SITUACION ATRASO (45 DIAS)';
+    ELSE IF @tipoReporte IN ('ATRASO 60', 'ATRASO 60 DIAS', 'ATRASO 60+', 'ATRASO 60+ DIAS', '60 DIAS', '60')
+        DELETE FROM #ReporteDetalle WHERE clasificacion <> 'SITUACION ATRASO (60+ DIAS)';
+    ELSE IF @tipoReporte IN ('EN MORA', 'ATRASO', 'SITUACION ATRASO')
+        DELETE FROM #ReporteDetalle WHERE clasificacion NOT LIKE 'SITUACION ATRASO%';
 
     -- ── Result Set 1: Listado Detalle por Préstamo ───────────────────
     SELECT 
         idCliente,
         clasificacion,
+        diasAtraso,
         nombreCliente,
         cedula,
         empresa,

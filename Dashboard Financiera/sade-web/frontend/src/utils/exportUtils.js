@@ -629,6 +629,8 @@ export function exportarReporteCompletoLibroExcel({
   totalesReenganches = {},
   cancelados = [],
   totalesCancelados = {},
+  carteraMora = [],
+  totalesMora = {},
   nombreArchivo = 'Informe_Financiero_SADE_Completo',
   empresa = '',
   fechaDesde = '',
@@ -745,6 +747,38 @@ export function exportarReporteCompletoLibroExcel({
       subtituloPeriodo
     )
     XLSX.utils.book_append_sheet(workbook, wsDet, 'DETALLE COMPLETO')
+  }
+
+  // 6. Pestaña: CARTERA EN MORA (Por Tramos y Compañía)
+  if (carteraMora.length > 0) {
+    const rowsMora = carteraMora.map((c) => ({
+      'CARTERA / EMPRESA': c.cartera,
+      'CLIENTES EN MORA': Number(c.totalClientesMora) || 0,
+      'PRÉSTAMOS EN MORA': Number(c.totalPrestamosMora) || 0,
+      'MORA 30 DÍAS': Number(c.capitalMora30Dias) || 0,
+      'LEGAL 60 DÍAS': Number(c.capitalMora60DiasLegal) || 0,
+      'MORA 90+ DÍAS': Number(c.capitalMora90MasDias) || 0,
+      'TOTAL CAPITAL EN MORA': Number(c.totalCapitalMora) || 0,
+      'OTROS CARGOS (INT/MORA)': Number(c.otrosCargosMora) || 0,
+      'TOTAL DEUDA EN MORA': Number(c.totalDeudaMora) || 0,
+    }))
+    rowsMora.push({
+      'CARTERA / EMPRESA': 'TOTAL GENERAL',
+      'CLIENTES EN MORA': Number(totalesMora.totalClientesMora) || 0,
+      'PRÉSTAMOS EN MORA': Number(totalesMora.totalPrestamosMora) || 0,
+      'MORA 30 DÍAS': Number(totalesMora.totalCapitalMora30Dias) || 0,
+      'LEGAL 60 DÍAS': Number(totalesMora.totalCapitalMora60DiasLegal) || 0,
+      'MORA 90+ DÍAS': Number(totalesMora.totalCapitalMora90MasDias) || 0,
+      'TOTAL CAPITAL EN MORA': Number(totalesMora.totalCapitalMora) || 0,
+      'OTROS CARGOS (INT/MORA)': (Number(totalesMora.totalInteresVencido) || 0) + (Number(totalesMora.totalMoraPendiente) || 0),
+      'TOTAL DEUDA EN MORA': Number(totalesMora.totalDeudaMora) || 0,
+    })
+    const wsMora = crearHojaConTitulo(
+      rowsMora,
+      `INFORME DE CARTERA EN MORA POR TRAMOS Y COMPAÑÍA${sufijoEmpresa}`,
+      subtituloPeriodo
+    )
+    XLSX.utils.book_append_sheet(workbook, wsMora, 'CARTERA EN MORA')
   }
 
   XLSX.writeFile(workbook, `${nombreArchivo}_${new Date().toISOString().slice(0, 10)}.xlsx`)
@@ -905,3 +939,431 @@ export function exportarDashboardPDF(kpis, cobrosPorMes = []) {
 
   doc.save(`Reporte_Ejecutivo_Dashboard_${new Date().toISOString().slice(0, 10)}.pdf`)
 }
+
+/**
+ * 8. Exporta la Tabla de Cuotas de un Préstamo a Excel
+ */
+export function exportarCuotasExcel(cuotas = [], prestamoInfo = {}, nombreArchivo = null) {
+  if (!cuotas || cuotas.length === 0) return
+
+  const numPres = prestamoInfo.numeroPrestamo || prestamoInfo.idCxc || 'Detalle'
+  const cliNom = prestamoInfo.nombreCliente || 'Cliente'
+
+  const rows = cuotas.map((c) => ({
+    '# Cuota': c.numCuota,
+    'Fecha Vencimiento': fmtDate(c.fecha),
+    'Balance Cuota': Number(c.balance) || 0,
+    'Capital': Number(c.capital) || 0,
+    'Interés': Number(c.interes) || 0,
+    'Mora': Number(c.mora) || 0,
+    'Estado': c.estadoCuota || c.estado || 'PENDIENTE',
+  }))
+
+  // Fila de totales
+  const totBal = cuotas.reduce((s, c) => s + (Number(c.balance) || 0), 0)
+  const totCap = cuotas.reduce((s, c) => s + (Number(c.capital) || 0), 0)
+  const totInt = cuotas.reduce((s, c) => s + (Number(c.interes) || 0), 0)
+  const totMor = cuotas.reduce((s, c) => s + (Number(c.mora) || 0), 0)
+
+  rows.push({
+    '# Cuota': 'TOTAL GENERAL',
+    'Fecha Vencimiento': `${cuotas.length} cuotas`,
+    'Balance Cuota': totBal,
+    'Capital': totCap,
+    'Interés': totInt,
+    'Mora': totMor,
+    'Estado': '',
+  })
+
+  const sub = `Cliente: ${cliNom} | Cédula: ${prestamoInfo.cedula || '—'} | Préstamo #${numPres} | Empresa: ${prestamoInfo.empresa || '—'}`
+  const ws = crearHojaConTitulo(rows, `TABLA DE CUOTAS — PRÉSTAMO #${numPres}`, sub)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, `Cuotas_${numPres}`)
+
+  const filename = nombreArchivo || `Cuotas_Prestamo_${numPres}_${new Date().toISOString().slice(0, 10)}.xlsx`
+  XLSX.writeFile(wb, filename)
+}
+
+/**
+ * 9. Exporta la Tabla de Cuotas de un Préstamo a PDF
+ */
+export function exportarCuotasPDF(cuotas = [], prestamoInfo = {}, nombreArchivo = null) {
+  if (!cuotas || cuotas.length === 0) return
+
+  const numPres = prestamoInfo.numeroPrestamo || prestamoInfo.idCxc || 'Detalle'
+  const cliNom = prestamoInfo.nombreCliente || 'Cliente'
+  const doc = new jsPDF('portrait', 'pt', 'letter')
+
+  // Encabezado
+  doc.setFontSize(14)
+  doc.setTextColor(30, 58, 95)
+  doc.text('SADE WEB — TABLA DE AMORTIZACIÓN Y CUOTAS', 40, 38)
+
+  doc.setFontSize(10)
+  doc.setTextColor(50)
+  doc.text(`Préstamo #${numPres}  |  Cliente: ${cliNom}  |  Cédula: ${prestamoInfo.cedula || '—'}`, 40, 54)
+  doc.text(`Empresa / Cartera: ${prestamoInfo.empresa || '—'}  |  Tasa: ${prestamoInfo.tasaInteres || prestamoInfo.tasa || '—'}%  |  Capital Pendiente: ${fmtMoney(prestamoInfo.capitalBalance || 0)}`, 40, 68)
+
+  doc.setFontSize(8.5)
+  doc.setTextColor(110)
+  doc.text(`Emisión: ${new Date().toLocaleDateString('es-DO')} ${new Date().toLocaleTimeString('es-DO')}  |  Total Cuotas: ${cuotas.length}`, 40, 82)
+
+  const cols = ['#', 'VENCIMIENTO', 'BALANCE', 'CAPITAL', 'INTERÉS', 'MORA', 'ESTADO']
+  const rows = cuotas.map((c) => [
+    String(c.numCuota),
+    fmtDate(c.fecha),
+    fmtMoney(c.balance),
+    fmtMoney(c.capital),
+    fmtMoney(c.interes),
+    fmtMoney(c.mora),
+    c.estadoCuota || c.estado || 'PENDIENTE',
+  ])
+
+  const totBal = cuotas.reduce((s, c) => s + (Number(c.balance) || 0), 0)
+  const totCap = cuotas.reduce((s, c) => s + (Number(c.capital) || 0), 0)
+  const totInt = cuotas.reduce((s, c) => s + (Number(c.interes) || 0), 0)
+  const totMor = cuotas.reduce((s, c) => s + (Number(c.mora) || 0), 0)
+
+  const foot = [
+    'TOTAL',
+    `${cuotas.length} cuotas`,
+    fmtMoney(totBal),
+    fmtMoney(totCap),
+    fmtMoney(totInt),
+    fmtMoney(totMor),
+    '',
+  ]
+
+  autoTable(doc, {
+    head: [cols],
+    body: rows,
+    foot: [foot],
+    startY: 94,
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 3.5 },
+    headStyles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold' },
+    footStyles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+  })
+
+  const filename = nombreArchivo || `Cuotas_Prestamo_${numPres}_${new Date().toISOString().slice(0, 10)}.pdf`
+  doc.save(filename)
+}
+
+/**
+ * 10. Exporta el Historial de Pagos (Recibos) de un Préstamo a Excel
+ */
+export function exportarHistorialPagosExcel(recibos = [], prestamoInfo = {}, nombreArchivo = null) {
+  if (!recibos || recibos.length === 0) return
+
+  const numPres = prestamoInfo.numeroPrestamo || prestamoInfo.idCxc || 'Detalle'
+  const cliNom = prestamoInfo.nombreCliente || 'Cliente'
+
+  const rows = recibos.map((r) => ({
+    'Recibo #': r.numeroPago,
+    'Fecha de Pago': fmtDate(r.fecha),
+    'Total Pagado': Number(r.totalPagado) || 0,
+    'Capital Aplicado': Number(r.capital) || 0,
+    'Interés Aplicado': Number(r.interes) || 0,
+    'Mora Aplicada': Number(r.mora) || 0,
+    'Usuario / Caja': r.usuario || '—',
+  }))
+
+  const totTot = recibos.reduce((s, r) => s + (Number(r.totalPagado) || 0), 0)
+  const totCap = recibos.reduce((s, r) => s + (Number(r.capital) || 0), 0)
+  const totInt = recibos.reduce((s, r) => s + (Number(r.interes) || 0), 0)
+  const totMor = recibos.reduce((s, r) => s + (Number(r.mora) || 0), 0)
+
+  rows.push({
+    'Recibo #': 'TOTAL COBRADO',
+    'Fecha de Pago': `${recibos.length} recibos`,
+    'Total Pagado': totTot,
+    'Capital Aplicado': totCap,
+    'Interés Aplicado': totInt,
+    'Mora Aplicada': totMor,
+    'Usuario / Caja': '',
+  })
+
+  const sub = `Cliente: ${cliNom} | Cédula: ${prestamoInfo.cedula || '—'} | Préstamo #${numPres} | Total Pagado: ${fmtMoney(totTot)}`
+  const ws = crearHojaConTitulo(rows, `HISTORIAL DE PAGOS Y RECIBOS — PRÉSTAMO #${numPres}`, sub)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, `Pagos_${numPres}`)
+
+  const filename = nombreArchivo || `Historial_Pagos_Prestamo_${numPres}_${new Date().toISOString().slice(0, 10)}.xlsx`
+  XLSX.writeFile(wb, filename)
+}
+
+/**
+ * 11. Exporta el Historial de Pagos (Recibos) de un Préstamo a PDF
+ */
+export function exportarHistorialPagosPDF(recibos = [], prestamoInfo = {}, nombreArchivo = null) {
+  if (!recibos || recibos.length === 0) return
+
+  const numPres = prestamoInfo.numeroPrestamo || prestamoInfo.idCxc || 'Detalle'
+  const cliNom = prestamoInfo.nombreCliente || 'Cliente'
+  const doc = new jsPDF('portrait', 'pt', 'letter')
+
+  doc.setFontSize(14)
+  doc.setTextColor(30, 58, 95)
+  doc.text('SADE WEB — HISTORIAL DE PAGOS Y RECIBOS', 40, 38)
+
+  doc.setFontSize(10)
+  doc.setTextColor(50)
+  doc.text(`Préstamo #${numPres}  |  Cliente: ${cliNom}  |  Cédula: ${prestamoInfo.cedula || '—'}`, 40, 54)
+  doc.text(`Empresa / Cartera: ${prestamoInfo.empresa || '—'}  |  Total Recibos Emitidos: ${recibos.length}`, 40, 68)
+
+  doc.setFontSize(8.5)
+  doc.setTextColor(110)
+  doc.text(`Emisión: ${new Date().toLocaleDateString('es-DO')} ${new Date().toLocaleTimeString('es-DO')}`, 40, 82)
+
+  const cols = ['RECIBO #', 'FECHA PAGO', 'TOTAL PAGADO', 'CAPITAL', 'INTERÉS', 'MORA', 'OPERADOR']
+  const rows = recibos.map((r) => [
+    `#${r.numeroPago}`,
+    fmtDate(r.fecha),
+    fmtMoney(r.totalPagado),
+    fmtMoney(r.capital),
+    fmtMoney(r.interes),
+    fmtMoney(r.mora),
+    r.usuario || '—',
+  ])
+
+  const totTot = recibos.reduce((s, r) => s + (Number(r.totalPagado) || 0), 0)
+  const totCap = recibos.reduce((s, r) => s + (Number(r.capital) || 0), 0)
+  const totInt = recibos.reduce((s, r) => s + (Number(r.interes) || 0), 0)
+  const totMor = recibos.reduce((s, r) => s + (Number(r.mora) || 0), 0)
+
+  const foot = [
+    'TOTAL',
+    `${recibos.length} recibos`,
+    fmtMoney(totTot),
+    fmtMoney(totCap),
+    fmtMoney(totInt),
+    fmtMoney(totMor),
+    '',
+  ]
+
+  autoTable(doc, {
+    head: [cols],
+    body: rows,
+    foot: [foot],
+    startY: 94,
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 4 },
+    headStyles: { fillColor: [15, 118, 110], textColor: [255, 255, 255], fontStyle: 'bold' },
+    footStyles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+  })
+
+  const filename = nombreArchivo || `Historial_Pagos_Prestamo_${numPres}_${new Date().toISOString().slice(0, 10)}.pdf`
+  doc.save(filename)
+}
+
+/**
+ * 12. Exporta el Reporte Especializado de Clientes Atrasados / Mora por Tramos a Excel (2 Hojas)
+ */
+export function exportarReporteClientesAtrasadosExcel({
+  carteras = [],
+  clientes = [],
+  totales = {},
+  nombreArchivo = 'Reporte_Cartera_En_Mora',
+  titulo = 'INFORME DE CARTERA EN MORA POR TRAMOS Y COMPAÑÍA',
+  fechaCorte = null,
+}) {
+  const wb = XLSX.utils.book_new()
+  const fechaStr = fechaCorte ? fmtDate(fechaCorte) : fmtDate(new Date())
+
+  // Hoja 1: Resumen por Compañía / Cartera
+  const carterasRows = carteras.map((c) => ({
+    'Cartera / Empresa': c.cartera,
+    'Clientes en Mora': c.totalClientesMora,
+    'Préstamos en Mora': c.totalPrestamosMora,
+    'Mora 30 Días (RD$)': Number(c.capitalMora30Dias) || 0,
+    'Legal 60 Días (RD$)': Number(c.capitalMora60DiasLegal) || 0,
+    'Mora 90+ Días (RD$)': Number(c.capitalMora90MasDias) || 0,
+    'Total Capital en Mora (RD$)': Number(c.totalCapitalMora) || 0,
+    'Otros Cargos (Int/Mora)': Number(c.otrosCargosMora) || 0,
+    'Total Deuda en Mora (RD$)': Number(c.totalDeudaMora) || 0,
+  }))
+
+  carterasRows.push({
+    'Cartera / Empresa': 'TOTAL GENERAL',
+    'Clientes en Mora': totales.totalClientesMora || 0,
+    'Préstamos en Mora': totales.totalPrestamosMora || 0,
+    'Mora 30 Días (RD$)': Number(totales.totalCapitalMora30Dias) || 0,
+    'Legal 60 Días (RD$)': Number(totales.totalCapitalMora60DiasLegal) || 0,
+    'Mora 90+ Días (RD$)': Number(totales.totalCapitalMora90MasDias) || 0,
+    'Total Capital en Mora (RD$)': Number(totales.totalCapitalMora) || 0,
+    'Otros Cargos (Int/Mora)': (Number(totales.totalInteresVencido) || 0) + (Number(totales.totalMoraPendiente) || 0),
+    'Total Deuda en Mora (RD$)': Number(totales.totalDeudaMora) || 0,
+  })
+
+  const wsCarteras = crearHojaConTitulo(
+    carterasRows,
+    titulo,
+    `Fecha de Corte: ${fechaStr}  |  Total Carteras con Mora: ${carteras.length}`
+  )
+  XLSX.utils.book_append_sheet(wb, wsCarteras, 'Resumen por Compañía')
+
+  // Hoja 2: Detalle Individual de Clientes en Mora
+  const clientesRows = clientes.map((cl) => ({
+    'ID Cliente': cl.idCliente,
+    'Nombre del Cliente': cl.nombreCliente,
+    'Cédula': cl.cedula || '—',
+    'Teléfono': cl.telefono || '—',
+    'Empresa / Cartera': cl.empresa || '—',
+    'Préstamo #': cl.numeroPrestamo,
+    'Días Atraso': cl.diasAtraso,
+    'Tramo de Mora': cl.tramoMora,
+    'Cuotas Vencidas': cl.cuotasVencidas,
+    '1er Vencimiento': fmtDate(cl.primeraFechaVenc),
+    'Capital Vencido (RD$)': Number(cl.capitalVencido) || 0,
+    'Interés Vencido (RD$)': Number(cl.interesVencido) || 0,
+    'Mora Pendiente (RD$)': Number(cl.moraPendiente) || 0,
+    'Total Vencido (RD$)': Number(cl.totalVencido) || 0,
+    'Saldo Capital Total (RD$)': Number(cl.saldoCapital) || 0,
+    'Tasa': `${cl.tasa}%`,
+  }))
+
+  const wsClientes = crearHojaConTitulo(
+    clientesRows,
+    'DETALLE INDIVIDUAL DE CLIENTES EN MORA',
+    `Fecha de Corte: ${fechaStr}  |  Total Clientes Atrasados: ${clientes.length}`
+  )
+  XLSX.utils.book_append_sheet(wb, wsClientes, 'Detalle Clientes Atrasados')
+
+  XLSX.writeFile(wb, `${nombreArchivo}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+}
+
+/**
+ * 13. Exporta el Reporte Especializado de Clientes Atrasados / Mora por Tramos a PDF
+ */
+export function exportarReporteClientesAtrasadosPDF({
+  carteras = [],
+  clientes = [],
+  totales = {},
+  titulo = 'INFORME DE CARTERA EN MORA POR TRAMOS Y COMPAÑÍA',
+  nombreArchivo = 'Reporte_Cartera_En_Mora',
+  fechaCorte = null,
+}) {
+  const doc = new jsPDF('landscape', 'pt', 'letter')
+  const fechaStr = fechaCorte ? fmtDate(fechaCorte) : fmtDate(new Date())
+
+  // Encabezado
+  doc.setFontSize(14)
+  doc.setTextColor(30, 58, 95)
+  doc.text('SADE WEB — SISTEMA DE GESTIÓN FINANCIERA', 40, 36)
+
+  doc.setFontSize(11)
+  doc.setTextColor(180, 40, 40)
+  doc.text(titulo.toUpperCase(), 40, 52)
+
+  doc.setFontSize(9)
+  doc.setTextColor(80)
+  doc.text(
+    `Fecha de Corte: ${fechaStr}  |  Capital en Mora: ${fmtMoney(totales.totalCapitalMora)}  |  Clientes Atrasados: ${totales.totalClientesMora || 0}`,
+    40,
+    66
+  )
+
+  // Tabla 1: Resumen por Compañía y Tramos de Mora
+  const headCols = [
+    'CARTERA / EMPRESA',
+    'CLI.',
+    'PRÉST.',
+    'MORA 30 DÍAS',
+    'LEGAL 60 DÍAS',
+    'MORA 90+ DÍAS',
+    'CAPITAL EN MORA',
+    'OTROS CARGOS',
+    'TOTAL EN MORA',
+  ]
+
+  const bodyRows = carteras.map((c) => [
+    c.cartera,
+    String(c.totalClientesMora),
+    String(c.totalPrestamosMora),
+    fmtMoney(c.capitalMora30Dias),
+    fmtMoney(c.capitalMora60DiasLegal),
+    fmtMoney(c.capitalMora90MasDias),
+    fmtMoney(c.totalCapitalMora),
+    fmtMoney(c.otrosCargosMora),
+    fmtMoney(c.totalDeudaMora),
+  ])
+
+  const footCols = [
+    'TOTAL GENERAL',
+    String(totales.totalClientesMora || 0),
+    String(totales.totalPrestamosMora || 0),
+    fmtMoney(totales.totalCapitalMora30Dias),
+    fmtMoney(totales.totalCapitalMora60DiasLegal),
+    fmtMoney(totales.totalCapitalMora90MasDias),
+    fmtMoney(totales.totalCapitalMora),
+    fmtMoney((Number(totales.totalInteresVencido) || 0) + (Number(totales.totalMoraPendiente) || 0)),
+    fmtMoney(totales.totalDeudaMora),
+  ]
+
+  autoTable(doc, {
+    head: [headCols],
+    body: bodyRows,
+    foot: [footCols],
+    startY: 80,
+    theme: 'grid',
+    styles: { fontSize: 7.5, cellPadding: 3.5 },
+    headStyles: { fillColor: [180, 40, 40], textColor: [255, 255, 255], fontStyle: 'bold' },
+    footStyles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+  })
+
+  // Tabla 2: Detalle de Clientes en Mora (en página nueva o continuación)
+  if (clientes && clientes.length > 0) {
+    doc.addPage()
+    doc.setFontSize(12)
+    doc.setTextColor(30, 58, 95)
+    doc.text('DETALLE INDIVIDUAL DE CLIENTES EN ESTADO DE MORA', 40, 36)
+
+    doc.setFontSize(8.5)
+    doc.setTextColor(100)
+    doc.text(`Fecha de Corte: ${fechaStr}  |  Total Clientes: ${clientes.length}`, 40, 50)
+
+    const cliCols = [
+      'CLIENTE',
+      'CÉDULA',
+      'TELÉFONO',
+      'EMPRESA',
+      'PRÉSTAMO',
+      'DÍAS',
+      'TRAMO',
+      'CUOTAS',
+      'CAPITAL VENCIDO',
+      'INTERÉS',
+      'TOTAL VENCIDO',
+    ]
+
+    const cliRows = clientes.map((cl) => [
+      cl.nombreCliente,
+      cl.cedula || '—',
+      cl.telefono || '—',
+      (cl.empresa || '—').slice(0, 22),
+      `#${cl.numeroPrestamo}`,
+      String(cl.diasAtraso),
+      cl.tramoMora,
+      String(cl.cuotasVencidas),
+      fmtMoney(cl.capitalVencido),
+      fmtMoney(cl.interesVencido),
+      fmtMoney(cl.totalVencido),
+    ])
+
+    autoTable(doc, {
+      head: [cliCols],
+      body: cliRows,
+      startY: 60,
+      theme: 'grid',
+      styles: { fontSize: 7, cellPadding: 3 },
+      headStyles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    })
+  }
+
+  doc.save(`${nombreArchivo}_${new Date().toISOString().slice(0, 10)}.pdf`)
+}
+

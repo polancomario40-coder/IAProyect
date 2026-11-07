@@ -15,6 +15,8 @@ import {
   Clock,
   ShieldCheck,
   Calculator,
+  FileSpreadsheet,
+  FileText,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useState } from 'react'
@@ -23,6 +25,12 @@ import SummaryBlock from '../components/SummaryBlock'
 import CuotasTable from '../components/CuotasTable'
 import RecibosTable from '../components/RecibosTable'
 import ClientePerfilModal from '../components/ClientePerfilModal'
+import {
+  exportarCuotasExcel,
+  exportarCuotasPDF,
+  exportarHistorialPagosExcel,
+  exportarHistorialPagosPDF,
+} from '../utils/exportUtils'
 
 const fmt = (n) =>
   new Intl.NumberFormat('es-DO', {
@@ -291,21 +299,45 @@ export default function LoanDetail() {
 
         {/* Cuotas — más ancho (3/5) */}
         <div className="xl:col-span-3 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CreditCard size={16} className="text-blue-500" />
-              <h2 className="font-semibold text-slate-800 text-sm">Tabla de Cuotas</h2>
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <CreditCard size={16} className="text-blue-500" />
+                <h2 className="font-semibold text-slate-800 text-sm">Tabla de Cuotas</h2>
+              </div>
+              {conteos && (
+                <span className="text-xs text-slate-400 font-mono">
+                  {conteos.totalCuotas} cuotas
+                  {enc?.cuotasVencidas > 0 && (
+                    <span className="ml-1.5 text-red-500 font-semibold">
+                      ({enc.cuotasVencidas} vencidas)
+                    </span>
+                  )}
+                </span>
+              )}
             </div>
-            {conteos && (
-              <span className="text-xs text-slate-400 font-mono">
-                {conteos.totalCuotas} cuotas
-                {enc?.cuotasVencidas > 0 && (
-                  <span className="ml-2 text-red-500 font-semibold">
-                    ({enc.cuotasVencidas} vencidas)
-                  </span>
-                )}
-              </span>
-            )}
+
+            {/* Botones de Exportación Cuotas */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => exportarCuotasExcel(cuotas, enc)}
+                disabled={!cuotas || cuotas.length === 0}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-colors disabled:opacity-40"
+                title="Descargar tabla de cuotas en formato Excel (.xlsx)"
+              >
+                <FileSpreadsheet size={13} />
+                <span>Excel</span>
+              </button>
+              <button
+                onClick={() => exportarCuotasPDF(cuotas, enc)}
+                disabled={!cuotas || cuotas.length === 0}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition-colors disabled:opacity-40"
+                title="Descargar tabla de cuotas en PDF formal listo para imprimir"
+              >
+                <FileText size={13} />
+                <span>PDF</span>
+              </button>
+            </div>
           </div>
           <div className="p-3 overflow-auto max-h-[520px] scrollbar-thin">
             <CuotasTable cuotas={cuotas} loading={isLoading} />
@@ -314,14 +346,38 @@ export default function LoanDetail() {
 
         {/* Recibos — 2/5 */}
         <div className="xl:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Receipt size={16} className="text-emerald-500" />
-              <h2 className="font-semibold text-slate-800 text-sm">Historial de Pagos</h2>
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Receipt size={16} className="text-emerald-500" />
+                <h2 className="font-semibold text-slate-800 text-sm">Historial de Pagos</h2>
+              </div>
+              {conteos && (
+                <span className="text-xs text-slate-400 font-mono">{conteos.totalRecibos} recibos</span>
+              )}
             </div>
-            {conteos && (
-              <span className="text-xs text-slate-400 font-mono">{conteos.totalRecibos} recibos</span>
-            )}
+
+            {/* Botones de Exportación Recibos */}
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => exportarHistorialPagosExcel(recibos, enc)}
+                disabled={!recibos || recibos.length === 0}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg transition-colors disabled:opacity-40"
+                title="Descargar historial de recibos en formato Excel (.xlsx)"
+              >
+                <FileSpreadsheet size={13} />
+                <span>Excel</span>
+              </button>
+              <button
+                onClick={() => exportarHistorialPagosPDF(recibos, enc)}
+                disabled={!recibos || recibos.length === 0}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition-colors disabled:opacity-40"
+                title="Descargar historial de recibos en PDF formal listo para imprimir"
+              >
+                <FileText size={13} />
+                <span>PDF</span>
+              </button>
+            </div>
           </div>
           <div className="p-3 overflow-auto max-h-[520px] scrollbar-thin">
             <RecibosTable recibos={recibos} loading={isLoading} />

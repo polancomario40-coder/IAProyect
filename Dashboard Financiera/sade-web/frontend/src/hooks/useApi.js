@@ -108,3 +108,18 @@ export function useReporteConsolidadoCartera(filtros = {}, options = {}) {
   })
 }
 
+export function useReporteClientesAtrasados(filtros = {}, options = {}) {
+  const params = new URLSearchParams()
+  Object.entries(filtros).forEach(([k, v]) => {
+    if (v !== null && v !== undefined && v !== '') params.set(k, v)
+  })
+  const queryString = params.toString()
+  return useQuery({
+    queryKey: ['reportes', 'clientes-atrasados', filtros],
+    queryFn: () => fetchJson(`${API_BASE}/reportes/clientes-atrasados${queryString ? '?' + queryString : ''}`),
+    staleTime: 60 * 1000,
+    ...options,
+  })
+}
+
+
