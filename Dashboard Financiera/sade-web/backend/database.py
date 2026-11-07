@@ -8,6 +8,10 @@ import pyodbc
 from pydantic_settings import BaseSettings
 
 
+from pathlib import Path
+
+ENV_PATH = Path(__file__).resolve().parent / ".env"
+
 class Settings(BaseSettings):
     DB_SERVER: str = "localhost"
     DB_DATABASE: str = "Financiera"
@@ -17,23 +21,52 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "http://localhost:5173"
 
     class Config:
-        env_file = ".env"
+        env_file = str(ENV_PATH)
         env_file_encoding = "utf-8"
 
 
 settings = Settings()
 
 
+def _resolve_driver(preferred: str) -> str:
+    installed = pyodbc.drivers()
+    if preferred in installed:
+        return preferred
+    for candidate in (
+        "ODBC Driver 18 for SQL Server",
+        "ODBC Driver 17 for SQL Server",
+        "ODBC Driver 13 for SQL Server",
+        "ODBC Driver 11 for SQL Server",
+        "SQL Server Native Client 11.0",
+        "SQL Server",
+    ):
+        if candidate in installed:
+            return candidate
+    return preferred
+
+
 def get_connection_string() -> str:
+    driver = _resolve_driver(settings.DB_DRIVER)
     return (
-        f"DRIVER={{{settings.DB_DRIVER}}};"
+        f"DRIVER={{{driver}}};"
         f"SERVER={settings.DB_SERVER};"
         f"DATABASE={settings.DB_DATABASE};"
         f"UID={settings.DB_USERNAME};"
         f"PWD={settings.DB_PASSWORD};"
         "TrustServerCertificate=yes;"
-        "Connection Timeout=30;"
+        "Timeout=30;"
     )
+
+
+def test_connection() -> bool:
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+        return True
+    except Exception:
+        return False
 
 
 @contextmanager
@@ -41,19 +74,11 @@ def get_db() -> Generator[pyodbc.Connection, None, None]:
     """
     Context manager que proporciona una conexión a SQL Server.
     Se cierra automáticamente al terminar el bloque 'with'.
-
-    Uso:
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1")
+    Usa autocommit=True para evitar bloqueos y transacciones implícitas en consultas.
     """
-    conn = pyodbc.connect(get_connection_string(), autocommit=False)
+    conn = pyodbc.connect(get_connection_string(), autocommit=True)
     try:
         yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
     finally:
         conn.close()
 

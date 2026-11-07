@@ -3,7 +3,7 @@ schemas.py — Pydantic models para validación y serialización de respuestas
 """
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -59,10 +59,11 @@ class DashboardResponse(BaseModel):
 
 class EncabezadoPrestamo(BaseModel):
     numeroPrestamo: str
+    idCliente: Optional[int] = None
     nombreCliente: str
     fechaPrestamo: date
     fechaConsulta: datetime
-    estado: str  # "AL DIA" | "ATRASADO"
+    estado: str  # "AL DIA" | "ATRASADO" | "SALDADO"
 
     # Bloque Inicial
     capitalInicial: Decimal
@@ -87,8 +88,13 @@ class EncabezadoPrestamo(BaseModel):
     moraVencida: Decimal
     totalVencido: Decimal
 
+    # Proyección para Saldar Hoy
+    montoSaldarHoy: Optional[Decimal] = None
+    diasDesdeVencimiento: Optional[int] = None
+    ultimoVencimiento: Optional[datetime] = None
+
     # Meta
-    cuotasVencidas: int
+    cuotasVencidas: Optional[int] = 0
     tasaInteres: Optional[Decimal] = None
     creador: Optional[str] = None
     tipoPrestamo: Optional[str] = None
@@ -96,17 +102,18 @@ class EncabezadoPrestamo(BaseModel):
 
 class Cuota(BaseModel):
     numCuota: int
-    idCuota: str  # UNIQUEIDENTIFIER (GUID)
+    idCuota: str  # UNIQUEIDENTIFIER (GUID) o string id
     fecha: date
     balance: Decimal
     capital: Decimal
     interes: Decimal
     mora: Decimal
-    estadoCuota: str  # "PAGADA" | "VENCIDA" | "PENDIENTE"
+    estadoCuota: Optional[str] = 'PENDIENTE'
+    estado: Optional[str] = None
 
 
 class Recibo(BaseModel):
-    numeroPago: int
+    numeroPago: Union[int, str]
     fecha: date
     totalPagado: Decimal
     capital: Decimal
@@ -140,6 +147,7 @@ class ClienteResumen(BaseModel):
     empresa: Optional[str] = None
     cargoEmpresa: Optional[str] = None
     salario: Optional[Decimal] = None
+    creador: Optional[str] = None
     gestor: Optional[str] = None
     sexo: Optional[str] = None
     esProblematico: Optional[bool] = None
@@ -157,16 +165,32 @@ class ClienteResumen(BaseModel):
     vencimiento: Optional[datetime] = None
     capitalPagado: Optional[Decimal] = None
     balanceActual: Optional[Decimal] = None
+    balanceCapital: Optional[Decimal] = None
+    montoSaldarHoy: Optional[Decimal] = None
     clasificacion: str = 'NUEVO'
+    estadoCartera: Optional[str] = 'ACTIVO'
+
+    # Referencias personales
+    nombreRef1: Optional[str] = None
+    parentescoRef1: Optional[str] = None
+    telRef1: Optional[str] = None
+    dirRef1: Optional[str] = None
+    nombreRef2: Optional[str] = None
+    parentescoRef2: Optional[str] = None
+    telRef2: Optional[str] = None
+    dirRef2: Optional[str] = None
 
 
 class ClientesStats(BaseModel):
     totalClientes: int
+    totalClientesGlobal: Optional[int] = None
+    totalFiltrados: Optional[int] = None
     nuevos: int
     reenganchados: int
     enMora: int
     problematicos: int
     alDia: int
+    cancelados: Optional[int] = 0
     montoTotalCartera: Decimal
     balanceTotalPendiente: Decimal
     paginaActual: int
@@ -188,3 +212,135 @@ class ClientesResponse(BaseModel):
     clientes: List[ClienteResumen]
     porEmpresa: List[EmpresaDistribucion]
     oficinas: List[str]
+
+
+# ─── Historial y Perfil Integral del Cliente ──────────────
+class PrestamoHistoricoItem(BaseModel):
+    numeroPrestamo: str
+    montoOriginal: Decimal
+    interesOriginal: Decimal
+    totalOriginal: Decimal
+    tasa: float
+    fechaPrestamo: date
+    fechaVencimiento: Optional[date] = None
+    idEstado: int
+    estado: str  # "ACTIVO" | "SALDADO"
+    balanceTotal: Decimal
+    balanceCapital: Decimal
+    capitalPagado: Decimal
+    interesPagado: Decimal
+    totalPagado: Decimal
+    creador: Optional[str] = None
+    ultimoVencimiento: Optional[datetime] = None
+    montoSaldarHoy: Decimal
+
+
+class ClienteDetalle(BaseModel):
+    idCliente: int
+    nombreCompleto: str
+    cedula: Optional[str] = None
+    telefono: Optional[str] = None
+    correo: Optional[str] = None
+    direccion: Optional[str] = None
+    oficina: Optional[str] = None
+    fechaRegistro: Optional[date] = None
+    empresa: Optional[str] = None
+    cargoEmpresa: Optional[str] = None
+    salario: Optional[Decimal] = None
+    creador: Optional[str] = None
+    sexo: Optional[str] = None
+    esProblematico: Optional[bool] = None
+    banco: Optional[str] = None
+    cuentaBancaria: Optional[str] = None
+    nombreRef1: Optional[str] = None
+    parentescoRef1: Optional[str] = None
+    telRef1: Optional[str] = None
+    dirRef1: Optional[str] = None
+    nombreRef2: Optional[str] = None
+    parentescoRef2: Optional[str] = None
+    telRef2: Optional[str] = None
+    dirRef2: Optional[str] = None
+    totalPrestamos: int = 0
+    prestamosActivos: int = 0
+    clasificacionGlobal: str = 'NUEVO'
+
+
+class ClienteHistorialResponse(BaseModel):
+    cliente: ClienteDetalle
+    prestamos: List[PrestamoHistoricoItem]
+
+
+# ─── Reportes Analíticos (Plantillas Excel / PDF) ─────────
+class ReporteDetalleClienteItem(BaseModel):
+    idCliente: int
+    clasificacion: str
+    nombreCliente: str
+    cedula: Optional[str] = None
+    empresa: Optional[str] = None
+    numeroPrestamo: Optional[str] = None
+    montoPrestamo: Decimal
+    capitalPagado: Decimal = Decimal('0.00')
+    balanceAntesCobro: Decimal
+    capitalCobradoQuincena: Decimal
+    interesCobradoQuincena: Decimal
+    capitalActualAdeudado: Decimal = Decimal('0.00')
+    totalCobradoQuincena: Decimal
+    balanceActual: Decimal
+    tasa: float
+    fechaPrestamo: Optional[datetime] = None
+    comentario: Optional[str] = None
+
+
+class ReporteDetalleClientesTotales(BaseModel):
+    totalRegistros: int
+    totalMontoPrestamo: Decimal
+    totalCapitalPagado: Decimal = Decimal('0.00')
+    totalBalanceAntesCobro: Decimal
+    totalCapitalCobradoQuincena: Decimal
+    totalInteresCobradoQuincena: Decimal
+    totalCapitalActualAdeudado: Decimal = Decimal('0.00')
+    totalCobradoQuincena: Decimal
+    totalBalanceActual: Decimal
+    tasaPromedio: float
+    periodoDesde: Optional[date] = None
+    periodoHasta: Optional[date] = None
+    quincenaDesde: Optional[date] = None
+    quincenaHasta: Optional[date] = None
+
+
+class ReporteDetalleClientesResponse(BaseModel):
+    totales: ReporteDetalleClientesTotales
+    filas: List[ReporteDetalleClienteItem]
+
+
+class ReporteConsolidadoCarteraItem(BaseModel):
+    cartera: str
+    balanceCapitalColocado: Decimal
+    capitalClientesInactivosCancelados: Decimal
+    capitalActivo: Decimal
+    clientesActivos: int
+    clientesInactivos: int
+    capitalCobradoQuincena: Decimal
+    interesCobradoQuincena: Decimal
+    tasa: float
+
+
+class ReporteConsolidadoCarteraTotales(BaseModel):
+    totalCarteras: int
+    totalBalanceCapitalColocado: Decimal
+    totalCapitalInactivosCancelados: Decimal
+    totalCapitalActivo: Decimal
+    totalClientesActivos: int
+    totalClientesInactivos: int
+    totalCapitalCobradoQuincena: Decimal
+    totalInteresCobradoQuincena: Decimal
+    tasaPromedioPonderada: float
+    fechaCorte: Optional[date] = None
+    quincenaDesde: Optional[date] = None
+    quincenaHasta: Optional[date] = None
+
+
+class ReporteConsolidadoCarteraResponse(BaseModel):
+    totales: ReporteConsolidadoCarteraTotales
+    filas: List[ReporteConsolidadoCarteraItem]
+

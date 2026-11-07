@@ -1,20 +1,10 @@
-@echo off
-title SADE Web Backend API
+﻿@echo off
+title SADE Web - Servidor API y Aplicacion Web
 cd /d "%~dp0"
-
-echo ========================================================
-echo   Iniciando Backend API - SADE Web (ERP Financiera)
-echo ========================================================
-echo.
-
-:: Verificar si existe entorno virtual local
-if exist ".venv\Scripts\python.exe" (
-    set "PYTHON_EXE=.venv\Scripts\python.exe"
+if exist "venv\Scripts\python.exe" (
+    "venv\Scripts\python.exe" -m uvicorn main:app --host 0.0.0.0 --port 8080
+) else if exist "%LOCALAPPDATA%\sade-web-runtime\venv\Scripts\python.exe" (
+    "%LOCALAPPDATA%\sade-web-runtime\venv\Scripts\python.exe" -m uvicorn main:app --host 0.0.0.0 --port 8080
 ) else (
-    set "PYTHON_EXE=python"
+    python -m uvicorn main:app --host 0.0.0.0 --port 8080
 )
-
-:: Iniciar Uvicorn en localhost:8000
-%PYTHON_EXE% -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2
-
-pause

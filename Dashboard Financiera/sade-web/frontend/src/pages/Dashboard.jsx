@@ -1,7 +1,9 @@
-import { Wallet, TrendingUp, AlertTriangle, Percent, RefreshCw, AlertCircle } from 'lucide-react'
+import { useState } from 'react'
+import { Wallet, TrendingUp, AlertTriangle, Percent, RefreshCw, AlertCircle, FileSpreadsheet, FileText } from 'lucide-react'
 import KPICard from '../components/KPICard'
 import CobrosChart from '../components/CobrosChart'
 import { useDashboardKPIs, useCobrosporMes } from '../hooks/useApi'
+import { exportarDashboardExcel, exportarDashboardPDF } from '../utils/exportUtils'
 
 const fmt = (n) =>
   new Intl.NumberFormat('es-DO', {
@@ -28,6 +30,8 @@ function ErrorBanner({ message }) {
 }
 
 export default function Dashboard() {
+  const [exportando, setExportando] = useState(false)
+
   const {
     data: kpis,
     isLoading: kpisLoading,
@@ -42,23 +46,68 @@ export default function Dashboard() {
   const now = new Date()
   const mesActual = now.toLocaleDateString('es-DO', { month: 'long', year: 'numeric' })
 
+  function handleExportExcel() {
+    try {
+      setExportando(true)
+      exportarDashboardExcel(kpis, cobros || [])
+    } catch (err) {
+      alert(`Error al exportar Dashboard a Excel: ${err.message}`)
+    } finally {
+      setExportando(false)
+    }
+  }
+
+  function handleExportPDF() {
+    try {
+      setExportando(true)
+      exportarDashboardPDF(kpis, cobros || [])
+    } catch (err) {
+      alert(`Error al exportar Dashboard a PDF: ${err.message}`)
+    } finally {
+      setExportando(false)
+    }
+  }
+
   return (
     <div className="p-4 lg:p-6 space-y-6 max-w-screen-2xl mx-auto">
 
       {/* ── Page header ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
           <p className="text-sm text-slate-500 mt-0.5 capitalize">Período: {mesActual}</p>
         </div>
-        <button
-          onClick={refetch}
-          disabled={isFetching}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
-          Actualizar
-        </button>
+
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={handleExportExcel}
+            disabled={kpisLoading || exportando}
+            className="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition-all shadow-sm hover:shadow disabled:opacity-50"
+            title="Exportar Indicadores y Cobros a Excel"
+          >
+            <FileSpreadsheet size={16} />
+            <span>Exportar Excel</span>
+          </button>
+
+          <button
+            onClick={handleExportPDF}
+            disabled={kpisLoading || exportando}
+            className="flex items-center gap-2 px-3.5 py-2 text-sm font-semibold bg-rose-600 hover:bg-rose-700 text-white rounded-xl transition-all shadow-sm hover:shadow disabled:opacity-50"
+            title="Exportar Reporte Ejecutivo Formal a PDF"
+          >
+            <FileText size={16} />
+            <span>Exportar PDF</span>
+          </button>
+
+          <button
+            onClick={refetch}
+            disabled={isFetching}
+            className="flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw size={15} className={isFetching ? 'animate-spin' : ''} />
+            Actualizar
+          </button>
+        </div>
       </div>
 
       {/* ── Error ── */}

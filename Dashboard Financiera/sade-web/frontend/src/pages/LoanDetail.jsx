@@ -11,6 +11,10 @@ import {
   Receipt,
   RefreshCw,
   Search,
+  Sparkles,
+  Clock,
+  ShieldCheck,
+  Calculator,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useState } from 'react'
@@ -18,6 +22,7 @@ import { useEstadoPrestamo } from '../hooks/useApi'
 import SummaryBlock from '../components/SummaryBlock'
 import CuotasTable from '../components/CuotasTable'
 import RecibosTable from '../components/RecibosTable'
+import ClientePerfilModal from '../components/ClientePerfilModal'
 
 const fmt = (n) =>
   new Intl.NumberFormat('es-DO', {
@@ -37,16 +42,19 @@ const fmtDate = (d) =>
 
 function StatusBadge({ estado }) {
   const isOk = estado === 'AL DIA'
+  const isSaldado = estado === 'SALDADO'
   return (
     <span
       className={clsx(
         'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold',
-        isOk
+        isSaldado
+          ? 'bg-zinc-100 text-zinc-700 border border-zinc-300'
+          : isOk
           ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
           : 'bg-red-100 text-red-700 border border-red-200'
       )}
     >
-      {isOk ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+      {isSaldado ? <CheckCircle2 size={14} /> : isOk ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
       {estado}
     </span>
   )
@@ -76,9 +84,10 @@ export default function LoanDetail() {
   const { idCxc } = useParams()
   const navigate = useNavigate()
   const [searchId, setSearchId] = useState('')
+  const [perfilModalClienteId, setPerfilModalClienteId] = useState(null)
   const { data, isLoading, isError, error, refetch, isFetching } = useEstadoPrestamo(idCxc)
 
-  const enc  = data?.encabezado
+  const enc     = data?.encabezado
   const cuotas  = data?.cuotas  ?? []
   const recibos = data?.recibos ?? []
   const conteos = data?.conteos
@@ -92,6 +101,8 @@ export default function LoanDetail() {
     }
   }
 
+  const enGracia = enc ? (enc.diasDesdeVencimiento ?? 99) <= 5 : false
+
   return (
     <div className="p-4 lg:p-6 space-y-5 max-w-screen-2xl mx-auto">
 
@@ -99,8 +110,9 @@ export default function LoanDetail() {
       <div className="flex items-center gap-3 flex-wrap justify-between">
         <div className="flex items-center gap-3 min-w-0">
           <Link
-            to="/dashboard"
+            to="/clientes"
             className="text-slate-500 hover:text-slate-800 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+            title="Volver a Cartera de Clientes"
           >
             <ArrowLeft size={18} />
           </Link>
@@ -111,9 +123,19 @@ export default function LoanDetail() {
               {enc && <StatusBadge estado={enc.estado} />}
             </h1>
             {enc && (
-              <p className="text-sm text-slate-500 mt-0.5 flex items-center gap-1">
+              <p className="text-sm text-slate-500 mt-0.5 flex items-center gap-2">
                 <User size={13} />
-                {enc.nombreCliente}
+                {enc.idCliente ? (
+                  <button
+                    onClick={() => setPerfilModalClienteId(enc.idCliente)}
+                    className="font-medium text-slate-700 hover:text-blue-600 hover:underline text-left"
+                    title="Ver perfil e historial completo de préstamos"
+                  >
+                    {enc.nombreCliente} (Ver Expediente)
+                  </button>
+                ) : (
+                  <span>{enc.nombreCliente}</span>
+                )}
               </p>
             )}
           </div>
@@ -175,6 +197,48 @@ export default function LoanDetail() {
               <InfoPill icon={User}     label="Creador"  value={enc.creador || '—'} />
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── BANNER DESTACADO: PROYECCIÓN DE CANCELACIÓN (MONTO PARA SALDAR HOY) ── */}
+      {enc && enc.estado !== 'SALDADO' && (
+        <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 rounded-2xl p-5 text-white shadow-md flex items-center justify-between flex-wrap gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Calculator size={20} className="text-amber-200" />
+              <span className="text-xs font-bold uppercase tracking-wider text-amber-100">
+                Proyección de Cancelación Inmediata
+              </span>
+            </div>
+            <h2 className="text-3xl font-extrabold tracking-tight font-mono">
+              {fmt(enc.montoSaldarHoy)}
+            </h2>
+            <p className="text-xs text-amber-100 flex items-center gap-1.5 pt-0.5">
+              {enGracia ? (
+                <>
+                  <ShieldCheck size={14} className="text-emerald-300" />
+                  <span>
+                    Dentro de los 5 días de gracia (Día {enc.diasDesdeVencimiento} de 5). Monto a saldar = 100% Capital Pendiente sin intereses del período.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Clock size={14} className="text-amber-200" />
+                  <span>
+                    Han transcurrido {enc.diasDesdeVencimiento} días desde el corte (supera 5 días de gracia). Aplica tasa del {enc.tasaInteres}% sobre capital pendiente ({fmt(enc.capitalBalance)}).
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2.5 text-right border border-white/20">
+            <div className="text-[11px] text-amber-100 uppercase">Capital Pendiente Base</div>
+            <div className="text-lg font-bold font-mono">{fmt(enc.capitalBalance)}</div>
+            <div className="text-[10px] text-amber-200">
+              {enc.ultimoVencimiento ? `Último corte: ${fmtDate(enc.ultimoVencimiento)}` : ''}
+            </div>
+          </div>
         </div>
       )}
 
@@ -270,6 +334,14 @@ export default function LoanDetail() {
         <p className="text-xs text-slate-400 pb-2">
           Consulta generada el {fmtDate(enc.fechaConsulta)}
         </p>
+      )}
+
+      {/* ── Modal de Historial del Cliente ── */}
+      {perfilModalClienteId && (
+        <ClientePerfilModal
+          idCliente={perfilModalClienteId}
+          onClose={() => setPerfilModalClienteId(null)}
+        />
       )}
     </div>
   )

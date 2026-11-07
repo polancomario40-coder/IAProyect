@@ -1,9 +1,10 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, CreditCard, Menu, X, Users } from 'lucide-react'
+import { LayoutDashboard, CreditCard, Menu, X, Users, FileSpreadsheet } from 'lucide-react'
 import { useState } from 'react'
 import Dashboard from './pages/Dashboard'
 import LoanDetail from './pages/LoanDetail'
 import Clientes from './pages/Clientes'
+import Reportes from './pages/Reportes'
 
 function Sidebar({ open, onClose }) {
   const navigate = useNavigate()
@@ -62,6 +63,14 @@ function Sidebar({ open, onClose }) {
           >
             <Users size={18} />
             Clientes
+          </NavLink>
+          <NavLink
+            to="/reportes"
+            className={({ isActive }) => `${navItem} ${isActive ? activeClass : ''}`}
+            onClick={onClose}
+          >
+            <FileSpreadsheet size={18} />
+            Informes
           </NavLink>
           <NavLink
             to="/prestamos/17481"
@@ -138,6 +147,7 @@ export default function App() {
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/clientes" element={<Clientes />} />
+              <Route path="/reportes" element={<Reportes />} />
               <Route path="/prestamos/:idCxc" element={<LoanDetail />} />
             </Routes>
           </main>

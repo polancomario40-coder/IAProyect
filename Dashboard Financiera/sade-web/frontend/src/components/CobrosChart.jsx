@@ -15,10 +15,10 @@ const fmt = (n) =>
     currency: 'DOP',
     notation: 'compact',
     maximumFractionDigits: 1,
-  }).format(n ?? 0)
+  }).format(Number(n) || 0)
 
 const fmtFull = (n) =>
-  new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP', minimumFractionDigits: 2 }).format(n ?? 0)
+  new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP', minimumFractionDigits: 2 }).format(Number(n) || 0)
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
@@ -34,7 +34,7 @@ function CustomTooltip({ active, payload, label }) {
       <div className="border-t border-slate-100 mt-1.5 pt-1.5 flex justify-between">
         <span className="text-slate-500">Total</span>
         <span className="font-mono font-semibold">
-          {fmtFull(payload.reduce((s, p) => s + (p.value || 0), 0))}
+          {fmtFull(payload.reduce((s, p) => s + (parseFloat(p.value) || 0), 0))}
         </span>
       </div>
     </div>

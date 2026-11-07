@@ -43,26 +43,68 @@ export function useEstadoPrestamo(idCxc) {
 // ─── Clientes ─────────────────────────────────────────────────────────────────
 
 export function useClientes(filtros = {}) {
-  const params = new URLSearchParams();
+  const params = new URLSearchParams()
   const mapped = {
     ...filtros,
     fechaDesde: filtros.fechaDesde || filtros.desde || undefined,
     fechaHasta: filtros.fechaHasta || filtros.hasta || undefined,
-  };
-  delete mapped.desde;
-  delete mapped.hasta;
+  }
+  delete mapped.desde
+  delete mapped.hasta
 
   Object.entries(mapped).forEach(([k, v]) => {
-    if (v !== null && v !== undefined && v !== '') params.set(k, v);
-  });
-  const queryString = params.toString();
+    if (v !== null && v !== undefined && v !== '') params.set(k, v)
+  })
+  const queryString = params.toString()
   return useQuery({
     queryKey: ['clientes', filtros],
-    queryFn: () => fetch(`/api/clientes/${queryString ? '?' + queryString : ''}`).then(r => {
-      if (!r.ok) throw new Error('Error al cargar clientes');
-      return r.json();
+    queryFn: () => fetch(`${API_BASE}/clientes/${queryString ? '?' + queryString : ''}`).then(r => {
+      if (!r.ok) throw new Error('Error al cargar clientes')
+      return r.json()
     }),
     staleTime: 2 * 60 * 1000,
     retry: 1,
-  });
+  })
 }
+
+// ─── Historial del Cliente ───────────────────────────────────────────────────
+
+export function useHistorialCliente(idCliente) {
+  return useQuery({
+    queryKey: ['cliente', 'historial', idCliente],
+    queryFn: () => fetchJson(`${API_BASE}/clientes/${idCliente}/historial`),
+    enabled: !!idCliente,
+    staleTime: 2 * 60 * 1000,
+  })
+}
+
+// ─── Reportes Analíticos Oficiales ──────────────────────────────────────────
+
+export function useReporteDetalleClientes(filtros = {}, options = {}) {
+  const params = new URLSearchParams()
+  Object.entries(filtros).forEach(([k, v]) => {
+    if (v !== null && v !== undefined && v !== '') params.set(k, v)
+  })
+  const queryString = params.toString()
+  return useQuery({
+    queryKey: ['reportes', 'detalle-clientes', filtros],
+    queryFn: () => fetchJson(`${API_BASE}/reportes/detalle-clientes${queryString ? '?' + queryString : ''}`),
+    staleTime: 60 * 1000,
+    ...options,
+  })
+}
+
+export function useReporteConsolidadoCartera(filtros = {}, options = {}) {
+  const params = new URLSearchParams()
+  Object.entries(filtros).forEach(([k, v]) => {
+    if (v !== null && v !== undefined && v !== '') params.set(k, v)
+  })
+  const queryString = params.toString()
+  return useQuery({
+    queryKey: ['reportes', 'consolidado-cartera', filtros],
+    queryFn: () => fetchJson(`${API_BASE}/reportes/consolidado-cartera${queryString ? '?' + queryString : ''}`),
+    staleTime: 60 * 1000,
+    ...options,
+  })
+}
+

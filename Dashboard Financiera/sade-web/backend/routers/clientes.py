@@ -1,89 +1,113 @@
-"""
-clientes.py — Router FastAPI para el módulo de Clientes (CXC)
-
-Endpoint:
-    GET /api/clientes/  → Listado paginado + estadísticas + distribución por empresa
+﻿"""
+clientes.py — Router para inteligencia de cartera e historial de clientes
 """
 from datetime import date
 from typing import Optional
-
 from fastapi import APIRouter, HTTPException, Query
-
 from database import execute_sp_multi
-from models.schemas import ClientesResponse
+from models.schemas import (
+    ClientesResponse,
+    ClientesStats,
+    ClienteResumen,
+    EmpresaDistribucion,
+    ClienteHistorialResponse,
+    ClienteDetalle,
+    PrestamoHistoricoItem,
+)
 
 router = APIRouter(prefix="/api/clientes", tags=["Clientes"])
 
 
-@router.get("/", response_model=ClientesResponse, summary="Listado de clientes con estadísticas")
-def get_clientes(
-    fechaDesde:  Optional[date] = Query(None, description="Fecha inicio del filtro"),
-    fechaHasta:  Optional[date] = Query(None, description="Fecha fin del filtro"),
-    empresa:     Optional[str]  = Query(None, description="Nombre de la empresa"),
-    estado:      Optional[str]  = Query(
-        None,
-        description="Estado del cliente",
-        pattern="^(NUEVO|REENGANCHADO|EN MORA|PROBLEMATICO|AL DIA)$",
-    ),
-    busqueda:    Optional[str]  = Query(None, description="Texto libre (nombre, cedula, telefono...)"),
-    oficina:     Optional[str]  = Query(None, description="Nombre de la oficina"),
-    gestor:      Optional[str]  = Query(None, description="Nombre del gestor"),
-    pagina:      int            = Query(1,    ge=1,       description="Pagina actual"),
-    porPagina:   int            = Query(25,   ge=1, le=200, description="Registros por pagina"),
+@router.get(
+    "/",
+    response_model=ClientesResponse,
+    summary="Listado inteligente y filtrado de cartera de clientes",
+)
+async def get_clientes(
+    fechaDesde: Optional[date] = Query(default=None),
+    fechaHasta: Optional[date] = Query(default=None),
+    empresa: Optional[str] = Query(default=None),
+    estado: Optional[str] = Query(default=None),
+    busqueda: Optional[str] = Query(default=None),
+    oficina: Optional[str] = Query(default=None),
+    creador: Optional[str] = Query(default=None),
+    pagina: int = Query(default=1, ge=1),
+    porPagina: int = Query(default=25, ge=1, le=10000),
+    tipoCliente: Optional[str] = Query(default="ACTIVO"),
+    ordenarPor: Optional[str] = Query(default="fecha"),
+    ordenDireccion: Optional[str] = Query(default="DESC"),
+    tipoFecha: Optional[str] = Query(default="PRESTAMO"),
 ):
-    """
-    Consulta el SP cxcClientesIntelligence y devuelve:
-    - stats: KPIs/totales del universo filtrado (RS 0)
-    - clientes: Lista paginada de clientes (RS 1)
-    - porEmpresa: Top 15 empresas por cartera (RS 2)
-    - oficinas: Catalogo de oficinas disponibles (RS 3)
-    """
     try:
-        # execute_sp_multi usa *args — pasamos los 9 parámetros desempaquetados
-        result_sets = execute_sp_multi(
+        sets = execute_sp_multi(
             "cxcClientesIntelligence",
             fechaDesde,
             fechaHasta,
-            empresa,
-            estado,
-            busqueda,
-            oficina,
-            gestor,
+            empresa or None,
+            estado or None,
+            busqueda or None,
+            oficina or None,
+            creador or None,
             pagina,
             porPagina,
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Error al ejecutar SP: {exc}") from exc
-
-    # Validar que el SP devolvio los 4 result sets esperados
-    if len(result_sets) < 4:
-        raise HTTPException(
-            status_code=500,
-            detail=f"El SP devolvio {len(result_sets)} result sets; se esperaban 4.",
+            tipoCliente or "ACTIVO",
+            ordenarPor or "fecha",
+            ordenDireccion or "DESC",
+            tipoFecha or "PRESTAMO",
         )
 
-    rs_stats, rs_clientes, rs_empresas, rs_oficinas = (
-        result_sets[0],
-        result_sets[1],
-        result_sets[2],
-        result_sets[3],
-    )
+        stats_raw = sets[0][0] if sets and sets[0] else {
+            "totalClientes": 0,
+            "totalClientesGlobal": 0,
+            "totalFiltrados": 0,
+            "nuevos": 0,
+            "reenganchados": 0,
+            "enMora": 0,
+            "problematicos": 0,
+            "alDia": 0,
+            "cancelados": 0,
+            "montoTotalCartera": 0,
+            "balanceTotalPendiente": 0,
+            "paginaActual": pagina,
+            "porPagina": porPagina,
+            "totalPaginas": 0,
+        }
+        clientes_raw = sets[1] if len(sets) > 1 else []
+        empresas_raw = sets[2] if len(sets) > 2 else []
+        oficinas_raw = [r.get("oficina") for r in (sets[3] if len(sets) > 3 else []) if r.get("oficina")]
 
-    # RS 0: fila unica de estadisticas
-    if not rs_stats:
-        raise HTTPException(status_code=500, detail="RS 0 (stats) vacio.")
-    stats = rs_stats[0]
+        return ClientesResponse(
+            stats=ClientesStats(**stats_raw),
+            clientes=[ClienteResumen(**c) for c in clientes_raw],
+            porEmpresa=[EmpresaDistribucion(**e) for e in empresas_raw],
+            oficinas=oficinas_raw,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # RS 3: extraer solo el nombre de la oficina (primer valor de cada fila)
-    oficinas_list: list[str] = []
-    for row in rs_oficinas:
-        valores = list(row.values())
-        if valores:
-            oficinas_list.append(str(valores[0]))
 
-    return {
-        "stats":      stats,
-        "clientes":   rs_clientes,
-        "porEmpresa": rs_empresas,
-        "oficinas":   oficinas_list,
-    }
+@router.get(
+    "/{id_cliente}/historial",
+    response_model=ClienteHistorialResponse,
+    summary="Perfil integral e historial de préstamos de un cliente",
+)
+async def get_historial_cliente(id_cliente: int):
+    try:
+        sets = execute_sp_multi("cxcHistorialPrestamosCliente", id_cliente)
+        if not sets or not sets[0]:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No se encontró el cliente con ID {id_cliente}",
+            )
+
+        cliente_raw = sets[0][0]
+        prestamos_raw = sets[1] if len(sets) > 1 else []
+
+        return ClienteHistorialResponse(
+            cliente=ClienteDetalle(**cliente_raw),
+            prestamos=[PrestamoHistoricoItem(**p) for p in prestamos_raw],
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

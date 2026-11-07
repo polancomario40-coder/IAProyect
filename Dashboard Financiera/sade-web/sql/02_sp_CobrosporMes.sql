@@ -1,6 +1,14 @@
--- ============================================================
--- SP: cxcCobrosporMes  (v2 - columnas reales)
--- ============================================================
+-- =========================================================================================
+-- SP: cxcCobrosporMes (v4 - Cobros Reales por Mes sin Notas de Crédito ni Reenganches)
+-- =========================================================================================
+-- Correcciones aplicadas:
+--   1. Lee directamente de dbsolonegocios.dbo.tb_recibo_pagos con rp_estado = 1.
+--   2. Excluye Notas de Crédito y liquidaciones internas por Reenganche (rp_forma_pago = 'N.CREDITO',
+--      tb_notas_credito, tb_reenganche y cierres administrativos 'SALDO DE PRESTAMO' sin interés),
+--      que anteriormente disparaban el Capital Cobrado en meses como noviembre o el mes actual.
+--   3. Desglosa con total precisión: capital, interés, mora y total cobrado real.
+--   4. Mantiene zero-fill para meses sin cobros.
+-- =========================================================================================
 USE Financiera
 GO
 
@@ -29,22 +37,33 @@ BEGIN
     ),
     CobrosPorMes AS (
         SELECT
-            DATEFROMPARTS(YEAR(rc.Fecha), MONTH(rc.Fecha), 1) AS mesFecha,
-            -- Capital = aplicaciones a FT directamente
-            SUM(CASE WHEN d.Referencia LIKE 'RP:%'
-                     THEN d.Valor ELSE 0 END)               AS capitalCobrado,
-            -- Interés = aplicaciones a ND
-            SUM(CASE WHEN d.Referencia LIKE 'APL. INTERES%'
-                     THEN d.Valor ELSE 0 END)               AS interesCobrado,
-            0.00                                            AS moraCobrada,
-            SUM(rc.Valor)                                   AS totalCobrado,
-            COUNT(DISTINCT rc.idCxc)                        AS cantidadRecibos
-        FROM dbo.Cxc rc
-        INNER JOIN dbo.CxcDet d ON d.idCxc = rc.idCxc
-        WHERE rc.idTipoDocumento = 'RC'
-          AND rc.Cancelado = 0
-          AND CAST(rc.Fecha AS DATE) >= @FechaInicio
-        GROUP BY DATEFROMPARTS(YEAR(rc.Fecha), MONTH(rc.Fecha), 1)
+            DATEFROMPARTS(YEAR(rp.rp_fecha), MONTH(rp.rp_fecha), 1) AS mesFecha,
+            ISNULL(SUM(rp.rp_capital), 0)      AS capitalCobrado,
+            ISNULL(SUM(rp.rp_interes), 0)      AS interesCobrado,
+            ISNULL(SUM(rp.rp_mora), 0)         AS moraCobrada,
+            ISNULL(SUM(rp.rp_capital + rp.rp_interes + ISNULL(rp.rp_mora, 0)), 0) AS totalCobrado,
+            COUNT(*)                           AS cantidadRecibos
+        FROM dbsolonegocios.dbo.tb_recibo_pagos rp
+        WHERE rp.rp_estado = 1
+          AND CAST(rp.rp_fecha AS DATE) >= @FechaInicio
+          AND UPPER(LTRIM(RTRIM(ISNULL(rp.rp_forma_pago, '')))) NOT IN ('N.CREDITO', 'N. CREDITO', 'NOTA DE CREDITO', 'NC')
+          AND ISNULL(rp.rp_observacion, '') NOT LIKE '%Nota de Credito%'
+          AND ISNULL(rp.rp_observacion, '') NOT LIKE '%Reenganche%'
+          AND NOT EXISTS (
+              SELECT 1 FROM dbsolonegocios.dbo.tb_notas_credito nc
+              WHERE nc.nc_recibo_pago = rp.rp_id_recibo AND nc.nc_id_oficina = rp.rp_id_oficina
+          )
+          AND NOT (
+              ISNULL(rp.rp_observacion, '') = 'SALDO DE PRESTAMO'
+              AND (
+                  ISNULL(rp.rp_interes, 0) = 0
+                  OR EXISTS (
+                      SELECT 1 FROM dbsolonegocios.dbo.tb_reenganche rg
+                      WHERE rg.rg_id_prestamo = rp.rp_id_prestamo AND rg.rg_id_oficina = rp.rp_id_oficina
+                  )
+              )
+          )
+        GROUP BY DATEFROMPARTS(YEAR(rp.rp_fecha), MONTH(rp.rp_fecha), 1)
     )
     SELECT
         m.mesFecha,

@@ -30,6 +30,19 @@ export default function App() {
     setRedirectUri(redirect);
     setClientId(client);
 
+    const isLogout = params.get('logout') === 'true' || params.has('logout');
+    if (isLogout) {
+      localStorage.removeItem('jwt_token');
+      localStorage.removeItem('empresa');
+      localStorage.removeItem('usuario');
+      setUsuarioStr('');
+      setClave('');
+      setEmpresas([]);
+      setSelectedEmpresa(null);
+      setStep('login');
+      return;
+    }
+
     // If already logged in, check if we can skip directly to company selection
     const token = localStorage.getItem('jwt_token');
     const savedUser = localStorage.getItem('usuario');
@@ -110,8 +123,8 @@ export default function App() {
       } else {
         // If target app is Cuadre de Caja, we might not strictly block if the database group check is for CXPAPP only.
         // We warn or allow access because Cuadre de Caja has its own database privileges.
-        console.warn('Acceso denegado en CXPAPP, procediendo con permisos alternativos para Cuadre de Caja.');
-        if (clientId !== 'cuadre-caja') {
+        console.warn('Acceso denegado en CXPAPP, procediendo con permisos alternativos para Cuadre de Caja / Producción Embarque.');
+        if (clientId !== 'cuadre-caja' && clientId !== 'produccion-embarque' && clientId !== 'textil' && clientId !== 'modulo-lentes') {
           throw new Error(response.data?.mensaje || 'No tiene permisos requeridos para esta compañía.');
         }
       }

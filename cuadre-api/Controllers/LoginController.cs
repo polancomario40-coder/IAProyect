@@ -165,7 +165,13 @@ public class LoginController : ControllerBase
             string requiredGroup = "cxpsade"; // default fallback for older apps
             string appName = "CXPAPP";
             
-            if (clientId == "seg-sade")
+            if (clientId == "produccion-embarque" || clientId == "textil")
+            {
+                // Producción / Embarque (Textil) no requiere grupo legacy cxpsade
+                requiredGroup = "";
+                appName = "Producción y Embarque";
+            }
+            else if (clientId == "seg-sade")
             {
                 requiredGroup = "System";
                 appName = "Seguridad SADE";
@@ -176,23 +182,26 @@ public class LoginController : ControllerBase
                 appName = "Cuadre de Caja";
             }
 
-            using (var cmd = erpConnection.CreateCommand())
+            if (!string.IsNullOrEmpty(requiredGroup))
             {
-                cmd.CommandText = "SELECT COUNT(1) FROM SegUserinGrp WHERE idSegUser = @user AND idSegGrupo = @grupo";
-                var pUser = cmd.CreateParameter();
-                pUser.ParameterName = "@user";
-                pUser.Value = subTrimmed;
-                cmd.Parameters.Add(pUser);
-
-                var pGrupo = cmd.CreateParameter();
-                pGrupo.ParameterName = "@grupo";
-                pGrupo.Value = requiredGroup;
-                cmd.Parameters.Add(pGrupo);
-                
-                var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-                if (count == 0)
+                using (var cmd = erpConnection.CreateCommand())
                 {
-                    return Ok(new { success = false, mensaje = $"Su usuario no pertenece al grupo autorizado ({requiredGroup}) para acceder a {appName}." });
+                    cmd.CommandText = "SELECT COUNT(1) FROM SegUserinGrp WHERE idSegUser = @user AND idSegGrupo = @grupo";
+                    var pUser = cmd.CreateParameter();
+                    pUser.ParameterName = "@user";
+                    pUser.Value = subTrimmed;
+                    cmd.Parameters.Add(pUser);
+
+                    var pGrupo = cmd.CreateParameter();
+                    pGrupo.ParameterName = "@grupo";
+                    pGrupo.Value = requiredGroup;
+                    cmd.Parameters.Add(pGrupo);
+                    
+                    var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+                    if (count == 0)
+                    {
+                        return Ok(new { success = false, mensaje = $"Su usuario no pertenece al grupo autorizado ({requiredGroup}) para acceder a {appName}." });
+                    }
                 }
             }
 

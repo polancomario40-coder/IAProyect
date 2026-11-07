@@ -59,10 +59,10 @@ export default function CuotasTable({ cuotas = [], loading }) {
                 <span
                   className={clsx(
                     'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
-                    STATUS_STYLES[c.estadoCuota]
+                    STATUS_STYLES[c.estadoCuota || c.estado] || 'bg-slate-100 text-slate-600'
                   )}
                 >
-                  {c.estadoCuota}
+                  {c.estadoCuota || c.estado}
                 </span>
               </td>
             </tr>

@@ -1,7 +1,7 @@
+﻿"""
+prestamos.py — Router para consulta de estado de préstamo individual
 """
-prestamos.py — Router para endpoints de Préstamos
-"""
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, HTTPException
 from database import execute_sp_multi
 from models.schemas import (
     EstadoPrestamoResponse,
@@ -15,62 +15,34 @@ router = APIRouter(prefix="/api/prestamos", tags=["Préstamos"])
 
 
 @router.get(
-    "/{idCxc}",
+    "/{numero_cxc}",
     response_model=EstadoPrestamoResponse,
-    summary="Estado completo de un préstamo",
+    summary="Consulta el estado completo de un préstamo por su número",
 )
-async def get_estado_prestamo(
-    idCxc: str = Path(
-        ...,
-        description="Número del préstamo (campo Cxc en dbo.Cxc)",
-        examples=["17481"],
-    )
-):
-    """
-    Retorna el estado completo de un préstamo en 4 secciones:
-    1. **Encabezado** — Datos generales + los 4 bloques de resumen
-       (Inicial, Pagado, Balance, Vencido)
-    2. **Cuotas** — Tabla de cuotas con estado (PAGADA / VENCIDA / PENDIENTE)
-    3. **Recibos** — Historial de pagos con distribución
-    4. **Conteos** — Total de cuotas y recibos
-    """
+async def get_estado_prestamo(numero_cxc: str):
     try:
-        result_sets = execute_sp_multi("cxcEstadoPrestamo", idCxc)
-
-        # Verificar que el SP retornó los 4 result sets esperados
-        if len(result_sets) < 4:
-            raise HTTPException(
-                status_code=500,
-                detail=f"El SP retornó {len(result_sets)} result sets, se esperaban 4",
-            )
-
-        # RS 0 → Encabezado y bloques resumen
-        if not result_sets[0]:
+        sets = execute_sp_multi("cxcEstadoPrestamo", numero_cxc)
+        if not sets or not sets[0]:
             raise HTTPException(
                 status_code=404,
-                detail=f"Préstamo {idCxc} no encontrado",
+                detail=f"No se encontró el préstamo '{numero_cxc}'",
             )
 
-        encabezado = EncabezadoPrestamo(**result_sets[0][0])
-
-        # RS 1 → Cuotas
-        cuotas = [Cuota(**row) for row in result_sets[1]]
-
-        # RS 2 → Recibos
-        recibos = [Recibo(**row) for row in result_sets[2]]
-
-        # RS 3 → Conteos
-        conteos = ConteosPrestamo(**result_sets[3][0]) if result_sets[3] else ConteosPrestamo(
-            totalCuotas=len(cuotas), totalRecibos=len(recibos)
+        encabezado_raw = sets[0][0]
+        cuotas_raw = sets[1] if len(sets) > 1 else []
+        recibos_raw = sets[2] if len(sets) > 2 else []
+        conteos_raw = (
+            sets[3][0]
+            if len(sets) > 3 and sets[3]
+            else {"totalCuotas": len(cuotas_raw), "totalRecibos": len(recibos_raw)}
         )
 
         return EstadoPrestamoResponse(
-            encabezado=encabezado,
-            cuotas=cuotas,
-            recibos=recibos,
-            conteos=conteos,
+            encabezado=EncabezadoPrestamo(**encabezado_raw),
+            cuotas=[Cuota(**c) for c in cuotas_raw],
+            recibos=[Recibo(**r) for r in recibos_raw],
+            conteos=ConteosPrestamo(**conteos_raw),
         )
-
     except HTTPException:
         raise
     except Exception as e:
