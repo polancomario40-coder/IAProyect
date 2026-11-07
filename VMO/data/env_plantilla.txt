@@ -1,0 +1,37 @@
+# Plantilla del .env de conduces. Renombrar a ".env" y ponerlo en la raiz
+# del proyecto (al lado de main.py). Completar los valores. NO se versiona.
+
+# OBLIGATORIO en el servidor publicado. Con 1 la app:
+#  - no arranca si LOGIN_USER tiene menos de 4 caracteres, LOGIN_PASS menos
+#    de 15, o falta ANTHROPIC_API_KEY;
+#  - no publica /docs ni /openapi.json;
+#  - manda HSTS (obliga HTTPS en el navegador).
+PRODUCCION=1
+
+# OBLIGATORIO si la app esta detras de un proxy o balanceador (Railway,
+# Nginx, Cloudflare...). Con 1 se toma la IP real del cliente de la ULTIMA
+# entrada de X-Forwarded-For, para que el bloqueo por intentos fallidos de
+# login funcione por persona y no bloquee a toda la empresa.
+PROXY_CONFIABLE=1
+
+# OBLIGATORIO - clave de Anthropic para leer los PDF escaneados (Vision).
+# Crear una propia en console.anthropic.com. El consumo se cobra a esa cuenta.
+ANTHROPIC_API_KEY=
+
+# OBLIGATORIO - usuario y contrasena para entrar a la app. Sin esto el login
+# no deja entrar a nadie. Usar una contrasena nueva y larga.
+LOGIN_USER=
+LOGIN_PASS=
+
+# OPCIONAL - carpeta donde scripts/backup_db.py deja una copia extra de los
+# backups (en la maquina original era una carpeta de Google Drive).
+GDRIVE_BACKUP_DIR=
+
+# OPCIONAL - correo de avisos de pendientes (scripts/avisar_pendientes.py).
+# Si se deja vacio, la app funciona igual y solo no manda correos.
+SMTP_HOST=
+SMTP_PORT=
+SMTP_USER=
+SMTP_PASS=
+# a quienes va, separados por coma
+MAIL_DESTINATARIOS=

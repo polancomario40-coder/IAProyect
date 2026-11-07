@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reporte del Día — VMO Concretos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="/logistica.logic.js?v=2026-10-28"></script>
+<script src="/calendario.js?v=2026-10-19b"></script>
+<script src="/logistica.api.js?v=2026-10-08b"></script>
+<style>
+  :root{
+    color-scheme: dark;
+    --vmo-red:#D32F2F; --vmo-red-dark:#F87171;
+    --ink:#EEF2F7; --muted:rgba(238,242,247,0.55); --line:rgba(255,255,255,0.07);
+    --bg:#0D1829; --card:#152535; --elevated:#1C3045;
+    --ok:#34D399; --warn:#F59E0B; --err:#F87171;
+    --brand-glow:rgba(211,47,47,0.22);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Inter','Segoe UI',system-ui,sans-serif;
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(rgba(211,47,47,0.03) 1px, transparent 1px),
+      radial-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size:40px 40px, 20px 20px; background-position:0 0, 10px 10px;
+    color:var(--ink); -webkit-font-smoothing:antialiased;
+  }
+  header{
+    background:var(--card); color:var(--ink); padding:16px 28px;
+    display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--line); flex-wrap:wrap; gap:10px; position:relative;
+  }
+  header::after{content:''; position:absolute; bottom:-1px; left:0; width:180px; height:2px;
+    background:linear-gradient(90deg, var(--vmo-red) 0%, transparent 100%);}
+  header .brand{display:flex; flex-direction:column; gap:2px;}
+  header .brand .tag{text-transform:uppercase; letter-spacing:1px; font-size:10.5px; color:var(--muted);}
+  header h1{margin:0; font-size:17px; font-weight:700; letter-spacing:-.2px;}
+
+  .wrap{max-width:760px; margin:0 auto; padding:24px 24px 60px;}
+  .panel{background:var(--card); border:1px solid var(--line); border-top:3px solid var(--vmo-red);
+    border-radius:12px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
+  .panel-body{padding:22px 24px;}
+  .panel h2{margin:0 0 4px; font-size:16px;}
+  .panel .intro{margin:0 0 20px; font-size:13px; color:var(--muted); line-height:1.55;}
+
+  .fechas{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;}
+  label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.5px;
+        color:var(--muted); font-weight:700; margin-bottom:6px;}
+  select, input[type="date"], .cal-campo{
+    width:100%; background:var(--elevated); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; padding:10px 12px; font-size:14px; font-weight:600; font-family:inherit;
+  }
+  select:focus-visible, .cal-campo:focus-visible, .btn:focus-visible{outline:2px solid var(--vmo-red); outline-offset:2px;}
+
+  .dias{font-size:12.5px; color:var(--muted); line-height:1.6; margin-bottom:18px; min-height:20px;}
+  .dias strong{color:var(--ink);}
+  .btn{
+    width:100%; padding:13px 18px; background:var(--vmo-red); color:#fff; border:none; border-radius:8px;
+    font-weight:700; font-size:14px; cursor:pointer; font-family:inherit;
+    box-shadow:0 4px 14px var(--brand-glow);
+  }
+  .btn:disabled{opacity:.45; cursor:not-allowed; box-shadow:none;}
+  .atajos{display:flex; gap:8px; margin-bottom:14px;}
+  .btn-sec{
+    padding:7px 12px; background:var(--elevated); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; font-weight:600; font-size:12.5px; cursor:pointer; font-family:inherit;
+  }
+  .btn-sec:hover:not(:disabled){border-color:var(--vmo-red);}
+  .btn-sec:disabled{opacity:.45; cursor:not-allowed;}
+
+  .estado{margin-top:16px; font-size:13px; line-height:1.55;}
+  .estado.error{color:var(--err);}
+  .resultado{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:16px;}
+  .dato{background:var(--elevated); border:1px solid var(--line); border-radius:10px; padding:12px 14px;}
+  .dato .v{font-size:20px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .dato .l{font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin-top:2px;}
+  .nota{font-size:12px; color:var(--muted); line-height:1.55;}
+  footer{text-align:center; padding:26px; color:var(--muted); font-size:11.5px;}
+
+  @media (max-width:600px){
+    .wrap{padding:16px;}
+    .fechas, .resultado{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="tag">VMO Concretos · Logística</span>
+    <h1>Reporte del Día</h1>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="panel-body">
+      <h2>Generar reporte</h2>
+      <p class="intro">Elegí un día guardado, o un rango de fechas, y se descarga un PDF con su
+        estadística: las dos métricas de cumplimiento, el resumen por zona y por servicio (con bomba
+        o directo), los motivos y responsables de las incumplidas y el detalle de todas las entregas.
+        En un rango va además un renglón por día.</p>
+      <div class="atajos">
+        <button type="button" class="btn-sec" id="btnUltimo" disabled>Último día</button>
+      </div>
+      <div class="fechas">
+        <div><label for="desde">Desde</label><input type="date" id="desde" disabled></div>
+        <div><label for="hasta">Hasta</label><input type="date" id="hasta" disabled></div>
+      </div>
+      <div class="dias" id="dias">Cargando los días guardados...</div>
+      <button class="btn" id="btnGenerar" disabled>Generar reporte</button>
+      <div id="estado" class="estado" role="status"></div>
+    </div>
+  </div>
+  <p class="nota">Solo cuentan los días que se guardaron en el historial. En un rango, los porcentajes
+    juntan todas las entregas del rango (no promedian los de cada día). Si cambiás algo del día
+    (un motivo, un responsable, una observación), guardalo de nuevo antes de generar el reporte.</p>
+</div>
+
+<footer>VMO Concretos · Reporte del Día</footer>
+
+<script>
+// Reporte de un dia en PDF (2026-10-15); desde el 2026-10-21 tambien de un
+// rango de fechas, con el atajo "Ultimo dia".
+//
+// El navegador lee los dias guardados, los recalcula con restaurarDia() y arma
+// los numeros con reporteDelPeriodo(), en logistica.logic.js — la misma cuenta
+// que la pantalla del dia y Estadisticas. El servidor solo los dibuja en el PDF.
+
+let fechas = [];   // los dias guardados, ordenados
+const $ = id => document.getElementById(id);
+const fechaCorta = f => f.slice(8, 10) + '/' + f.slice(5, 7);
+const enRango = () => fechas.filter(f => f >= $('desde').value && f <= $('hasta').value);
+
+function estado(texto, error){
+  $('estado').className = 'estado' + (error ? ' error' : '');
+  $('estado').innerHTML = texto;
+}
+
+function actualizarRango(){
+  const desde = $('desde').value, hasta = $('hasta').value;
+  const dias = enRango();
+  let error = '';
+  if (!desde || !hasta) error = 'Elegí las dos fechas.';
+  else if (desde > hasta) error = 'La fecha "desde" es posterior a "hasta".';
+  else if (!dias.length) error = 'No hay días guardados en este rango.';
+  $('dias').innerHTML = error ? esc(error)
+    : dias.length === 1 ? `Reporte de <strong>un día</strong>: ${fechaCorta(dias[0])}`
+    : `<strong>${dias.length} días guardados</strong> en el rango: ${dias.map(fechaCorta).join(', ')}`;
+  $('btnGenerar').disabled = !!error;
+}
+
+function ultimoDia(){
+  const ultimo = fechas[fechas.length - 1];
+  $('desde').value = ultimo;
+  $('hasta').value = ultimo;
+  actualizarRango();
+}
+
+async function cargarIndice(){
+  try { fechas = (await apiLogistica('/api/logistica/dias')).dias.map(d => d.fecha).sort(); }
+  catch (err) { $('dias').textContent = err.sinToken ? err.message : 'No se pudo leer el historial: ' + err.message; return; }
+  if (!fechas.length){ $('dias').textContent = 'Todavía no hay días guardados.'; return; }
+  // Los calendarios solo dejan tocar los dias guardados; arrancan en el ultimo.
+  ['desde', 'hasta'].forEach(id => {
+    VMOCalendario.mejorar($(id), {permitidos: fechas});
+    $(id).disabled = false;
+  });
+  $('btnUltimo').disabled = false;
+  ultimoDia();
+}
+
+async function generar(){
+  const dias = enRango();
+  $('btnGenerar').disabled = true;
+  try {
+    const cargados = [];
+    for (let i = 0; i < dias.length; i += 6){
+      estado(dias.length === 1 ? 'Leyendo el día guardado...'
+        : `Leyendo los días guardados... ${cargados.length}/${dias.length}`);
+      const tanda = await Promise.all(dias.slice(i, i + 6).map(f =>
+        apiLogistica('/api/logistica/dias/' + encodeURIComponent(f))
+          .then(dia => ({fecha: f, ...restaurarDia(dia)}))));
+      cargados.push(...tanda);
+    }
+    const reporte = reporteDelPeriodo(cargados);
+    estado('Armando el PDF...');
+    const res = await fetch('/api/logistica/reporte-dia', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenDelPortal()}`},
+      body: JSON.stringify(reporte),
+    });
+    if (!res.ok){
+      let detalle = `Error ${res.status}`;
+      try { const c = await res.json(); detalle = c.detail?.detalle || c.detail || detalle; } catch (e) {}
+      throw new Error(typeof detalle === 'string' ? detalle : JSON.stringify(detalle));
+    }
+    const blob = await res.blob();
+    const nombre = reporte.desde === reporte.hasta ? `Reporte_dia_VMO_${reporte.desde}.pdf`
+      : `Reporte_VMO_${reporte.desde}_al_${reporte.hasta}.pdf`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    const g = reporte.bloques[0];
+    const pct = p => p === null ? '—' : p + '%';
+    estado(`✓ Descargado <strong>${esc(nombre)}</strong>
+      <div class="resultado">
+        <div class="dato"><div class="v">${pct(g.pct)}</div><div class="l">${esc(NOMBRE_PCT)}</div></div>
+        <div class="dato"><div class="v">${pct(g.pctPedidos)}</div><div class="l">${esc(NOMBRE_PCT_PEDIDOS)}</div></div>
+        <div class="dato"><div class="v">${fmtInt(g.incumplidos)}</div><div class="l">incumplidas</div></div>
+      </div>`);
+  } catch (err) {
+    estado('No se pudo generar el reporte: ' + esc(err.message), true);
+  } finally {
+    actualizarRango();
+  }
+}
+
+$('desde').addEventListener('change', actualizarRango);
+$('hasta').addEventListener('change', actualizarRango);
+$('btnUltimo').addEventListener('click', ultimoDia);
+$('btnGenerar').addEventListener('click', generar);
+cargarIndice();
+</script>
+</body>
+</html>

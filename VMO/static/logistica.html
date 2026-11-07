@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard de Cumplimiento — VMO Concretos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="/vendor/xlsx-0.20.3.full.min.js"></script>
+<script src="/logistica.logic.js?v=2026-10-28"></script>
+<script src="/calendario.js?v=2026-10-19b"></script>
+<script src="/logistica.api.js?v=2026-10-08b"></script>
+<style>
+
+  :root{
+    color-scheme: dark;
+    /* Paleta del portal (static/index.html) — mismo look en los tres modulos.
+       Se conservan los NOMBRES de variables originales del dashboard porque
+       hay estilos inline en el HTML/JS que los referencian. */
+    --vmo-red:#D32F2F; --vmo-red-dark:#F87171;
+    --vmo-blue:#EEF2F7; --vmo-blue-dark:#152535;
+    --ink:#EEF2F7; --muted:rgba(238,242,247,0.55); --line:rgba(255,255,255,0.07);
+    --bg:#0D1829; --card:#152535; --elevated:#1C3045; --hover:#243850;
+    --ok:#34D399; --ok-bg:rgba(16,185,129,0.11);
+    --warn:#F59E0B; --warn-bg:rgba(245,158,11,0.11);
+    --err:#F87171; --err-bg:rgba(248,113,113,0.11);
+    --brand-glow:rgba(211,47,47,0.22);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Inter','Segoe UI',system-ui,sans-serif;
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(rgba(211,47,47,0.03) 1px, transparent 1px),
+      radial-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size:40px 40px, 20px 20px;
+    background-position:0 0, 10px 10px;
+    color:var(--ink); -webkit-font-smoothing:antialiased;
+  }
+  input, select{ background:var(--elevated); color:var(--ink); border:1px solid var(--line); border-radius:6px; font-family:inherit; }
+  input::placeholder{ color:rgba(238,242,247,0.32); }
+  input:focus, select:focus{ outline:none; border-color:rgba(211,47,47,.45); box-shadow:0 0 0 3px rgba(211,47,47,.07); }
+  header{
+    background:var(--card); color:var(--ink);
+    padding:16px 28px; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--line); flex-wrap:wrap; gap:10px; position:relative;
+  }
+  header::after{
+    content:''; position:absolute; bottom:-1px; left:0; width:180px; height:2px;
+    background:linear-gradient(90deg, var(--vmo-red) 0%, transparent 100%);
+  }
+  header .brand{display:flex; flex-direction:column; gap:2px;}
+  header .brand .tag{text-transform:uppercase; letter-spacing:1px; font-size:10.5px; color:var(--muted);}
+  header h1{margin:0; font-size:17px; font-weight:700; letter-spacing:-.2px;}
+
+  .layout{display:flex; align-items:flex-start; max-width:1900px; margin:0 auto; gap:20px; padding:20px 24px 60px;}
+  .asm-dropdown{position:relative; display:inline-block;}
+  .asm-btn{
+    list-style:none; cursor:pointer; padding:10px 18px; background:var(--elevated); color:var(--ink);
+    border:1px solid var(--line); border-radius:8px; font-weight:700; font-size:13px; user-select:none;
+  }
+  .asm-btn::-webkit-details-marker{display:none;}
+  .asm-dropdown[open] .asm-btn{border-color:var(--vmo-red); box-shadow:inset 0 -2px 0 var(--vmo-red);}
+  .asm-caret{display:inline-block; transition:transform .15s; font-size:11px; margin-left:2px;}
+  .asm-dropdown[open] .asm-caret{transform:rotate(180deg);}
+  .asm-popover{
+    position:absolute; top:calc(100% + 8px); left:0; z-index:50; width:300px; max-height:70vh; overflow-y:auto;
+    background:var(--card); border:1px solid var(--line); border-radius:10px; padding:4px 16px 16px;
+    box-shadow:0 12px 32px rgba(0,0,0,.55);
+  }
+  /* La tabla de cumplimiento con columnas fijas y compacta, como en la
+     version de la companera: con quince columnas, el ancho automatico
+     aplastaba Obra y Observaciones. */
+  table.tabla-cumpl{table-layout:fixed; width:100%; min-width:1100px; font-size:12px;}
+  table.tabla-cumpl thead th{white-space:normal; padding:8px 5px; font-size:9.5px; line-height:1.25; vertical-align:bottom; letter-spacing:.2px;}
+  table.tabla-cumpl tbody td{padding:8px 5px; overflow-wrap:anywhere; vertical-align:middle;}
+  table.tabla-cumpl .estado-pill{font-size:10px; padding:3px 6px; text-align:center;}
+  table.tabla-cumpl textarea{width:100%; min-width:0; font:inherit; font-size:12px; resize:vertical; line-height:1.3;
+    background:var(--elevated); color:var(--ink); padding:5px 7px; border:1px solid var(--line); border-radius:5px;}
+  table.tabla-cumpl .conf-pill{white-space:normal; line-height:1.3;}
+  table.tabla-cumpl input, table.tabla-cumpl select{width:100%; min-width:0; font-size:12px;}
+  table.tabla-cumpl input.trayectoOverrideInput{max-width:64px;}
+  .asm-group{margin-top:14px;}
+  .asm-group label{display:block; font-size:12px; color:var(--muted); margin-bottom:4px;}
+  .asm-group input[type=number]{ width:100%; padding:7px 9px; font-size:13px; }
+  .trayecto-table{width:100%; font-size:12px; border-collapse:collapse; margin-top:6px;}
+  .trayecto-table th{text-align:left; color:var(--muted); font-weight:600; padding:4px 2px; border-bottom:1px solid var(--line); font-size:10.5px; text-transform:uppercase; letter-spacing:.4px;}
+  .trayecto-table td{padding:3px 2px; border-bottom:1px solid rgba(255,255,255,0.03);}
+  .trayecto-table input{width:52px; padding:3px 4px; font-size:12px;}
+  .trayecto-table .zona-tag{font-size:10px; color:var(--muted);}
+  .asm-note{font-size:11px; color:var(--muted); margin-top:10px; line-height:1.4;}
+
+  .content{flex:1; min-width:0;}
+
+  .upload-row{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:20px;}
+  .upload-card{
+    background:var(--card); border:1px solid var(--line); border-top:3px solid var(--vmo-red);
+    border-radius:12px; padding:16px 18px; box-shadow:0 1px 4px rgba(0,0,0,0.45);
+  }
+  .upload-card h4{margin:0 0 4px; font-size:14px; color:var(--ink); font-weight:700;}
+  .upload-card p{margin:0 0 10px; font-size:12px; color:var(--muted);}
+  .upload-card input[type=file]{font-size:12px; color:var(--muted); background:transparent; border:none;}
+  .upload-status{margin-top:8px; font-size:12px; font-weight:600;}
+  .upload-status.ok{color:var(--ok);}
+  .upload-status.err{color:var(--err);}
+  .upload-status.pending{color:var(--muted); font-weight:400;}
+
+  .tabs-nav{display:flex; gap:8px; margin-bottom:0; flex-wrap:wrap; align-items:center;}
+  .filtro-servicio{margin-left:auto; display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted);}
+  .filtro-servicio select{background:var(--elevated); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; padding:7px 10px; font-size:13px; font-weight:600; font-family:inherit;}
+  .tab-btn{
+    padding:9px 16px; border:1px solid var(--line); border-bottom:none; background:transparent;
+    color:var(--muted); font-weight:600; font-size:13px; border-radius:8px 8px 0 0; cursor:pointer;
+    font-family:inherit; transition:all .18s ease;
+  }
+  .tab-btn:hover{color:var(--ink); background:rgba(255,255,255,.04);}
+  .tab-btn.active{background:var(--card); color:var(--ink); box-shadow:inset 0 2px 0 var(--vmo-red);}
+  .tabview{display:none;}
+  .tabview.active{display:block;}
+
+  .barra-acciones{display:flex; justify-content:flex-end; align-items:center; gap:12px; margin-bottom:12px;}
+  .btn-accion{padding:9px 16px; background:var(--elevated); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; font-family:inherit;}
+  .sel-responsable{padding:5px 4px; border:1px solid var(--line); border-radius:5px; font-size:12.5px;
+    background:var(--elevated); color:var(--ink);}
+
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:0 12px 12px 12px; margin-bottom:20px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
+  .panel-head{padding:14px 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+  .panel-head h2{margin:0; font-size:14px; color:var(--ink); font-weight:700;}
+  .panel-body{padding:16px 18px;}
+  .sub-head{font-size:12px; color:var(--muted);}
+  .tabla-elementos td, .tabla-elementos th{padding:8px 14px;}
+  .barra-pct{height:7px; border-radius:4px; background:rgba(255,255,255,.07); overflow:hidden; min-width:70px;}
+  .barra-pct span{display:block; height:100%; border-radius:4px;}
+
+  .comp-kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px;}
+  .kpis{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:18px;}
+  .kpi{background:var(--card); border:1px solid var(--line); border-top:3px solid var(--vmo-red); border-radius:12px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
+  .kpi .label{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; font-weight:700;}
+  .kpi .value{font-size:24px; font-weight:700; color:var(--ink); margin-top:4px;}
+  .kpi .sub{font-size:11px; color:var(--muted); margin-top:2px;}
+  /* Aviso de brecha entre las dos unidades del porcentaje: va debajo de los
+     KPI y solo aparece cuando los dos numeros no coinciden. */
+  .kpi-nota{
+    margin:-8px 0 18px; padding:8px 12px; border-radius:8px;
+    background:var(--warn-bg); color:var(--warn);
+    border:1px solid rgba(245,158,11,0.25);
+    font-size:11.5px; line-height:1.45;
+  }
+
+  .empty-state{padding:40px 20px; text-align:center; color:var(--muted); font-size:13px;}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{
+    text-align:left; padding:9px 10px; background:rgba(0,0,0,.3); border-bottom:1px solid var(--line);
+    color:var(--muted); font-weight:700; text-transform:uppercase; font-size:10.5px; letter-spacing:.7px; white-space:nowrap;
+  }
+  tbody td{padding:9px 10px; border-bottom:1px solid rgba(255,255,255,0.03); vertical-align:top; color:var(--ink);}
+  tbody tr:hover{background:rgba(255,255,255,.02);}
+  td.num, th.num{text-align:right; font-variant-numeric:tabular-nums;}
+  .estado-pill{display:inline-block; padding:3px 10px; border-radius:20px; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;}
+  .estado-Cumplido{background:var(--ok-bg); color:var(--ok);}
+.btn-manual{display:block; margin-top:4px; padding:2px 6px; font-size:10px; border:1px solid var(--line); border-radius:5px; background:transparent; color:var(--muted); cursor:pointer;}
+.btn-manual:hover{color:var(--ink, inherit); border-color:var(--muted);}
+  .estado-Incumplido{background:var(--err-bg); color:var(--err);}
+  .estado-Sin-despachar{background:var(--warn-bg); color:var(--warn);}
+  .estado-Sin-programación{background:rgba(255,255,255,.05); color:var(--muted);}
+  .estado-Sin-dato-de-planta{background:var(--warn-bg); color:var(--warn);}
+  .estado-Sin-hora-programada{background:var(--warn-bg); color:var(--warn);}
+  .conf-pill{display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:600;}
+  .conf-Alta{background:rgba(255,255,255,.06); color:rgba(238,242,247,0.62);}
+  .conf-Revisar{background:var(--warn-bg); color:var(--warn);}
+  .conf-Única-obra{background:var(--ok-bg); color:var(--ok);}
+
+  .cliente-row{cursor:pointer;}
+  .cliente-row td:first-child{font-weight:600;}
+  .chev{display:inline-block; width:14px; color:var(--vmo-red); font-weight:700; transition:transform .15s;}
+  tr.expanded .chev{transform:rotate(90deg);}
+  .detail-row td{background:rgba(0,0,0,.18); padding:0;}
+  .detail-wrap{padding:14px 18px 18px 40px; display:none;}
+  tr.expanded + .detail-row .detail-wrap{display:block;}
+  .mini-table{width:100%; font-size:12px; border-collapse:collapse;}
+  .mini-table th{text-align:left; padding:5px 7px; color:var(--muted); font-weight:700; border-bottom:1px solid var(--line); font-size:10px; text-transform:uppercase; letter-spacing:.5px; background:transparent;}
+  .mini-table td{padding:5px 7px; border-bottom:1px solid rgba(255,255,255,0.03);}
+  .mini-table tr.grupo-elemento td{padding:10px 7px 5px; font-weight:700; color:var(--ink); font-size:11.5px; border-bottom:1px solid var(--line);}
+  .mini-table tr.grupo-elemento span{font-weight:400; color:var(--muted);}
+  .mini-table td.num, .mini-table th.num{text-align:right;}
+  .badge{display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; background:var(--elevated); color:var(--ink); border:1px solid var(--line);}
+
+  .nota-caveat{background:var(--warn-bg); border:1px solid rgba(245,158,11,.3); border-radius:8px; padding:11px 15px; font-size:12.5px; color:#FCD34D; margin-bottom:16px; line-height:1.5;}
+  .info-note{font-size:12px; color:var(--muted); margin-top:10px;}
+
+  input#buscador, #buscadorResumen{padding:7px 10px; font-size:13px; width:230px;}
+
+  #btnExportar:disabled{opacity:.45; cursor:not-allowed;}
+
+  footer{text-align:center; color:var(--muted); font-size:12px; padding:20px;}
+
+  @media (max-width:1000px){
+    .layout{flex-direction:column;}
+    .kpis, .comp-kpis, .upload-row{grid-template-columns:repeat(2,1fr);}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="tag">VMO Concretos</span>
+    <h1>Dashboard de Cumplimiento — Despacho</h1>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+    <a id="enlaceEstadisticas" href="/logistica-estadisticas.html" style="padding:8px 16px; background:var(--elevated); color:var(--ink); text-decoration:none; border:1px solid var(--line); border-radius:8px; font-size:13px; font-weight:600;">Estadísticas →</a>
+    <div class="fecha" id="fechaLabel" style="font-size:13px; background:rgba(255,255,255,0.12); padding:6px 14px; border-radius:20px;"></div>
+  </div>
+</header>
+
+<div class="layout">
+
+
+  <div class="content">
+
+    <div class="upload-row">
+      <div class="upload-card">
+        <h4>1. Programación</h4>
+        <p>Excel con la programación de despacho (Cliente, Obra, Hora Inicio, Cantidad...)</p>
+        <input type="file" id="fileProgramacion" accept=".xlsx,.xls">
+        <div class="upload-status pending" id="statusProgramacion">Sin archivo cargado</div>
+      </div>
+      <div class="upload-card">
+        <h4>2. Tiempo de Cargue</h4>
+        <p>Excel con el cargue real (Ficha, Hora, Cliente, Planta, Dirección/Obra...)</p>
+        <input type="file" id="fileCargue" accept=".xlsx,.xls">
+        <div class="upload-status pending" id="statusCargue">Sin archivo cargado</div>
+      </div>
+    </div>
+
+    <div class="upload-card" style="margin-bottom:20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+      <div>
+        <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px;">Fecha de este día</label>
+        <input type="date" id="asmFecha" style="padding:6px 8px; border:1px solid var(--line); border-radius:5px; font-size:13px;">
+      </div>
+      <button id="btnExportar" style="padding:10px 18px; background:var(--vmo-red); color:#fff; border:none; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit; box-shadow:0 4px 14px var(--brand-glow);" disabled>Descargar Excel consolidado</button>
+      <button id="btnGuardarDia" style="padding:10px 18px; background:var(--elevated); color:var(--ink); border:1px solid var(--line); border-radius:8px; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit;" disabled>Guardar día</button>
+      <!-- Los supuestos en un menu desplegable y no en una barra lateral
+           (2026-10-06, de la version de la companera): el tablero usa el
+           ancho completo, que las tablas necesitan. -->
+      <details id="supuestosDetails" class="asm-dropdown">
+        <summary class="asm-btn">⚙ Supuestos <span class="asm-caret">▾</span></summary>
+        <div class="asm-popover">
+    <div class="asm-group">
+      <label>Tiempo de cargue (min)</label>
+      <input type="number" id="asmCargue" value="15" min="0">
+    </div>
+    <div class="asm-group">
+      <label>Tiempo de calidad (min)</label>
+      <input type="number" id="asmCalidad" value="10" min="0">
+    </div>
+    <div class="asm-group">
+      <label>Tolerancia de cumplimiento (min)</label>
+      <input type="number" id="asmTolerancia" value="30" min="0">
+    </div>
+    <!-- Espaciamiento maximo entre camiones de una misma obra (2026-10-06):
+         se evalua en el Resumen por cliente. -->
+    <div class="asm-group">
+      <label>Espaciamiento máx. entre camiones (min)</label>
+      <input type="number" id="asmEspaciamiento" value="30" min="0">
+    </div>
+    <div class="asm-group">
+      <label>Tiempo de trayecto por planta (min)</label>
+      <table class="trayecto-table" id="trayectoTable"></table>
+    </div>
+    <div class="asm-note">Estos valores son estimados/provisionales. Ajústalos aquí y las tablas se recalculan automáticamente.</div>
+        </div>
+      </details>
+      <button id="btnReiniciar" style="padding:10px 18px; background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:8px; font-weight:600; font-size:13px; cursor:pointer; font-family:inherit;">Reiniciar</button>
+      <span id="exportStatus" style="font-size:12px; color:var(--muted);"></span>
+      <span id="guardarStatus" style="font-size:12px; color:var(--muted);"></span>
+    </div>
+
+    <div class="tabs-nav">
+      <button class="tab-btn active" data-tab="general">General</button>
+      <button class="tab-btn" data-tab="sd">Santo Domingo</button>
+      <button class="tab-btn" data-tab="pc">Punta Cana</button>
+      <button class="tab-btn" data-tab="cancelado">Cancelado</button>
+      <button class="tab-btn" data-tab="resumen">Resumen por cliente</button>
+      <label class="filtro-servicio">Servicio
+        <select id="selServicio">
+          <option value="">Todos</option>
+          <option value="bomba">Con bomba</option>
+          <option value="directo">Directo</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="avisoReemplazo" style="display:none; margin:14px 0; padding:14px 16px; background:var(--warn-bg); border:1px solid var(--warn); border-radius:10px; font-size:13px;"></div>
+    <div id="avisoDiaAbierto" style="display:none; margin:14px 0; padding:12px 16px; background:var(--elevated); border:1px solid var(--line); border-left:3px solid var(--vmo-red); border-radius:8px; font-size:13px;"></div>
+
+    <div id="tab-general" class="tabview active"><div class="panel"><div class="panel-body"><div class="empty-state" id="emptyGeneral">Sube los dos archivos (Programación y Tiempo de Cargue) para ver el cumplimiento.</div></div></div></div>
+    <div id="tab-sd" class="tabview"><div class="panel"><div class="panel-body"><div class="empty-state">Sube los dos archivos para ver el cumplimiento de Santo Domingo.</div></div></div></div>
+    <div id="tab-pc" class="tabview"><div class="panel"><div class="panel-body"><div class="empty-state">Sube los dos archivos para ver el cumplimiento de Punta Cana.</div></div></div></div>
+    <div id="tab-cancelado" class="tabview"><div class="panel"><div class="panel-body"><div class="empty-state">Sube los dos archivos para ver los pedidos programados que no se despacharon.</div></div></div></div>
+    <div id="tab-resumen" class="tabview"><div class="panel"><div class="panel-body"><div class="empty-state">Sube el archivo de Tiempo de Cargue para ver el resumen por cliente.</div></div></div></div>
+
+  </div>
+</div>
+
+<footer>VMO Concretos · Dashboard de Cumplimiento de Despacho · Versión 2026-10-06</footer>
+
+<script>
+document.getElementById('fechaLabel').textContent = new Date().toLocaleDateString('es-DO', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+
+// ================= ESTADO =================
+const state = {
+  programacion: null,   // array de filas
+  cargue: null,         // array de filas
+  cargueMacao: [],      // viajes de Macao: fuera del cumplimiento, solo para Indicadores
+  programacionMacao: [], // pedidos de Macao: solo para el Reporte de cancelados
+  trayectoOverrides: new Map(), // key: normalize(cliente)+'||'+normalize(obraReal) -> minutos
+  observaciones: new Map(), // key: rowKey (cliente||obra||bomba||elemento||hora) -> texto libre
+  responsables: new Map(),  // key: rowKey -> 'VMO' | 'Cliente' | 'Externo'
+  motivos: new Map(),       // key: rowKey -> uno de MOTIVOS
+  cumplidosManuales: new Set(), // rowKeys de incumplidas pasadas a cumplido a mano
+  fecha: null,
+};
+
+const assumptions = {
+  cargue: 15, calidad: 10, tolerancia: 30, toleranciaAdelanto: ADELANTO_POR_DEFECTO,
+  espaciamiento: ESPACIAMIENTO_POR_DEFECTO,
+  trayecto: {
+    'Movil II': 30, 'SDN': 20, 'SanIsidro': 60, 'Movil VI': 20,
+    'Movil III': 15, 'Movil IX': 30, 'Movil VII': 15, 'Movil VIII': 15, 'Movil IV': 20
+  },
+  zonaPlanta: {
+    'Movil II':'Santo Domingo', 'SDN':'Santo Domingo', 'SanIsidro':'Santo Domingo', 'Movil VI':'Santo Domingo',
+    'Movil III':'Punta Cana', 'Movil IX':'Punta Cana', 'Movil VII':'Punta Cana', 'Movil VIII':'Punta Cana', 'Movil IV':'Punta Cana'
+  }
+};
+
+function renderTrayectoTable(){
+  const tbl = document.getElementById('trayectoTable');
+  const plantas = Object.keys(assumptions.trayecto).sort();
+  tbl.innerHTML = `<tr><th>Planta</th><th>Zona</th><th>Min.</th></tr>` + plantas.map(p => {
+    const sinZona = !assumptions.zonaPlanta[p];
+    return `
+    <tr ${sinZona?'style="background:rgba(248,113,113,.08);"':''}>
+      <td>${esc(p)}${sinZona?' ⚠':''}</td>
+      <td>
+        <select data-planta="${esc(p)}" class="zonaSel" style="font-size:11px; padding:2px;">
+          <option value="" ${sinZona?'selected':''}>—</option>
+          <option value="Santo Domingo" ${assumptions.zonaPlanta[p]==='Santo Domingo'?'selected':''}>SD</option>
+          <option value="Punta Cana" ${assumptions.zonaPlanta[p]==='Punta Cana'?'selected':''}>PC</option>
+        </select>
+      </td>
+      <td><input type="number" data-planta="${esc(p)}" class="trayectoInput" value="${assumptions.trayecto[p]??''}" min="0"></td>
+    </tr>
+  `;
+  }).join('');
+
+  tbl.querySelectorAll('.trayectoInput').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      assumptions.trayecto[inp.dataset.planta] = parseFloat(inp.value)||0;
+      recalcAll();
+    });
+  });
+  tbl.querySelectorAll('.zonaSel').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      assumptions.zonaPlanta[sel.dataset.planta] = sel.value || undefined;
+      renderTrayectoTable();
+      recalcAll();
+    });
+  });
+}
+renderTrayectoTable();
+
+document.getElementById('asmCargue').addEventListener('input', e=>{ assumptions.cargue = parseFloat(e.target.value)||0; recalcAll(); });
+document.getElementById('asmCalidad').addEventListener('input', e=>{ assumptions.calidad = parseFloat(e.target.value)||0; recalcAll(); });
+document.getElementById('asmTolerancia').addEventListener('input', e=>{ assumptions.tolerancia = parseFloat(e.target.value)||0; recalcAll(); });
+document.getElementById('asmEspaciamiento').addEventListener('input', e=>{
+  const v = parseFloat(e.target.value);
+  assumptions.espaciamiento = isNaN(v) ? ESPACIAMIENTO_POR_DEFECTO : v;
+  recalcAll();
+});
+
+// ================= TABS =================
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b===btn));
+    document.querySelectorAll('.tabview').forEach(v=>v.classList.toggle('active', v.id==='tab-'+btn.dataset.tab));
+  });
+});
+
+// ================= HELPERS =================
+// normalize, excelTimeToMinutes, excelSerialToFechaStr, minToStr,
+// fmtDiff y fmtInt -> logistica.logic.js
+
+// findHeaderRowIndex y colIndex -> logistica.logic.js
+
+// ================= PARSERS =================
+function hojasDeProgramacion(wb){
+  // Envoltorio, igual que el de cargue: XLSX solo para pasar hoja -> filas.
+  return wb.SheetNames.map(nombre => ({
+    nombre,
+    rows: XLSX.utils.sheet_to_json(wb.Sheets[nombre], {header:1, defval:null, raw:true}),
+  }));
+}
+
+function parseProgramacionWorkbook(wb){
+  return parseProgramacionSheets(hojasDeProgramacion(wb));
+}
+
+function parseCargueWorkbook(wb){
+  // Envoltorio: lo unico que hace es convertir cada hoja a filas con XLSX. La
+  // heuristica vive en parseCargueSheets, en logistica.logic.js.
+  return parseCargueSheets(wb.SheetNames.map(nombre => ({
+    nombre,
+    rows: XLSX.utils.sheet_to_json(wb.Sheets[nombre], {header:1, defval:null, raw:true}),
+  })));
+}
+document.getElementById('fileProgramacion').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('statusProgramacion');
+  statusEl.className = 'upload-status pending'; statusEl.textContent = 'Leyendo...';
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      const wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array', cellDates:false});
+      const parsed = parseProgramacionWorkbook(wb);
+      if (parsed.length===0){
+        statusEl.className='upload-status err'; statusEl.textContent='No se encontraron columnas Cliente/Obra reconocibles.';
+        return;
+      }
+      state.programacion = parsed;
+      state.programacionMacao = parseProgramacionMacao(hojasDeProgramacion(wb));
+      statusEl.className='upload-status ok';
+      statusEl.textContent = `✓ ${parsed.length} pedidos cargados (${new Set(parsed.map(p=>p.cliente)).size} clientes)`;
+      recalcAll();
+    }catch(err){
+      statusEl.className='upload-status err'; statusEl.textContent='Error leyendo el archivo: '+err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+document.getElementById('fileCargue').addEventListener('change', function(e){
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('statusCargue');
+  statusEl.className = 'upload-status pending'; statusEl.textContent = 'Leyendo...';
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      const wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array', cellDates:false});
+      const {rows: parsed, macao, fecha} = parseCargueWorkbook(wb);
+      if (parsed.length===0){
+        statusEl.className='upload-status err'; statusEl.textContent='No se encontraron columnas Ficha/Cliente reconocibles.';
+        return;
+      }
+      // Un cargue de OTRO dia empieza un dia nuevo (#168, 2026-10-23). Antes la
+      // fecha del campo se quedaba con la del dia que estaba abierto y se
+      // guardaba con esa: con el 20/10 abierto, subir el cargue del 21 y darle
+      // "Reemplazar" pisaba el 20 con datos del 21, y los responsables y
+      // motivos del 20 aparecian en las filas del 21 con la misma clave. Se
+      // limpia todo como "Reiniciar", programacion incluida, porque era del
+      // otro dia.
+      const fechaAbierta = fechaParaGuardar();
+      const otroDia = !!(fecha && fechaAbierta && fecha !== fechaAbierta);
+      if (otroDia) document.getElementById('btnReiniciar').click();
+      state.cargue = parsed;
+      state.cargueMacao = macao || [];   // solo para Indicadores (camiones)
+      if (fecha){
+        state.fecha = fecha;
+        const fechaInput = document.getElementById('asmFecha');
+        if (fechaInput && !fechaInput.value) fechaInput.value = fecha;
+      }
+      statusEl.className='upload-status ok';
+      const m3 = parsed.reduce((s,r)=>s+r.cantidad,0);
+      statusEl.textContent = `✓ ${parsed.length} cargues (${fmtInt(m3)} m³, ${new Set(parsed.map(r=>r.ficha)).size} camiones) — primer registro leído: ${parsed[0].ficha} a las ${minToStr(parsed[0].horaMin)}`;
+      if (otroDia){
+        const spEl = document.getElementById('statusProgramacion');
+        spEl.className = 'upload-status err';
+        spEl.textContent = `Este cargue es del ${fecha} y estaba abierto el ${fechaAbierta}: se empezó un día nuevo. Sube la programación del ${fecha}.`;
+      }
+      recalcAll();
+    }catch(err){
+      statusEl.className='upload-status err'; statusEl.textContent='Error leyendo el archivo: '+err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+// ================= CALCULO DE CUMPLIMIENTO =================
+// obraScore -> logistica.logic.js
+
+// groupBy -> logistica.logic.js
+
+// computeCumplimiento -> logistica.logic.js
+
+// Las dos listas desplegables por fila: Responsable y Motivo. Mismo
+// mecanismo, distinta lista y distinto Map del estado.
+const DESPLEGABLES = {
+  responsable: {opciones: () => RESPONSABLES, mapa: () => state.responsables},
+  motivo:      {opciones: () => MOTIVOS,      mapa: () => state.motivos},
+};
+function selectDesplegable(tipo, clase, key){
+  const d = DESPLEGABLES[tipo], actual = d.mapa().get(key) || '';
+  return `<select class="${clase} sel-responsable" data-key="${key}" data-tipo="${tipo}">
+      <option value="" ${!actual?'selected':''}>—</option>
+      ${d.opciones().map(o=>`<option value="${o}" ${actual===o?'selected':''}>${o}</option>`).join('')}
+    </select>`;
+}
+const selectResponsable = (clase, key) => selectDesplegable('responsable', clase, key);
+const selectMotivo = (clase, key) => selectDesplegable('motivo', clase, key);
+// recalcAll() dibuja todas las pestanas de una vez, asi que la misma fila
+// esta varias veces en la pagina: en General y en Santo Domingo o Punta Cana.
+// Lo que se carga en una se copiaba al estado pero no a sus gemelas, y la otra
+// pestana seguia mostrando el valor viejo hasta el proximo recalculo
+// (2026-10-08). Al cambiar un campo se copia a todos los de la misma fila.
+function copiarAGemelos(origen, selector){
+  document.querySelectorAll(selector).forEach(el => { if (el !== origen) el.value = origen.value; });
+}
+function conectarDesplegables(container, clase){
+  container.querySelectorAll('.'+clase).forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      const mapa = DESPLEGABLES[sel.dataset.tipo].mapa();
+      if (sel.value===''){ mapa.delete(sel.dataset.key); }
+      else { mapa.set(sel.dataset.key, sel.value); }
+      copiarAGemelos(sel, `select[data-tipo="${sel.dataset.tipo}"][data-key="${CSS.escape(sel.dataset.key)}"]`);
+      // Una pasada a cumplido sin motivo vuelve a incumplida: hay que recalcular.
+      if (sel.dataset.tipo === 'motivo' && state.cumplidosManuales.has(sel.dataset.key)) recalcAll();
+    });
+  });
+}
+// Boton "Pasar a cumplido" / "Deshacer" (2026-10-26). Pide el motivo antes:
+// es lo que deja dicho por que se movio.
+function conectarCumplidoManual(container){
+  container.querySelectorAll('.btnCumplidoManual').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const key = btn.dataset.key;
+      if (state.cumplidosManuales.has(key)){ state.cumplidosManuales.delete(key); recalcAll(); return; }
+      if (!MOTIVOS.includes(state.motivos.get(key))){
+        alert('Primero elige el motivo de esta fila: es lo que queda dicho de por qué pasó a cumplido.');
+        return;
+      }
+      state.cumplidosManuales.add(key);
+      recalcAll();
+    });
+  });
+}
+function conectarObservaciones(container, clase){
+  container.querySelectorAll('.'+clase).forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const key = inp.dataset.key;
+      if (inp.value.trim()===''){ state.observaciones.delete(key); }
+      else { state.observaciones.set(key, inp.value); }
+      copiarAGemelos(inp, `.observacionInput[data-key="${CSS.escape(key)}"], .observacionInputCancelado[data-key="${CSS.escape(key)}"]`);
+    });
+  });
+}
+
+function renderCumplimientoTabla(containerId, rows, barraHtml = ''){
+  const container = document.getElementById(containerId);
+  if (rows.length===0){
+    container.innerHTML = `${barraHtml}<div class="panel"><div class="panel-body"><div class="empty-state">No hay pedidos cruzados en esta vista.</div></div></div>`;
+    return;
+  }
+  // El resumen lo calcula logistica.logic.js, que es donde vive la regla.
+  // Devuelve las DOS unidades y las dos se muestran: una sola no alcanza
+  // porque entre el 29 y el 30 de septiembre se movieron en sentidos opuestos
+  // (ver el comentario de resumenDeCumplimiento).
+  const res = resumenDeCumplimiento(rows);
+  const pct = res.pct;
+  const pctPed = res.pctPedidos;
+  const sinProgramacion = rows.filter(r=>r.estado==='Sin programación').length;
+  const sinDespachar = rows.filter(r=>r.estado==='Sin despachar').length;
+  // Cuando las dos unidades no coinciden, decirlo: la brecha es el dato, no un
+  // detalle de redondeo. Significa que las entregas cumplidas y las que movieron
+  // volumen no son las mismas.
+  const brecha = (pct!==null && pctPed!==null && pct!==pctPed)
+    ? `<div class="kpi-nota">${NOMBRE_PCT} e ${NOMBRE_PCT_PEDIDOS.toLowerCase()} discrepan en ${Math.abs(pct-pctPed)} puntos: las entregas que cumplieron no son las que movieron el volumen.</div>`
+    : '';
+
+  const kpisHtml = `
+    <div class="comp-kpis">
+      <div class="kpi"><div class="label">% ${NOMBRE_PCT}</div><div class="value">${pct!==null?pct+'%':'—'}</div><div class="sub">${fmtInt(res.m3Cumplidos)} de ${fmtInt(res.m3)} m³ en tolerancia</div></div>
+      <div class="kpi"><div class="label">% ${NOMBRE_PCT_PEDIDOS}</div><div class="value">${pctPed!==null?pctPed+'%':'—'}</div><div class="sub">${res.pedidosCumplidos} de ${res.pedidos} horas programadas</div></div>
+      <!-- "Cargues" y no "camiones": es la cuenta de VIAJES, y un camion que
+           hace tres viajes aparece tres veces. Se muestra como contexto del
+           volumen de arriba; ningun porcentaje sale de este numero. -->
+      <div class="kpi"><div class="label">Cargues evaluados</div><div class="value">${fmtInt(res.camiones)}</div><div class="sub">${fmtInt(res.camionesCumplidos)} a tiempo</div></div>
+      <div class="kpi"><div class="label">Fuera del cálculo</div><div class="value">${res.noEvaluables}</div><div class="sub">${sinProgramacion} sin programación · ${sinDespachar} sin despachar</div></div>
+    </div>
+    ${brecha}`;
+
+  // El cumplimiento por tipo de elemento, y la tabla de abajo en ese mismo
+  // orden (pedido del usuario, 2026-10-08). El calculo y el orden viven en
+  // logistica.logic.js.
+  const porElemento = cumplimientoPorElemento(rows);
+  const elementosHtml = porElemento.length ? `
+    <div class="panel">
+      <div class="panel-head"><h2>Cumplimiento por elemento</h2><span class="sub-head">ordenado por m³; la tabla de abajo va en el mismo orden</span></div>
+      <div class="panel-body" style="padding:0;">
+        <table class="tabla-elementos">
+          <thead><tr><th>Elemento</th><th class="num">% ${NOMBRE_PCT}</th><th style="width:160px;"></th><th class="num">% ${NOMBRE_PCT_PEDIDOS}</th><th class="num">m³ en tolerancia</th></tr></thead>
+          <tbody>${porElemento.map(e => `
+            <tr>
+              <td><strong>${esc(e.tipo)}</strong></td>
+              <td class="num" style="color:${colorPct(e.pct)}; font-weight:700;">${e.pct===null?'—':e.pct+'%'}</td>
+              <td><div class="barra-pct"><span style="width:${e.pct||0}%; background:${colorPct(e.pct)};"></span></div></td>
+              <td class="num" style="color:${colorPct(e.pctPedidos)};">${e.pctPedidos===null?'—':e.pctPedidos+'%'}<span style="color:var(--muted);"> · ${e.pedidosCumplidos}/${e.pedidos}</span></td>
+              <td class="num" style="color:var(--muted);">${fmtInt(e.m3Cumplidos)} de ${fmtInt(e.m3)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : '';
+
+  const rowsHtml = ordenarParaTablaDelDia(rows)
+    .map(r=>`
+      <tr>
+        <td>${esc(r.cliente)}</td>
+        <td>${esc(r.obraReal)}${(r.confianza && r.confianza!=='—')?`<br><span class="conf-pill conf-${r.confianza.replace(/\s+/g,'-')}">${r.confianza==='Alta'?'Coincidencia exacta':(r.confianza==='Única obra'?'Única obra (sin ambigüedad)':'Revisar coincidencia')}</span>`:''}</td>
+        <td>${r.estado==='Sin programación' ? '—' : esc(r.bomba||'Directo')}</td>
+        <td>${esc(r.elemento||'—')}</td>
+        <td>${minToStr(r.horaProg)}</td>
+        <td class="num">${fmtInt(r.cantProg)}${(r.pendiente>0)?`<br><span style="font-size:10px; color:var(--warn);">${fmtInt(r.pendiente)} pend.</span>`:''}</td>
+        <td class="num">${fmtInt(r.cantReal)}<br><span style="font-size:10px; color:var(--muted);">${r.cargues} cam.</span></td>
+        <td>${minToStr(r.horaCargue)}</td>
+        <td>${esc(r.planta||'—')}</td>
+        <td class="num">${r.claveTrayecto ? `
+          <input type="number" class="trayectoOverrideInput" data-key="${r.claveTrayecto}" value="${(r.trayecto!==undefined && r.trayecto!==null)?r.trayecto:''}" min="0" style="width:60px; padding:4px 6px; border:1px solid ${r.isOverride?'var(--vmo-red)':'var(--line)'}; border-radius:5px; text-align:right; ${r.isOverride?'background:rgba(211,47,47,.12);':''}">
+          <span style="font-size:10px; color:var(--muted); display:block;">${r.isOverride?'real':'planta'}</span>`
+          : /* Sin programacion (#171, 2026-10-23): no hay hora contra la cual
+               comparar, asi que el trayecto no cambia nada. La casilla se podia
+               editar con data-key="undefined" y no hacia nada: va solo el numero. */
+            `${(r.trayecto!==undefined && r.trayecto!==null)?r.trayecto:'—'}`}
+        </td>
+        <td>${minToStr(r.horaLlegadaEst)}</td>
+        <td class="num">${fmtDiff(r.diff)}</td>
+        <td><span class="estado-pill estado-${r.estado.replace(/\s+/g,'-')}">${esc(estadoVisible(r))}</span>${
+          r.manual ? `<button type="button" class="btnCumplidoManual btn-manual" data-key="${r.rowKey}" title="Vuelve al estado calculado">Deshacer</button>`
+          : r.estado==='Incumplido' ? `<button type="button" class="btnCumplidoManual btn-manual" data-key="${r.rowKey}" title="Necesita motivo">Pasar a cumplido</button>` : ''}</td>
+        <td>${selectResponsable('desplegableSel', r.rowKey)}</td>
+        <td>${selectMotivo('desplegableSel', r.rowKey)}</td>
+        <td>
+          <textarea class="observacionInput" rows="2" data-key="${r.rowKey}" placeholder="Escribir...">${esc(r.observacion||'')}</textarea>
+        </td>
+      </tr>
+    `).join('');
+
+  container.innerHTML = `
+    ${barraHtml}
+    ${kpisHtml}
+    ${elementosHtml}
+    <div class="panel">
+      <div class="panel-head"><h2>Cumplimiento por cliente / obra</h2></div>
+      <div class="panel-body" style="padding:0;">
+        <table class="tabla-cumpl">
+          <colgroup>
+            <col style="width:11%"><col style="width:11%"><col style="width:4%"><col style="width:5.5%">
+            <col style="width:4.5%"><col style="width:4%"><col style="width:4.5%"><col style="width:4.5%">
+            <col style="width:5%"><col style="width:4.5%"><col style="width:4.5%"><col style="width:5.5%">
+            <col style="width:6.5%"><col style="width:6%"><col style="width:9%"><col style="width:10%">
+          </colgroup>
+          <thead><tr>
+            <th>Cliente</th><th>Obra</th><th>Bomba</th><th>Elemento</th><th>Hora programada</th><th class="num">m³ prog.</th>
+            <th class="num">m³ reales</th><th>Primer cargue</th>
+            <th>Planta</th><th class="num">Trayecto (min)</th><th>Llegada estimada</th><th class="num">Diferencia</th><th>Estado</th><th>Responsable</th><th>Motivo</th><th>Observaciones</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  conectarObservaciones(container, 'observacionInput');
+  conectarDesplegables(container, 'desplegableSel');
+  conectarCumplidoManual(container);
+
+  container.querySelectorAll('.trayectoOverrideInput').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const key = inp.dataset.key;
+      const val = parseFloat(inp.value);
+      if (isNaN(val)) { state.trayectoOverrides.delete(key); }
+      else { state.trayectoOverrides.set(key, val); }
+      recalcAll();
+    });
+  });
+}
+
+function renderSinCruceNote(comp){
+  if (!comp) return '';
+  const n1 = comp.sinCruce.length, n2 = comp.cargueSinProgCount;
+  // Solo las filas con planta: una hora sin camiones no tiene planta que
+  // agregar a ⚙ Supuestos, y sin este filtro el aviso salia con la lista vacia.
+  const plantasSinZona = [...new Set(comp.results.filter(r=>r.zona==='Sin zona' && r.planta).map(r=>r.planta))];
+  let html = '';
+  if (n1>0 || n2>0){
+    html += `<div class="info-note">${n1} pedido(s) programado(s) sin cargue registrado todavía (ver pestaña "Cancelado") · ${n2} cliente(s) con cargue real que no estaban en la programación.</div>`;
+  }
+  if (plantasSinZona.length){
+    html += `<div class="info-note" style="color:var(--vmo-red-dark); font-weight:600;">⚠ Planta(s) sin zona asignada (no aparecen en Santo Domingo ni Punta Cana, solo en General): ${esc(plantasSinZona.join(', '))}. Agrégalas en la tabla de trayecto dentro de ⚙ Supuestos.</div>`;
+  }
+  return html;
+}
+
+// ================= RESUMEN POR CLIENTE =================
+// computeResumen -> logistica.logic.js
+
+let expandedClienteResumen = null;
+
+function espaciamientoHtml(e){
+  if (!e || e.estado==='N/A') return '<span style="color:var(--muted); font-size:12px;" title="Un solo cargue: no hay intervalo que medir">—</span>';
+  const cls = e.estado==='Cumple' ? 'estado-Cumplido' : 'estado-Incumplido';
+  const det = e.excedidos
+    ? `máx ${Math.round(e.maxGap)} min · ${e.excedidos} de ${e.intervalos} sobre ${assumptions.espaciamiento}`
+    : `máx ${Math.round(e.maxGap)} min`;
+  return `<span class="estado-pill ${cls}">${e.estado}</span><div style="font-size:11px; color:var(--muted); margin-top:3px;">${det}</div>`;
+}
+
+function renderResumenTab(){
+  const data = computeResumen(state, assumptions);
+  const container = document.getElementById('tab-resumen');
+  if (!data){
+    container.innerHTML = `<div class="panel"><div class="panel-body"><div class="empty-state">Sube el archivo de Tiempo de Cargue para ver el resumen por cliente.</div></div></div>`;
+    return;
+  }
+  const kpiHtml = `
+    <div class="kpis">
+      <div class="kpi"><div class="label">m³ despachados</div><div class="value">${fmtInt(data.kpi.m3_total)}</div><div class="sub">total del período</div></div>
+      <div class="kpi"><div class="label">Cargues realizados</div><div class="value">${fmtInt(data.kpi.cargues_total)}</div><div class="sub">viajes con carga</div></div>
+      <div class="kpi"><div class="label">Camiones activos</div><div class="value">${fmtInt(data.kpi.camiones_total)}</div><div class="sub">fichas distintas</div></div>
+      <div class="kpi"><div class="label">Clientes atendidos</div><div class="value">${fmtInt(data.kpi.clientes_total)}</div><div class="sub">clientes con despacho</div></div>
+      <div class="kpi"><div class="label">Obras servidas</div><div class="value">${fmtInt(data.kpi.obras_total)}</div><div class="sub">sitios distintos</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Resumen por cliente</h2><input id="buscadorResumen" type="text" placeholder="Buscar cliente u obra..."></div>
+      <div class="panel-body" style="padding:0;"><table id="tablaResumen"><thead><tr>
+        <th style="width:26px;"></th><th>Cliente</th><th class="num">m³ prog.</th><th class="num">m³ despachados</th><th class="num">Cargues</th>
+        <th class="num">Camiones</th><th class="num">Obras</th><th>Primer cargue</th><th>Último cargue</th>
+        <th>Espaciamiento (${assumptions.espaciamiento} min)</th>
+      </tr></thead><tbody id="tablaResumenBody"></tbody></table></div>
+    </div>`;
+  container.innerHTML = kpiHtml;
+
+  function build(list){
+    const tbody = document.getElementById('tablaResumenBody');
+    tbody.innerHTML = '';
+    list.forEach(d=>{
+      const tr = document.createElement('tr');
+      tr.className='cliente-row';
+      if (expandedClienteResumen===d.cliente) tr.classList.add('expanded');
+      tr.innerHTML = `
+        <td><span class="chev">▶</span></td><td>${esc(d.cliente)}</td>
+        <td class="num">${d.m3Prog!==null ? fmtInt(d.m3Prog) : '—'}</td>
+        <td class="num">${fmtInt(d.m3)}</td><td class="num">${fmtInt(d.cargues)}</td>
+        <td class="num">${fmtInt(d.camiones)}</td><td class="num">${fmtInt(d.obras)}</td>
+        <td>${minToStr(d.primera)}</td><td>${minToStr(d.ultima)}</td>
+        <td>${espaciamientoHtml(d.espaciamiento)}</td>`;
+      tr.addEventListener('click', ()=>{ expandedClienteResumen = expandedClienteResumen===d.cliente?null:d.cliente; build(currentList()); });
+      tbody.appendChild(tr);
+
+      const dr = document.createElement('tr'); dr.className='detail-row';
+      const obrasHtml = `<table class="mini-table"><thead><tr><th>Obra</th><th class="num">m³ prog.</th><th class="num">m³</th><th class="num">Cargues</th><th class="num">Camiones</th><th>Espaciamiento</th></tr></thead><tbody>${
+        d.obras_detail.map(o=>`<tr><td>${esc(o.obra)}</td><td class="num">${o.m3Prog!==null ? fmtInt(o.m3Prog) : '—'}</td><td class="num">${fmtInt(o.m3)}</td><td class="num">${fmtInt(o.cargues)}</td><td class="num">${fmtInt(o.camiones)}</td><td>${espaciamientoHtml(o.espaciamiento)}</td></tr>`).join('')
+      }</tbody></table>`;
+      const cargesHtml = `<table class="mini-table"><thead><tr><th>Hora</th><th class="num">Desde el anterior</th><th>Ficha</th><th>Obra</th><th>Elemento</th><th>Planta</th><th class="num">m³</th></tr></thead><tbody>${
+        d.cargues_detail.map((c, i, todos)=>(i===0 || todos[i-1].tipo!==c.tipo ? (() => {
+          // Encabezado de cada tipo de elemento: los cargues van agrupados.
+          const grupo = todos.filter(x => x.tipo===c.tipo);
+          return `<tr class="grupo-elemento"><td colspan="7">${esc(c.tipo)} <span>· ${fmtInt(grupo.reduce((s,x)=>s+(x.cantidad||0),0))} m³ · ${grupo.length} cargue(s)</span></td></tr>`;
+        })() : '') + `<tr><td>${minToStr(c.horaMin)}</td><td class="num" style="${c.delta!==null && c.delta>assumptions.espaciamiento ? 'color:var(--vmo-red-dark); font-weight:700;' : ''}">${c.delta===null ? '—' : Math.round(c.delta)+' min'}</td><td><span class="badge">${esc(c.ficha)}</span></td><td>${esc(c.obra||'')}</td><td>${esc(c.elemento||'')}</td><td>${esc(c.planta||'')}</td><td class="num">${fmtInt(c.cantidad)}</td></tr>`).join('')
+      }</tbody></table>`;
+      dr.innerHTML = `<td colspan="10"><div class="detail-wrap">${obrasHtml}<br>${cargesHtml}</div></td>`;
+      tbody.appendChild(dr);
+    });
+  }
+  function currentList(){
+    const q = (document.getElementById('buscadorResumen').value||'').trim().toLowerCase();
+    let list = data.clientes;
+    if (q) list = list.filter(d => d.cliente.toLowerCase().includes(q) || d.obras_detail.some(o=>o.obra.toLowerCase().includes(q)));
+    return list;
+  }
+  document.getElementById('buscadorResumen').addEventListener('input', ()=>{ expandedClienteResumen=null; build(currentList()); });
+  build(currentList());
+}
+
+// ================= RECALCULAR TODO =================
+function detectarPlantasNuevas(){
+  if (!state.cargue) return [];
+  const nuevas = [];
+  const plantasEnDatos = new Set(state.cargue.map(c=>c.planta).filter(p=>p));
+  plantasEnDatos.forEach(p=>{
+    if (!(p in assumptions.trayecto)){
+      assumptions.trayecto[p] = 30;
+      assumptions.zonaPlanta[p] = 'Santo Domingo';
+      nuevas.push(p);
+    }
+  });
+  if (nuevas.length) renderTrayectoTable();
+  return nuevas;
+}
+
+function recalcAll(){
+  const plantasNuevas = detectarPlantasNuevas();
+  const comp = computeCumplimiento(state, assumptions);
+  if (comp){
+    const avisoPlantas = plantasNuevas.length ? `<div class="nota-caveat" style="background:var(--err-bg); border-color:rgba(248,113,113,.4); color:var(--err);">⚠ Se detectaron plantas nuevas en tus datos que no estaban en los supuestos: <strong>${esc(plantasNuevas.join(', '))}</strong>. Se agregaron a ⚙ Supuestos con 30 min y zona Santo Domingo por defecto — revisa y corrige el trayecto/zona real de cada una.</div>` : '';
+    const nota = `${avisoPlantas}<div class="nota-caveat">Tiempo de llegada estimado = Hora de cargue + tiempo de cargue + tiempo de calidad + tiempo de trayecto por planta (ajustables en ⚙ Supuestos). El trayecto de cada fila es <strong>editable</strong>: escribe el minutaje real de esa obra y quedará marcado como "real" en vez del promedio de la planta. Incumplimiento si llega más tarde que la tolerancia configurada; llegar antes cuenta como cumplido. Macao no entra en el cumplimiento. ${renderSinCruceNote(comp)}</div>`;
+    // Filtro Bomba / Directo (2026-10-13): las tres vistas de cumplimiento, sus
+    // KPIs y su imagen. Cancelado y Resumen por cliente no se filtran.
+    const servicio = document.getElementById('selServicio').value || null;
+    const resultados = filtrarPorServicio(comp.results, servicio);
+    const sufijo = servicio ? ' · ' + NOMBRE_SERVICIO[servicio] : '';
+    document.getElementById('tab-general').innerHTML = nota + '<div id="genTable"></div>';
+    renderVista('genTable', resultados, 'General' + sufijo, 'General');
+
+    // Las pestanas de zona pasan por el MISMO filtro que el PDF, Estadisticas
+    // y Comparacion (#169, 2026-10-23): la zona de ⚙ Supuestos del dia.
+    document.getElementById('tab-sd').innerHTML = '<div id="sdTable"></div>';
+    renderVista('sdTable', resultados.filter(r=>filaDelFiltro(r, 'zona:Santo Domingo')), 'Santo Domingo' + sufijo, 'SantoDomingo');
+
+    document.getElementById('tab-pc').innerHTML = '<div id="pcTable"></div>';
+    renderVista('pcTable', resultados.filter(r=>filaDelFiltro(r, 'zona:Punta Cana')), 'Punta Cana' + sufijo, 'PuntaCana');
+
+    renderCanceladoTabla(comp.sinCruce, comp.noDespachado);
+  }
+  renderResumenTab();
+  document.getElementById('btnExportar').disabled = !(state.programacion && state.cargue);
+  actualizarBotonGuardar();
+}
+document.getElementById('selServicio').addEventListener('change', () => {
+  if (state.programacion && state.cargue) recalcAll();
+});
+function renderCanceladoTabla(sinCruce, noDespachado = []){
+  const container = document.getElementById('tab-cancelado');
+  if (!sinCruce.length && !noDespachado.length){
+    container.innerHTML = `<div class="panel"><div class="panel-body"><div class="empty-state">No quedó nada sin despachar, y todo lo programado se pudo cruzar con el cargue.</div></div></div>`;
+    return;
+  }
+  const rowsHtml = [...sinCruce].sort((a,b)=>(a.horaProg??9999)-(b.horaProg??9999)).map(s=>`
+    <tr>
+      <td>${esc(s.cliente)}</td>
+      <td>${esc(s.obra)}</td>
+      <td>${minToStr(s.horaProg)}</td>
+      <td class="num">${fmtInt(s.cantProg)}</td>
+      <td style="font-size:12px; color:var(--muted);">${esc(s.motivo)}</td>
+      <td>${selectResponsable('desplegableSelCancelado', s.rowKey)}</td>
+      <td>${selectMotivo('desplegableSelCancelado', s.rowKey)}</td>
+      <td><input type="text" class="observacionInputCancelado" data-key="${s.rowKey}" value="${esc(state.observaciones.get(s.rowKey)||'')}" placeholder="Escribir..." style="width:160px; padding:5px 7px; border:1px solid var(--line); border-radius:5px; font-size:12.5px;"></td>
+    </tr>`).join('');
+  const m3Pendientes = noDespachado.reduce((s,n)=>s+n.pendiente,0);
+  // Lo que la programacion DECLARA pendiente. Es un dato exacto de su columna
+  // `Pendiente`, no una deduccion del cruce, y va primero porque es el que
+  // vale: una entrega que no salio no es lo mismo que un cruce que fallo.
+  const tablaPendientes = noDespachado.length ? `
+    <div class="panel">
+      <div class="panel-head">
+        <h2>No despachado, según la programación</h2>
+        <span style="font-size:12px; color:var(--muted);">de la columna Pendiente del archivo</span>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <table>
+          <thead><tr><th>Cliente</th><th>Obra</th><th>Bomba</th><th>Elemento</th><th>Hora</th><th class="num">Programado</th><th class="num">Despachado</th><th class="num">Pendiente</th><th>Responsable</th><th>Motivo</th><th>Razón</th></tr></thead>
+          <tbody>${noDespachado.map(n => `
+            <tr>
+              <td>${esc(n.cliente)}</td><td>${esc(n.obra)}</td><td>${esc(n.bomba||'Directo')}</td><td>${esc(n.elemento||'—')}</td><td>${minToStr(n.hora)}</td>
+              <td class="num">${fmtInt(n.programado)}</td>
+              <td class="num">${fmtInt(n.despachado)}</td>
+              <td class="num" style="color:var(--warn); font-weight:700;">${fmtInt(n.pendiente)}</td>
+              <td>${selectResponsable('desplegableSelCancelado', n.rowKey)}</td>
+              <td>${selectMotivo('desplegableSelCancelado', n.rowKey)}</td>
+              <td><input type="text" class="observacionInputCancelado" data-key="${n.rowKey}" value="${esc(state.observaciones.get(n.rowKey)||'')}" placeholder="Escribir..." style="width:160px; padding:5px 7px; border:1px solid var(--line); border-radius:5px; font-size:12.5px;"></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : '';
+
+  container.innerHTML = `
+    ${noDespachado.length ? `<div class="barra-acciones"><span id="cancExcelStatus" style="font-size:12px; color:var(--muted);"></span><button id="btnExcelCancelados" class="btn-accion">⬇ Excel de cancelados</button></div>` : ''}
+    <div class="comp-kpis" style="grid-template-columns:repeat(2,1fr);">
+      <div class="kpi"><div class="label">m³ no despachados</div><div class="value">${fmtInt(m3Pendientes)}</div><div class="sub">${noDespachado.length} entrega(s) con pendiente</div></div>
+      <div class="kpi"><div class="label">Sin poder cruzar</div><div class="value">${sinCruce.length}</div><div class="sub">no se les encontró cargue</div></div>
+    </div>
+    ${tablaPendientes}
+    ${sinCruce.length ? `<div class="panel">
+      <div class="panel-head"><h2>Programado que no se pudo cruzar con ningún cargue</h2><span style="font-size:12px; color:var(--muted);">es un problema de cruce, no necesariamente una entrega que faltó</span></div>
+      <div class="panel-body" style="padding:0;">
+        <table>
+          <thead><tr><th>Cliente</th><th>Obra</th><th>Hora programada</th><th class="num">Cantidad programada</th><th>Motivo del cruce</th><th>Responsable</th><th>Motivo</th><th>Observaciones</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    </div>` : ''}`;
+
+  conectarObservaciones(container, 'observacionInputCancelado');
+  conectarDesplegables(container, 'desplegableSelCancelado');
+  const btnExcel = document.getElementById('btnExcelCancelados');
+  if (btnExcel) btnExcel.addEventListener('click', ()=>descargarExcelCancelados(noDespachado));
+}
+function renderCumplimientoTablaInto(id, rows, barraHtml){
+  renderCumplimientoTabla(id, rows, barraHtml);
+}
+
+// ================= VISTAS CON IMAGEN (2026-10-06) =================
+// Cada vista de cumplimiento tiene su boton de imagen: General, Santo Domingo
+// y las dos partes de Punta Cana.
+function renderVista(id, rows, nombre, slug){
+  const btn = 'btnImg_' + slug, st = 'stImg_' + slug;
+  renderCumplimientoTablaInto(id, rows,
+    `<div class="barra-acciones"><span id="${st}" style="font-size:12px; color:var(--muted);"></span><button id="${btn}" class="btn-accion">📷 Descargar imagen</button></div>`);
+  const b = document.getElementById(btn);
+  if (b) b.addEventListener('click', ()=>descargarImagenCumplimiento(rows, nombre, slug, st));
+}
+
+// Descarga un archivo por el mismo camino que el Excel consolidado: la API de
+// descargas si la pagina corre embebida, o un enlace si no.
+async function descargarArchivo(filename, data, statusId, okTxt){
+  const statusEl = document.getElementById(statusId);
+  const setStatus = (t, ms)=>{ if (statusEl){ statusEl.textContent = t; if (ms) setTimeout(()=>{ statusEl.textContent=''; }, ms); } };
+  try{
+    const downloads = (window.claude && typeof window.claude.use === 'function') ? await window.claude.use('downloads') : null;
+    if (downloads){
+      const result = await downloads.save({filename, data});
+      setStatus(result.status==='saved' ? '✓ '+okTxt : '✓ Enviado', 4000);
+    } else {
+      const blob = data instanceof Blob ? data : new Blob([data]);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+      setStatus('✓ '+okTxt, 4000);
+    }
+  }catch(err){
+    if (err && err.code==='declined') setStatus('Descarga cancelada', 4000);
+    else setStatus('No se pudo descargar: '+(err && err.message ? err.message : 'error desconocido'), 6000);
+  }
+}
+
+// ================= EXCEL DE CANCELADOS =================
+// Las filas las arma filasCancelados() en logistica.logic.js, que esta
+// probada; aca solo se vuelven celdas con formato de fecha y hora.
+async function descargarExcelCancelados(noDespachado){
+  const fecha = state.fecha || new Date().toISOString().slice(0,10);
+  const {encabezado, filas} = filasCancelados(noDespachado, state, fecha);
+  const datos = filas.map(f=>[
+    {t:'n', v:f.fechaSerial, z:'d/m/yyyy'}, f.semana,
+    f.horaFraccion===null ? '' : {t:'n', v:f.horaFraccion, z:'h:mm:ss AM/PM'},
+    f.cliente, f.vendedor, f.zona, f.elemento, f.servicio, f.producto,
+    {t:'n', v:f.volumen, z:'0.00'}, f.razon, f.responsable, f.motivo,
+  ]);
+  const ws = XLSX.utils.aoa_to_sheet([encabezado, ...datos]);
+  ws['!cols'] = [{wch:11},{wch:22},{wch:15},{wch:48},{wch:20},{wch:16},{wch:18},{wch:18},{wch:26},{wch:16},{wch:34},{wch:14},{wch:30}];
+  ws['!autofilter'] = {ref: XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:datos.length,c:encabezado.length-1}})};
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Cancelados');
+  document.getElementById('cancExcelStatus').textContent = 'Generando...';
+  await descargarArchivo(`Cancelados_VMO_${fecha}.xlsx`, XLSX.write(wb, {bookType:'xlsx', type:'array'}),
+                         'cancExcelStatus', 'Descargado');
+}
+
+// ================= IMAGEN DE CUMPLIMIENTO =================
+function canvasWrap(ctx, text, maxW){
+  const words = String(text===null||text===undefined ? '' : text).split(/\s+/).filter(Boolean);
+  const lines = []; let cur = '';
+  words.forEach(word=>{
+    let w = word;
+    while (ctx.measureText(w).width > maxW){
+      let cut = w.length;
+      while (cut>1 && ctx.measureText(w.slice(0,cut)).width > maxW) cut--;
+      if (cur){ lines.push(cur); cur = ''; }
+      lines.push(w.slice(0,cut)); w = w.slice(cut);
+    }
+    const test = cur ? cur+' '+w : w;
+    if (ctx.measureText(test).width <= maxW) cur = test;
+    else { if (cur) lines.push(cur); cur = w; }
+  });
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
+
+function construirCanvasCumplimiento(rows, zonaNombre){
+  const W = 1400, PAD = 32, SCALE = 2;
+  const FONT = "'Segoe UI', Tahoma, Arial, sans-serif";
+  const C = {red:'#CC0000', redDark:'#970000', blue:'#003087', blueDark:'#001c52', ink:'#1c2430', muted:'#5b6472', line:'#e4e7ec', bg:'#f4f5f7', ok:'#1a8f5e'};
+  const {resumen: res, incumplidos: data} = filasImagenCumplimiento(rows, state);
+
+  const fecha = state.fecha || new Date().toISOString().slice(0,10);
+  const fp = fecha.split('-');
+  const fechaTxt = fp.length===3 ? `${fp[2]}/${fp[1]}/${fp[0]}` : fecha;
+
+  const cols = [
+    {h:'Cliente', w:175, bold:true}, {h:'Obra', w:180}, {h:'Bomba', w:62}, {h:'Elemento', w:115},
+    {h:'m³ prog.', w:68, num:true}, {h:'Hora prog.', w:78}, {h:'Llegada est.', w:88},
+    {h:'Diferencia', w:92, num:true, red:true}, {h:'Responsable', w:95, bold:true},
+    {h:'Motivo', w:150, bold:true}, {h:'Observaciones'}
+  ];
+  const tableW = W - 2*PAD;
+  cols[cols.length-1].w = tableW - cols.slice(0,-1).reduce((s,c)=>s+c.w,0);
+  const CP = 8, LH = 17, RP = 10, MAXL = 6;
+
+  const mctx = document.createElement('canvas').getContext('2d');
+  const rowLines = data.map(cells => cells.map((t,i)=>{
+    mctx.font = `${cols[i].bold?'600 ':''}13px ${FONT}`;
+    let ls = canvasWrap(mctx, t, cols[i].w - 2*CP);
+    if (ls.length > MAXL){ ls = ls.slice(0,MAXL); ls[MAXL-1] = ls[MAXL-1].replace(/.{0,2}$/,'') + '…'; }
+    return ls;
+  }));
+  const rowH = rowLines.map(cl => Math.max(...cl.map(l=>l.length))*LH + 2*RP);
+
+  const HEADER_H = 88, KPI_TOP = HEADER_H + 24, KPI_H = 92;
+  const SEC_TOP = KPI_TOP + KPI_H + 28;
+  const TH_H = 34;
+  const bodyH = data.length ? rowH.reduce((s,h)=>s+h,0) : 64;
+  const H = SEC_TOP + 34 + TH_H*(data.length?1:0) + bodyH + 28 + 36;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W*SCALE; canvas.height = H*SCALE;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(SCALE, SCALE);
+  const rr = (x,y,w,h,r)=>{ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); };
+
+  ctx.fillStyle = C.bg; ctx.fillRect(0,0,W,H);
+  const g = ctx.createLinearGradient(0,0,W,0); g.addColorStop(0,C.blue); g.addColorStop(1,C.blueDark);
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,HEADER_H);
+  ctx.fillStyle = C.red; ctx.fillRect(0,HEADER_H-4,W,4);
+  ctx.fillStyle = '#c9d6ee'; ctx.font = `12px ${FONT}`; ctx.textAlign = 'left';
+  ctx.fillText('VMO CONCRETOS', PAD, 32);
+  ctx.fillStyle = '#fff'; ctx.font = `700 24px ${FONT}`;
+  ctx.fillText('Cumplimiento de Despacho — '+zonaNombre, PAD, 62);
+  ctx.textAlign = 'right'; ctx.font = `600 14px ${FONT}`;
+  ctx.fillText(fechaTxt, W-PAD, 50);
+  ctx.textAlign = 'left';
+
+  // Los KPIs son los del tablero (resumenDeCumplimiento), no un conteo propio:
+  // la imagen que se manda no puede decir un numero distinto a la pantalla.
+  const kpis = [
+    {l:'% '+NOMBRE_PCT, v: res.pct!==null ? res.pct+'%' : '—', s:`${fmtInt(res.m3Cumplidos)} de ${fmtInt(res.m3)} m³ en tolerancia`, c:C.blue},
+    {l:'% '+NOMBRE_PCT_PEDIDOS, v: res.pctPedidos!==null ? res.pctPedidos+'%' : '—', s:`${res.pedidosCumplidos} de ${res.pedidos} horas programadas`, c:C.blue},
+    {l:'Cumplidas', v: String(res.pedidosCumplidos), s:'entregas a tiempo', c:C.ok},
+    {l:'Incumplidas', v: String(res.pedidos-res.pedidosCumplidos), s:`más de ${assumptions.tolerancia} min tarde`, c:C.red},
+  ];
+  const gap = 16, kw = (tableW - gap*3)/4;
+  kpis.forEach((k,i)=>{
+    const x = PAD + i*(kw+gap), y = KPI_TOP;
+    ctx.fillStyle = '#fff'; rr(x,y,kw,KPI_H,8); ctx.fill();
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1; rr(x+.5,y+.5,kw-1,KPI_H-1,8); ctx.stroke();
+    ctx.save(); rr(x,y,kw,KPI_H,8); ctx.clip(); ctx.fillStyle = C.red; ctx.fillRect(x,y,kw,3); ctx.restore();
+    ctx.fillStyle = C.muted; ctx.font = `11px ${FONT}`; ctx.fillText(k.l.toUpperCase(), x+16, y+28);
+    ctx.fillStyle = k.c; ctx.font = `700 32px ${FONT}`; ctx.fillText(k.v, x+16, y+62);
+    ctx.fillStyle = C.muted; ctx.font = `11px ${FONT}`; ctx.fillText(k.s, x+16, y+80);
+  });
+
+  ctx.fillStyle = C.blue; ctx.font = `700 16px ${FONT}`;
+  ctx.fillText(`Entregas con incumplimiento (${data.length})`, PAD, SEC_TOP+8);
+
+  let y = SEC_TOP + 22;
+  const tableTop = y;
+  const tableHeight = data.length ? TH_H + rowH.reduce((s,h)=>s+h,0) : 64;
+  ctx.fillStyle = '#fff'; rr(PAD,tableTop,tableW,tableHeight,8); ctx.fill();
+  ctx.save(); rr(PAD,tableTop,tableW,tableHeight,8); ctx.clip();
+  if (!data.length){
+    ctx.fillStyle = C.ok; ctx.font = `600 15px ${FONT}`; ctx.textAlign = 'center';
+    ctx.fillText(zonaNombre==='General' ? 'Sin incumplimientos' : 'Sin incumplimientos en '+zonaNombre, W/2, tableTop+38);
+    ctx.textAlign = 'left';
+  } else {
+    ctx.fillStyle = '#f7f8fa'; ctx.fillRect(PAD,y,tableW,TH_H);
+    ctx.fillStyle = C.line; ctx.fillRect(PAD,y+TH_H-2,tableW,2);
+    let x = PAD;
+    ctx.fillStyle = C.muted; ctx.font = `600 10.5px ${FONT}`;
+    cols.forEach(c=>{
+      ctx.textAlign = c.num ? 'right' : 'left';
+      ctx.fillText(c.h.toUpperCase(), c.num ? x+c.w-CP : x+CP, y+21);
+      x += c.w;
+    });
+    y += TH_H;
+    rowLines.forEach((cl,ri)=>{
+      let cx = PAD;
+      cl.forEach((lines,ci)=>{
+        const c = cols[ci];
+        ctx.font = `${c.bold?'600 ':''}13px ${FONT}`;
+        ctx.fillStyle = c.red ? C.redDark : (ci===cols.length-1 ? C.muted : C.ink);
+        if (c.red) ctx.font = `700 13px ${FONT}`;
+        ctx.textAlign = c.num ? 'right' : 'left';
+        lines.forEach((ln,li)=> ctx.fillText(ln, c.num ? cx+c.w-CP : cx+CP, y+RP+13+li*LH));
+        cx += c.w;
+      });
+      ctx.fillStyle = C.line; ctx.fillRect(PAD,y+rowH[ri]-1,tableW,1);
+      y += rowH[ri];
+    });
+    ctx.textAlign = 'left';
+  }
+  ctx.restore();
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1; rr(PAD+.5,tableTop+.5,tableW-1,tableHeight-1,8); ctx.stroke();
+
+  ctx.fillStyle = C.muted; ctx.font = `11px ${FONT}`; ctx.textAlign = 'left';
+  ctx.fillText(`Generado ${new Date().toLocaleString('es-DO')}`, PAD, H-16);
+  ctx.textAlign = 'right';
+  ctx.fillText('VMO Concretos · Dashboard de Cumplimiento de Despacho', W-PAD, H-16);
+  ctx.textAlign = 'left';
+  return canvas;
+}
+
+async function descargarImagenCumplimiento(rows, zonaNombre, slug, statusId){
+  const statusEl = document.getElementById(statusId);
+  if (statusEl) statusEl.textContent = 'Generando...';
+  const canvas = construirCanvasCumplimiento(rows, zonaNombre);
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+  if (!blob){ if (statusEl) statusEl.textContent = 'No se pudo crear la imagen'; return; }
+  const fecha = state.fecha || new Date().toISOString().slice(0,10);
+  const filename = `Cumplimiento_${slug}_${fecha}.png`;
+  const embebido = window.claude && typeof window.claude.use === 'function';
+  await descargarArchivo(filename, embebido ? await blob.arrayBuffer() : blob, statusId, 'Descargada');
+}
+
+document.getElementById('asmFecha').addEventListener('change', e=>{ state.fecha = e.target.value; });
+
+document.getElementById('btnReiniciar').addEventListener('click', ()=>{
+  state.programacion = null;
+  state.cargue = null;
+  state.cargueMacao = [];
+  state.programacionMacao = [];
+  state.trayectoOverrides = new Map();
+  // Las observaciones NO se limpiaban (encontrado el 2026-09-30). Como la
+  // clave es cliente||obra normalizado, al cargar otro dia una fila del mismo
+  // cliente y obra heredaba el comentario del dia anterior. Con el historial
+  // eso pasa de molesto a grave: las observaciones de un dia guardado se
+  // filtrarian al siguiente y se guardarian como suyas.
+  state.observaciones = new Map();
+  state.responsables = new Map();
+  state.motivos = new Map();
+  state.cumplidosManuales = new Set();
+  state.fecha = null;
+  HIST.abierto = null;
+  renderAvisoDiaAbierto();
+  expandedClienteResumen = null;
+
+  document.getElementById('fileProgramacion').value = '';
+  document.getElementById('fileCargue').value = '';
+  document.getElementById('asmFecha').value = '';
+
+  const spEl = document.getElementById('statusProgramacion');
+  spEl.className = 'upload-status pending'; spEl.textContent = 'Sin archivo cargado';
+  const scEl = document.getElementById('statusCargue');
+  scEl.className = 'upload-status pending'; scEl.textContent = 'Sin archivo cargado';
+  document.getElementById('exportStatus').textContent = '';
+
+  document.getElementById('tab-general').innerHTML = `<div class="panel"><div class="panel-body"><div class="empty-state">Sube los dos archivos (Programación y Tiempo de Cargue) para ver el cumplimiento.</div></div></div>`;
+  document.getElementById('tab-sd').innerHTML = `<div class="panel"><div class="panel-body"><div class="empty-state">Sube los dos archivos para ver el cumplimiento de Santo Domingo.</div></div></div>`;
+  document.getElementById('tab-pc').innerHTML = `<div class="panel"><div class="panel-body"><div class="empty-state">Sube los dos archivos para ver el cumplimiento de Punta Cana.</div></div></div>`;
+  document.getElementById('tab-cancelado').innerHTML = `<div class="panel"><div class="panel-body"><div class="empty-state">Sube los dos archivos para ver los pedidos programados que no se despacharon.</div></div></div>`;
+  document.getElementById('tab-resumen').innerHTML = `<div class="panel"><div class="panel-body"><div class="empty-state">Sube el archivo de Tiempo de Cargue para ver el resumen por cliente.</div></div></div>`;
+
+  document.getElementById('btnExportar').disabled = true;
+  document.getElementById('guardarStatus').textContent = '';
+  document.getElementById('avisoReemplazo').style.display = 'none';
+  actualizarBotonGuardar();
+});
+
+// ================= EXPORTAR EXCEL CONSOLIDADO (una sola hoja) =================
+document.getElementById('btnExportar').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('exportStatus');
+  if (!state.programacion || !state.cargue) return;
+
+  const fecha = state.fecha || new Date().toISOString().slice(0,10);
+  const comp = computeCumplimiento(state, assumptions);
+  const resumen = computeResumen(state, assumptions);
+  const resKpi = resumen ? resumen.kpi : {m3_total:0,cargues_total:0,camiones_total:0,clientes_total:0,obras_total:0};
+  // Se usa la MISMA funcion que la pantalla, no una copia del criterio: el
+  // 2026-09-29 el Excel exportado usaba otro denominador y daba un numero
+  // distinto al del dashboard.
+  const resDia = comp ? resumenDeCumplimiento(comp.results) : null;
+  const pctCumplimientoDia = resDia ? resDia.pct : null;
+  const pctCumplimientoDiaPorEntrega = resDia ? resDia.pctPedidos : null;
+
+  const filas = [];
+  const filaBase = () => ({
+    Fecha: fecha, m3_total_dia: resKpi.m3_total, cargues_total_dia: resKpi.cargues_total,
+    camiones_total_dia: resKpi.camiones_total, clientes_total_dia: resKpi.clientes_total,
+    // Las dos unidades viajan al Excel, con el nombre de la unidad en la
+    // columna: un "pct_cumplimiento" suelto en una planilla no dice sobre que
+    // esta calculado, y las dos no dan lo mismo.
+    // Con los nombres nuevos de las dos unidades (2026-10-13); la cuenta es
+    // la misma de antes.
+    pct_frecuencia_despacho_dia: pctCumplimientoDia,
+    pct_inicio_carga_dia: pctCumplimientoDiaPorEntrega,
+  });
+
+  if (comp){
+    // una fila por CADA camion real, con el cumplimiento de su pedido repetido en cada fila
+    comp.results.forEach(r=>{
+      const sorted = [...r.matchRows].sort((a,b)=>(a.horaMin??0)-(b.horaMin??0));
+      sorted.forEach((c,i)=>{
+        filas.push({
+          ...filaBase(),
+          Cliente: r.cliente, ObraProgramada: r.obraProg, ObraReal: r.obraReal, Zona: r.zona,
+          Bomba: r.estado==='Sin programación' ? '' : (r.bomba || 'Directo'),
+          ElementoProgramado: r.elemento || '', CantidadProgramada_m3: r.cantProg,
+          Ficha: c.ficha, HoraCargueCamion: minToStr(c.horaMin), Planta: c.planta,
+          Elemento: c.elemento, Conduce: c.conduce, CantidadCamion_m3: c.cantidad,
+          EsPrimerCamion: i===0 ? 'Sí' : 'No',
+          HoraProgramada: minToStr(r.horaProg), TrayectoMin: r.trayecto, TrayectoEsReal: r.isOverride?'Sí':'No',
+          LlegadaEstimada: minToStr(r.horaLlegadaEst), DiferenciaMin: r.diff!==null?Math.round(r.diff):null,
+          EstadoCumplimiento: estadoVisible(r), ConfianzaCoincidencia: r.confianza==='—'?'':r.confianza,
+          // Dos columnas distintas (#167, 2026-10-23): el motivo del cruce lo pone
+          // la app y el Motivo lo elige el usuario de la lista. Iban las dos como
+          // `Motivo` en el mismo objeto y la segunda borraba a la primera.
+          MotivoDelCruce: r.estado==='Sin programación' ? 'Cliente/obra no estaba en la programación' : '',
+          Responsable: state.responsables.get(r.rowKey) || '',
+          Motivo: state.motivos.get(r.rowKey) || '',
+          Observaciones: r.observacion || '',
+        });
+      });
+    });
+    // pedidos programados sin ningun cargue todavia
+    comp.sinCruce.forEach(s=>{
+      filas.push({
+        ...filaBase(),
+        Cliente: s.cliente, ObraProgramada: s.obra, ObraReal: '', Zona: '',
+        Ficha: '', HoraCargueCamion: '', Planta: '', Elemento: '', Conduce: '', CantidadCamion_m3: null,
+        EsPrimerCamion: '', HoraProgramada: minToStr(s.horaProg), TrayectoMin: null, TrayectoEsReal: '',
+        LlegadaEstimada: '', DiferenciaMin: null, EstadoCumplimiento: 'Cancelado', ConfianzaCoincidencia: '', MotivoDelCruce: s.motivo,
+        CantidadProgramada_m3: s.cantProg, Responsable: state.responsables.get(s.rowKey) || '',
+        Motivo: state.motivos.get(s.rowKey) || '',
+        Observaciones: state.observaciones.get(s.rowKey) || '',
+      });
+    });
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Cumplimiento');
+
+  const arrayBuf = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const filename = `Cumplimiento_VMO_${fecha}.xlsx`;
+
+  statusEl.textContent = 'Generando...';
+  try{
+    const downloads = (window.claude && typeof window.claude.use === 'function') ? await window.claude.use('downloads') : null;
+    if (downloads){
+      const result = await downloads.save({filename, data: arrayBuf});
+      statusEl.textContent = result.status==='saved' ? '✓ Descargado' : '✓ Enviado';
+    } else {
+      XLSX.writeFile(wb, filename);
+      statusEl.textContent = '✓ Descargado';
+    }
+  }catch(err){
+    if (err && err.code==='declined'){ statusEl.textContent='Descarga cancelada'; }
+    else { statusEl.textContent = 'No se pudo descargar: '+(err && err.message ? err.message : 'error desconocido'); }
+  }
+  setTimeout(()=>{ statusEl.textContent=''; }, 4000);
+});
+
+// ================= HISTORIAL (base de dias) =================
+//
+// Esta es la unica parte del dashboard que habla con el servidor. Todo lo
+// demas —leer los Excel, cruzar, calcular, exportar— sigue pasando entero en
+// el navegador. El backend guarda y devuelve; no calcula nada.
+
+// Adentro del portal el sidebar ya es la navegacion: el enlace propio sobra.
+if (estaEmbebido()) document.getElementById('enlaceEstadisticas').style.display = 'none';
+
+const HIST = {
+  // El dia que se esta mirando si viene del historial; null = el dia de hoy,
+  // el que se armo subiendo los dos Excel.
+  abierto: null,
+};
+
+// tokenDelPortal() y apiLogistica() viven en logistica.api.js
+
+function fechaParaGuardar(){
+  // La del campo si la escribieron; si no, la que se dedujo del Excel de
+  // cargue. Nunca "hoy" por defecto: guardar el archivo de ayer bajo la fecha
+  // de hoy es peor que no guardarlo.
+  return (document.getElementById('asmFecha').value || state.fecha || '').trim();
+}
+
+function actualizarBotonGuardar(){
+  const btn = document.getElementById('btnGuardarDia');
+  const hayDatos = !!(state.programacion && state.cargue);
+  btn.disabled = !hayDatos || !fechaParaGuardar();
+  btn.title = !hayDatos ? 'Subí los dos archivos primero'
+            : !fechaParaGuardar() ? 'Poné la fecha de este día'
+            : 'Guarda este día en el historial';
+}
+
+function mostrarAvisoReemplazo(aviso, alConfirmar){
+  const el = document.getElementById('avisoReemplazo');
+  el.style.display = 'block';
+  el.innerHTML = `
+    <strong>El ${aviso.fecha} ya está guardado.</strong> Se guardó el
+    ${(aviso.guardado_en || '').replace('T', ' a las ')} con
+    ${fmtInt(aviso.pedidos)} pedido(s), ${fmtInt(aviso.cargues)} cargue(s),
+    ${fmtInt(aviso.m3)} m³ y ${fmtInt(aviso.observaciones)} observación(es).
+    Guardar de nuevo <strong>reemplaza todo eso</strong>.
+    <div style="margin-top:10px; display:flex; gap:8px;">
+      <button id="btnConfirmarReemplazo" style="padding:7px 14px; background:var(--vmo-red); color:#fff; border:none; border-radius:6px; font-weight:700; font-size:12.5px; cursor:pointer; font-family:inherit;">Reemplazar</button>
+      <button id="btnCancelarReemplazo" style="padding:7px 14px; background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:6px; font-weight:600; font-size:12.5px; cursor:pointer; font-family:inherit;">Cancelar</button>
+    </div>`;
+  document.getElementById('btnConfirmarReemplazo').addEventListener('click', ()=>{
+    el.style.display = 'none'; alConfirmar();
+  });
+  document.getElementById('btnCancelarReemplazo').addEventListener('click', ()=>{
+    el.style.display = 'none';
+    document.getElementById('guardarStatus').textContent = 'No se guardó nada.';
+  });
+}
+
+async function guardarDia(confirmar = false){
+  const status = document.getElementById('guardarStatus');
+  const fecha = fechaParaGuardar();
+  if (!fecha){ status.textContent = 'Falta la fecha de este día.'; return; }
+  status.textContent = 'Guardando...';
+  const payload = {...payloadDelDia(state, assumptions, fecha), confirmar_aviso: confirmar};
+  try {
+    const r = await apiLogistica('/api/logistica/dias', {method:'POST', body: JSON.stringify(payload)});
+    status.textContent = `✓ ${fecha} guardado (${fmtInt(r.pedidos)} pedidos, ${fmtInt(r.cargues)} cargues)`
+                       + (r.reemplazado ? ' — reemplazó lo anterior' : '');
+    avisarDiaGuardado(fecha);
+  } catch (err) {
+    if (err.status === 409 && err.cuerpo && err.cuerpo.avisos){
+      status.textContent = '';
+      mostrarAvisoReemplazo(err.cuerpo.avisos[0], ()=>guardarDia(true));
+      return;
+    }
+    status.textContent = err.message;
+  }
+}
+
+document.getElementById('btnGuardarDia').addEventListener('click', ()=>guardarDia(false));
+
+// Si la URL trae #dia=AAAA-MM-DD, se abre ese dia al cargar. Es como llega el
+// pedido desde la pagina de Historial, y de paso hace que un dia sea un enlace.
+(function abrirDiaDeLaUrl(){
+  const fecha = fechaPedidaEnLaUrl();
+  if (fecha) abrirDia(fecha);
+  // Si el portal vuelve a pedir el MISMO dia, el hash no cambia y el iframe no
+  // recarga: por eso tambien se escucha hashchange.
+  window.addEventListener('hashchange', ()=>{
+    const f = fechaPedidaEnLaUrl();
+    if (f) abrirDia(f);
+  });
+})();
+document.getElementById('asmFecha').addEventListener('change', actualizarBotonGuardar);
+
+
+async function abrirDia(fecha){
+  const status = document.getElementById('guardarStatus');
+  status.textContent = `Abriendo ${fecha}...`;
+  let dia;
+  try {
+    dia = await apiLogistica('/api/logistica/dias/' + encodeURIComponent(fecha));
+  } catch (err) { status.textContent = 'No se pudo abrir el día: ' + err.message; return; }
+
+  // Los supuestos del dia REEMPLAZAN a los de la pantalla, no se mezclan: si
+  // se mezclaran, una planta que hoy tiene otro trayecto cambiaria un dia
+  // viejo, y el historial dejaria de mostrar lo que se mostro ese dia.
+  const {state: st, assumptions: asm} = restaurarDia(dia);
+  state.programacion = st.programacion;
+  state.cargue = st.cargue;
+  state.cargueMacao = st.cargueMacao;
+  state.programacionMacao = st.programacionMacao;
+  state.trayectoOverrides = st.trayectoOverrides;
+  state.observaciones = st.observaciones;
+  state.responsables = st.responsables;
+  state.motivos = st.motivos;
+  state.cumplidosManuales = st.cumplidosManuales;
+  state.fecha = st.fecha;
+  assumptions.cargue = asm.cargue;
+  assumptions.calidad = asm.calidad;
+  assumptions.tolerancia = asm.tolerancia;
+  // Hasta el 2026-10-06 la casilla se llenaba pero el calculo seguia con el
+  // adelanto que hubiera en pantalla: un dia guardado con otro piso se
+  // reabria calculado con el de hoy.
+  assumptions.toleranciaAdelanto = asm.toleranciaAdelanto;
+  assumptions.espaciamiento = asm.espaciamiento;
+  assumptions.trayecto = asm.trayecto;
+  assumptions.zonaPlanta = asm.zonaPlanta;
+
+  document.getElementById('asmCargue').value = asm.cargue;
+  document.getElementById('asmCalidad').value = asm.calidad;
+  document.getElementById('asmTolerancia').value = asm.tolerancia;
+  document.getElementById('asmEspaciamiento').value = asm.espaciamiento;
+  document.getElementById('asmFecha').value = fecha;
+  renderTrayectoTable();
+
+  HIST.abierto = {fecha, guardado_en: dia.guardado_en};
+  renderAvisoDiaAbierto();
+  recalcAll();
+  status.textContent = '';
+  // Se pasa a General: el historial ya cumplio su parte y lo que interesa
+  // ahora es el dia.
+  document.querySelector('.tab-btn[data-tab="general"]').click();
+}
+
+function renderAvisoDiaAbierto(){
+  const el = document.getElementById('avisoDiaAbierto');
+  if (!HIST.abierto){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = `Estás viendo el día <strong>${HIST.abierto.fecha}</strong> del historial,
+    guardado el ${(HIST.abierto.guardado_en||'').replace('T',' a las ')}, con los supuestos de ese día.
+    <button id="btnVolverAHoy" style="margin-left:10px; padding:5px 12px; background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit;">Salir del día</button>`;
+  document.getElementById('btnVolverAHoy').addEventListener('click', ()=>{
+    document.getElementById('btnReiniciar').click();
+  });
+}
+
+</script>
+</body>
+</html>

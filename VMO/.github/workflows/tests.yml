@@ -1,0 +1,60 @@
+# La suite, en cada PR y en cada push a main.
+#
+# Por que existe: hasta el 2026-09-07 este repo no tenia ninguna verificacion
+# automatica — los PRs se mergeaban con `checks: 0` y lo unico que los cubria
+# era que alguien corriera pytest a mano. Eso alcanza mientras los PRs los
+# escriba una persona que sepa; deja de alcanzar en cuanto entre un PR
+# automatico (Dependabot) que nadie mire.
+#
+# Corre en WINDOWS a proposito, no en ubuntu: es el sistema donde el proyecto
+# se desarrolla y donde los 732 tests estan verdes. Un runner de linux seria
+# mas barato, pero estrenar CI y estrenar plataforma a la vez convierte
+# cualquier rojo en una pregunta de dos respuestas posibles.
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Un push nuevo sobre la misma rama cancela la corrida anterior: la suite
+# tarda ~4 minutos y no tiene sentido pagar por un commit ya superado.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      # Lo que este checkout NO tiene, y por que no importa:
+      #
+      #   - `.env` con la API key. Ningun test llama a la API: los que tocan
+      #     Vision le pasan un cliente falso. `core` importa sin la key.
+      #   - `estimaciones.db` y `conduces.db` (.gitignore). Un test se saltea
+      #     solo (`requiere_base_estimaciones`).
+      #   - Los 15 documentos del cliente, 768 MB (.gitignore). Otro test se
+      #     saltea solo (`requiere_documentos_cliente`).
+      #   - LibreOffice. Los tests que recalculan con `soffice` se saltean
+      #     solos si no esta, y en el runner no esta: son ~30 de los salteos.
+      #
+      # El verde esperado en CI es ~700 pasando y ~32 salteados. Ojo con ese
+      # numero: la primera version de este archivo decia "730 y 2" porque se
+      # midio en un clone limpio de la maquina de desarrollo, que SI tiene
+      # LibreOffice. Un clone limpio no es lo mismo que una maquina limpia.
+      #
+      # Un salteo aca es honesto y dice por que; un FALLO es una regresion.
+      - name: Correr la suite
+        run: python -m pytest tests/ -q

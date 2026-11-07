@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estadísticas de Cumplimiento — VMO Concretos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="/logistica.logic.js?v=2026-10-28"></script>
+<script src="/logistica.api.js?v=2026-10-08b"></script>
+<style>
+  :root{
+    color-scheme: dark;
+    --vmo-red:#D32F2F; --vmo-red-dark:#F87171;
+    --ink:#EEF2F7; --muted:rgba(238,242,247,0.55); --line:rgba(255,255,255,0.07);
+    --bg:#0D1829; --card:#152535; --elevated:#1C3045;
+    --ok:#34D399; --ok-bg:rgba(16,185,129,0.11);
+    --warn:#F59E0B; --warn-bg:rgba(245,158,11,0.11);
+    --err:#F87171; --err-bg:rgba(248,113,113,0.11);
+    --brand-glow:rgba(211,47,47,0.22);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Inter','Segoe UI',system-ui,sans-serif;
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(rgba(211,47,47,0.03) 1px, transparent 1px),
+      radial-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size:40px 40px, 20px 20px; background-position:0 0, 10px 10px;
+    color:var(--ink); -webkit-font-smoothing:antialiased;
+  }
+  header{
+    background:var(--card); color:var(--ink); padding:16px 28px;
+    display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--line); flex-wrap:wrap; gap:10px; position:relative;
+  }
+  header::after{content:''; position:absolute; bottom:-1px; left:0; width:180px; height:2px;
+    background:linear-gradient(90deg, var(--vmo-red) 0%, transparent 100%);}
+  header .brand{display:flex; flex-direction:column; gap:2px;}
+  header .brand .tag{text-transform:uppercase; letter-spacing:1px; font-size:10.5px; color:var(--muted);}
+  header h1{margin:0; font-size:17px; font-weight:700; letter-spacing:-.2px;}
+  .volver{
+    padding:8px 16px; background:var(--elevated); color:var(--ink); text-decoration:none;
+    border:1px solid var(--line); border-radius:8px; font-size:13px; font-weight:600;
+  }
+  .volver:hover{background:rgba(255,255,255,.06);}
+
+  .wrap{max-width:1300px; margin:0 auto; padding:20px 24px 60px;}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:12px;
+    margin-bottom:20px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
+  .panel-head{padding:14px 18px; border-bottom:1px solid var(--line); display:flex;
+    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+  .panel-head h2{margin:0; font-size:14px; font-weight:700;}
+  .panel-head .sub{font-size:12px; color:var(--muted);}
+  .panel-body{padding:16px 18px;}
+
+  .kpis{display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:20px;}
+  .kpi{background:var(--card); border:1px solid var(--line); border-top:3px solid var(--vmo-red);
+    border-radius:12px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
+  .kpi .label{font-size:10.5px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.5px; font-weight:700;}
+  .kpi .value{font-size:28px; font-weight:700; margin-top:4px;}
+  .kpi .sub{font-size:11px; color:var(--muted); margin-top:2px;}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{text-align:left; padding:9px 10px; background:rgba(0,0,0,.3);
+    border-bottom:1px solid var(--line); color:var(--muted); font-weight:700;
+    text-transform:uppercase; font-size:10.5px; letter-spacing:.7px; white-space:nowrap;}
+  tbody td{padding:9px 10px; border-bottom:1px solid rgba(255,255,255,0.03); vertical-align:middle;}
+  tbody tr:hover{background:rgba(255,255,255,.02);}
+  td.num, th.num{text-align:right; font-variant-numeric:tabular-nums;}
+  .barra{height:7px; border-radius:4px; background:rgba(255,255,255,.07); overflow:hidden; min-width:70px;}
+  .barra span{display:block; height:100%; border-radius:4px;}
+  .empty-state{padding:40px 20px; text-align:center; color:var(--muted); font-size:13px;}
+  .nota{font-size:12px; color:var(--muted); line-height:1.5; margin-top:12px;}
+  /* Motivos de incumplimiento: un circulo y los botones por responsable */
+  .chips-resp{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;}
+  .chip-resp{padding:7px 14px; border:1px solid var(--line); background:var(--elevated); color:var(--muted);
+    border-radius:999px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;}
+  .chip-resp strong{color:var(--ink); margin-left:4px;}
+  .chip-resp.activo{border-color:var(--vmo-red); color:var(--ink); box-shadow:inset 0 -2px 0 var(--vmo-red);}
+  .circulo-uno{display:flex; align-items:center; gap:24px; flex-wrap:wrap;}
+  .circulo-lista{flex:1; min-width:240px; font-size:12.5px; line-height:1.9;}
+  .fila-motivo{display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:0 4px;
+    border-bottom:1px solid rgba(255,255,255,.04);}
+  .punto{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:baseline;}
+  .zona-tag{font-size:10.5px; color:var(--muted);}
+  .sin-dato{color:var(--muted);}
+  footer{text-align:center; padding:26px; color:var(--muted); font-size:11.5px;}
+
+  /* ── Selector de planta ── */
+  .filtro{
+    display:flex; align-items:center; flex-wrap:wrap; gap:10px 14px;
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:12px 16px; margin-bottom:18px;
+  }
+  .filtro label{font-size:11px; text-transform:uppercase; letter-spacing:.5px;
+                color:var(--muted); font-weight:700;}
+  .filtro select{
+    background:var(--elevated); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; padding:7px 10px; font-size:13px; font-weight:600;
+    min-width:190px;
+  }
+  .filtro select:focus-visible{outline:2px solid var(--vmo-red); outline-offset:2px;}
+  .filtro .zona-de-planta{font-size:12px; color:var(--muted);}
+  .filtro .alcance{margin-left:auto; font-size:11.5px; color:var(--muted); text-align:right;}
+
+  /* ── Anillos de porcentaje ──
+     Dos por ventana: una unidad cada uno. Van juntos a proposito, porque la
+     brecha entre los dos ES el dato (ver resumenDeCumplimiento). */
+  .aros{display:grid; grid-template-columns:1fr 1fr auto; gap:12px; margin-bottom:20px;}
+  .aro-grupo{
+    background:var(--card); border:1px solid var(--line); border-top:3px solid var(--vmo-red);
+    border-radius:12px; padding:14px 16px 16px;
+  }
+  .aro-titulo{font-size:10.5px; text-transform:uppercase; letter-spacing:.5px;
+              color:var(--muted); font-weight:700; margin-bottom:10px;}
+  .aro-par{display:flex; gap:18px; justify-content:space-around; flex-wrap:wrap;}
+  .aro{display:flex; flex-direction:column; align-items:center; gap:4px; min-width:92px;}
+  .aro-num{font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums;}
+  .aro-unidad{font-size:11px; font-weight:700; color:var(--ink);}
+  .aro svg{display:block;}
+  .aro-cifra{font-size:19px; font-weight:700; font-variant-numeric:tabular-nums;}
+  /* Los datos que no son porcentaje: no llevan anillo porque no son una
+     fraccion de nada, y un anillo al 100% para "2 dias" seria mentira. */
+  .aro-datos{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:14px 18px; display:flex; flex-direction:column; justify-content:center; gap:10px;
+    min-width:160px;
+  }
+  .aro-datos .d-val{font-size:18px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .aro-datos .d-lbl{font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted);}
+
+  @media (max-width:900px){
+    .aros{grid-template-columns:1fr;}
+    .filtro .alcance{margin-left:0; text-align:left; width:100%;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="tag">VMO Concretos · Logística</span>
+    <h1>Estadísticas de Cumplimiento</h1>
+  </div>
+  <a class="volver" id="enlaceDia" href="/logistica.html">← Dashboard del día</a>
+</header>
+
+<div class="wrap">
+  <div id="filtro"></div>
+  <div id="kpis"></div>
+  <div id="serie"></div>
+  <div id="motivos"></div>
+  <div id="elementos"></div>
+  <div id="plantas"></div>
+</div>
+
+<footer>VMO Concretos · Estadísticas de Cumplimiento · Los porcentajes se recalculan desde los días guardados</footer>
+
+<script>
+// Estadisticas del historial de Logistica.
+//
+// De donde sale cada numero: esta pagina NO guarda ni lee porcentajes. Pide al
+// servidor los dias guardados —las filas crudas y los supuestos de cada uno— y
+// recalcula el cumplimiento con computeCumplimiento(), la MISMA funcion que usa
+// el dashboard del dia. Por eso un dia viejo muestra aca lo mismo que muestra
+// al abrirlo alla: es el mismo calculo, no dos que tienen que coincidir.
+//
+// El costo es un pedido por dia. Con un mes son ~30 y no se nota; si algun dia
+// molesta, se agrega un endpoint que devuelva el rango junto — pero el calculo
+// tiene que seguir pasando en el navegador.
+
+// Adentro del portal el sidebar ya es la navegacion.
+if (estaEmbebido()) document.getElementById('enlaceDia').style.display = 'none';
+
+const COLOR = {ok: '#34D399', warn: '#F59E0B', err: '#F87171'};
+// colorPct() vive en logistica.api.js: la usa tambien el dashboard del dia.
+const pctTexto = p => p === null ? '—' : p + '%';
+// El sufijo con la planta elegida. Va en los titulos para que una captura de
+// pantalla de la pagina filtrada no quede ambigua sobre de quien es el numero.
+const esZona = () => !!plantaElegida && plantaElegida.startsWith(PREFIJO_ZONA);
+// Como se nombra lo elegido en los textos: "Zona Punta Cana" o la planta.
+const nombreElegido = () => esZona() ? 'Zona ' + plantaElegida.slice(PREFIJO_ZONA.length) : plantaElegida;
+const tituloPlanta = () => {
+  const partes = [plantaElegida ? nombreElegido() : null, servicioElegido ? NOMBRE_SERVICIO[servicioElegido] : null].filter(Boolean);
+  return partes.length ? ` — ${esc(partes.join(' · '))}` : '';
+};
+
+// Un anillo de porcentaje. Sin animacion a proposito: se redibuja en cada
+// cambio del selector y una transicion desde cero en cada render se lee como
+// un parpadeo, no como una entrada.
+//
+// `pct` en null NO se dibuja como 0%: el arco queda vacio y el numero sale
+// como raya. "No hubo nada que evaluar" y "no cumplio nada" son cosas
+// distintas, y un anillo vacio con un 0% adentro las mostraria igual.
+function anillo(pct, unidad, detalle){
+  const R = 34, GROSOR = 9, CENTRO = 42, LARGO = 2 * Math.PI * R;
+  const frac = pct === null ? 0 : Math.max(0, Math.min(100, pct)) / 100;
+  const color = colorPct(pct);
+  const etiqueta = `${unidad}: ${pctTexto(pct)}${detalle ? ' (' + detalle + ')' : ''}`;
+  return `
+    <div class="aro">
+      <svg viewBox="0 0 84 84" width="84" height="84" role="img" aria-label="${etiqueta}">
+        <circle cx="${CENTRO}" cy="${CENTRO}" r="${R}" fill="none"
+                stroke="rgba(255,255,255,0.08)" stroke-width="${GROSOR}"/>
+        ${frac > 0 ? `<circle cx="${CENTRO}" cy="${CENTRO}" r="${R}" fill="none"
+                stroke="${color}" stroke-width="${GROSOR}" stroke-linecap="round"
+                stroke-dasharray="${LARGO.toFixed(2)}"
+                stroke-dashoffset="${(LARGO * (1 - frac)).toFixed(2)}"
+                transform="rotate(-90 ${CENTRO} ${CENTRO})"/>` : ''}
+        <text x="${CENTRO}" y="${CENTRO}" text-anchor="middle" dominant-baseline="central"
+              class="aro-cifra" fill="${color}">${pctTexto(pct)}</text>
+      </svg>
+      <span class="aro-unidad">${unidad}</span>
+      ${detalle ? `<span class="aro-num">${detalle}</span>` : ''}
+    </div>`;
+}
+
+// Las dos unidades de una ventana, juntas y en el mismo orden siempre.
+function parDeAnillos(titulo, res){
+  return `
+    <div class="aro-grupo">
+      <div class="aro-titulo">${titulo}</div>
+      <div class="aro-par">
+        ${anillo(res.pct, NOMBRE_PCT, `${fmtInt(res.m3Cumplidos)}/${fmtInt(res.m3)} m³`)}
+        ${anillo(res.pctPedidos, NOMBRE_PCT_PEDIDOS, `${fmtInt(res.pedidosCumplidos)}/${fmtInt(res.pedidos)} entregas`)}
+      </div>
+    </div>`;
+}
+
+// ================= SELECTOR DE PLANTA =================
+//
+// Pedido de la jefa de Axel (2026-10-01): ver las estadisticas por movil. El
+// selector filtra TODA la pagina —porcentajes, grafico por dia y tabla de
+// abajo— y "Todas las plantas" deja la vista de antes intacta.
+//
+// El filtrado en si vive en logistica.logic.js y esta probado ahi: si lo
+// hiciera esta pantalla, el cumplimiento de una planta se calcularia en dos
+// lugares distintos y podrian discrepar.
+let plantaElegida = null;    // null = todas
+let servicioElegido = null;  // null = todos; 'bomba' o 'directo' (2026-10-13)
+let diasEnMemoria = [];      // el historial completo, cargado una sola vez
+let fallidosEnMemoria = 0;   // dias que no se pudieron cargar, para repetir el aviso
+
+function renderFiltro(dias){
+  const plantas = plantasDelHistorial(dias);
+  // Si la planta elegida dejo de existir en el historial, se vuelve a todas en
+  // vez de mostrar una pagina vacia sin explicacion.
+  if (plantaElegida && !esZona() && !plantas.some(p => p.planta === plantaElegida)) plantaElegida = null;
+  const elegida = plantas.find(p => p.planta === plantaElegida);
+  document.getElementById('filtro').innerHTML = `
+    <div class="filtro">
+      <label for="selPlanta">Planta</label>
+      <select id="selPlanta">
+        <option value="">Todas las plantas</option>
+        <optgroup label="Zona">
+          ${ZONAS.map(z => `<option value="${esc(PREFIJO_ZONA + z)}" ${plantaElegida === PREFIJO_ZONA + z ? 'selected' : ''}
+            >Zona ${esc(z)}</option>`).join('')}
+        </optgroup>
+        <optgroup label="Planta">
+        ${plantas.map(p => `<option value="${esc(p.planta)}" ${plantaElegida === p.planta ? 'selected' : ''}
+          >${esc(p.planta)} · ${p.m3
+              ? fmtInt(p.m3) + ' m³'
+              : fmtInt(p.filas) + ' entrega(s) sin cargue'}</option>`).join('')}
+        </optgroup>
+      </select>
+      ${elegida ? `<span class="zona-de-planta">Zona: ${esc(zonaDeFila(elegida) || 'sin zona')}</span>` : ''}
+      <label for="selServicio">Servicio</label>
+      <select id="selServicio" style="min-width:130px;">
+        <option value="">Todos</option>
+        ${SERVICIOS.map(s => `<option value="${s}" ${servicioElegido === s ? 'selected' : ''}>${NOMBRE_SERVICIO[s]}</option>`).join('')}
+      </select>
+      <span class="alcance">${plantaElegida
+        ? (esZona() ? 'Todo lo de abajo es solo de esta zona' : 'Todo lo de abajo es solo de esta planta')
+        : `El acumulado y el gráfico suman las ${plantas.length} plantas del historial`}</span>
+    </div>`;
+  document.getElementById('selPlanta').addEventListener('change', (ev) => {
+    plantaElegida = ev.target.value || null;
+    render(diasEnMemoria, fallidosEnMemoria);
+  });
+  document.getElementById('selServicio').addEventListener('change', (ev) => {
+    servicioElegido = ev.target.value || null;
+    render(diasEnMemoria, fallidosEnMemoria);
+  });
+}
+
+// El token y el fetch con token viven en logistica.api.js.
+
+function historialVacio(){
+  document.getElementById('kpis').innerHTML = `
+    <div class="panel">
+      <div class="panel-body" style="padding:34px 30px;">
+        <h2 style="margin:0 0 6px; font-size:17px;">El historial está vacío</h2>
+        <p style="margin:0 0 20px; color:var(--muted); font-size:13px; line-height:1.55;">
+          Acá no se guarda ningún porcentaje: todo se calcula desde los días guardados,
+          y todavía no hay ninguno. Son dos pasos.
+        </p>
+        <ol style="margin:0 0 22px; padding-left:20px; color:var(--ink); font-size:13.5px; line-height:1.9;">
+          <li>Abrí el <strong>dashboard del día</strong> y subí los dos Excel: la
+              <strong>Programación</strong> y el <strong>Tiempo de Cargue</strong>.</li>
+          <li>Revisá los trayectos y los cruces marcados, poné la fecha, y apretá
+              <strong>&ldquo;Guardar día&rdquo;</strong>.</li>
+        </ol>
+        <a class="volver" href="/logistica.html" style="display:inline-block;">Ir al dashboard del día →</a>
+        <div class="nota" style="margin-top:20px;">
+          Con <strong>un solo día</strong> ya vas a ver el porcentaje y la tabla por planta.
+          El gráfico por día y el OAT empiezan a decir algo recién con varios días
+          guardados, porque comparan.
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('serie').innerHTML = '';
+  document.getElementById('plantas').innerHTML = '';
+  // El selector tambien: una planta elegida sobre una pantalla sin datos
+  // ofreceria filtrar algo que no esta.
+  document.getElementById('filtro').innerHTML = '';
+}
+
+function mensaje(texto){
+  document.getElementById('kpis').innerHTML =
+    `<div class="panel"><div class="panel-body"><div class="empty-state">${texto}</div></div></div>`;
+  document.getElementById('serie').innerHTML = '';
+  document.getElementById('plantas').innerHTML = '';
+  document.getElementById('motivos').innerHTML = '';
+  document.getElementById('filtro').innerHTML = '';
+}
+
+async function cargarTodo(){
+  mensaje('Cargando el historial...');
+  let indice;
+  try { indice = (await apiLogistica('/api/logistica/dias')).dias; }
+  catch (err) { mensaje(err.sinToken ? err.message : 'No se pudo leer el historial: ' + err.message); return; }
+
+  if (!indice.length){
+    // El historial vacio NO es un error, pero una linea de texto gris en un
+    // recuadro se lee como una pantalla rota. Dice que falta y como llenarlo.
+    historialVacio();
+    return;
+  }
+
+  // Se piden todos los dias porque el OAT es "of all time": filtrarlos lo
+  // dejaria de ser. De a 6 a la vez para no abrir 60 conexiones de golpe.
+  const dias = [];
+  for (let i = 0; i < indice.length; i += 6){
+    const tanda = indice.slice(i, i + 6);
+    mensaje(`Cargando el historial... ${dias.length}/${indice.length} días`);
+    const cargados = await Promise.all(tanda.map(d =>
+      apiLogistica('/api/logistica/dias/' + encodeURIComponent(d.fecha))
+        .then(dia => {
+          const {state, assumptions} = restaurarDia(dia);
+          const comp = computeCumplimiento(state, assumptions);
+          // motivos, responsables y lo no despachado viajan con el dia para
+          // el Pareto de motivos
+          return {fecha: d.fecha, indice: d, results: comp ? comp.results : [],
+                  // Los m3 del dia salen del cargue restaurado, no del indice:
+                  // el indice cuenta las filas crudas, con Macao y los clientes
+                  // internos adentro (se veia 11.281 m3 contra 8.459, 2026-10-12).
+                  m3Despachado: (state.cargue || []).reduce((s, c) => s + (c.cantidad || 0), 0),
+                  noDespachado: comp ? comp.noDespachado : [],
+                  motivos: state.motivos, responsables: state.responsables};
+        })
+        .catch(() => null)));
+    cargados.filter(Boolean).forEach(d => dias.push(d));
+  }
+
+  // El historial se carga UNA vez y queda en memoria: cambiar de planta en el
+  // selector no vuelve a pedir nada al servidor, solo filtra y re-renderiza.
+  diasEnMemoria = dias;
+  fallidosEnMemoria = indice.length - dias.length;
+  render(diasEnMemoria, fallidosEnMemoria);
+}
+</script>
+
+<script>
+// ================= TARJETAS DE ARRIBA =================
+function renderKpis(dias, ultimo, fallidos){
+  const oat = acumuladoDeCumplimiento(dias);
+  const delDia = resumenDeCumplimiento(ultimo.results);
+  // Los dias en que hubo algo: con una planta elegida, los que ella despacho.
+  // Sin filtro son todos, porque un dia guardado sin filas igual se guardo.
+  const filtrado = plantaElegida || servicioElegido;
+  const conDespacho = filtrado ? dias.filter(d => d.results.length) : dias;
+  // Los m³ cambian de FUENTE segun el filtro, y por eso la etiqueta tambien:
+  //   sin filtro -> el total despachado del dia, del cargue sin Macao ni
+  //                 clientes internos (incluye cargues que no cruzaron con
+  //                 ningun pedido)
+  //   filtrado   -> la suma de las entregas cruzadas de esa planta
+  // No son la misma medida y mezclarlas daria un numero que no cierra con
+  // ninguna de las dos.
+  const m3 = filtrado
+    ? dias.reduce((s, d) => s + d.results.reduce((t, r) => t + (r.cantReal || 0), 0), 0)
+    : dias.reduce((s, d) => s + (d.m3Despachado || 0), 0);
+
+  document.getElementById('kpis').innerHTML = `
+    ${fallidos ? `<div class="panel" style="border-color:var(--err);"><div class="panel-body" style="color:var(--err); font-size:13px;">
+      ⚠ ${fallidos} día(s) del historial no se pudieron cargar y <strong>no están contados</strong> en estos números.
+    </div></div>` : ''}
+    <div class="aros">
+      ${parDeAnillos(filtrado
+          ? `Acumulado${tituloPlanta().replace(' — ', ' de ')} · ${oat.dias} ${oat.dias === 1 ? 'día' : 'días'}`
+          : `Acumulado · todo el historial · ${oat.dias} ${oat.dias === 1 ? 'día' : 'días'}`, oat)}
+      ${parDeAnillos(`Último día · ${ultimo.fecha}${delDia.pedidos === 0 ? ' · sin entregas' : ''}`, delDia)}
+      <div class="aro-datos">
+        <div>
+          <div class="d-val">${conDespacho.length}</div>
+          <div class="d-lbl">${conDespacho.length === 1 ? 'día' : 'días'} ${filtrado ? 'con entregas' : 'guardados'}</div>
+        </div>
+        <div>
+          <div class="d-val">${fmtInt(m3)}</div>
+          <div class="d-lbl">${plantaElegida ? (esZona() ? 'm³ de esta zona' : 'm³ de esta planta') : servicioElegido ? 'm³ ' + NOMBRE_SERVICIO[servicioElegido].toLowerCase() : 'm³ del historial'}</div>
+        </div>
+      </div>
+    </div>
+    ${brechaTexto(oat, 'el acumulado')}`;
+}
+
+// El aviso de brecha, igual que en la pantalla del dia: cuando las dos
+// unidades no coinciden, decirlo, porque significa que las entregas que
+// cumplieron no son las que movieron el volumen.
+function brechaTexto(res, cual){
+  if (res.pct === null || res.pctPedidos === null || res.pct === res.pctPedidos) return '';
+  return `<div class="nota" style="margin:-8px 0 20px;">En ${cual}, ${NOMBRE_PCT.toLowerCase()} e
+    ${NOMBRE_PCT_PEDIDOS.toLowerCase()} discrepan en <strong>${Math.abs(res.pct - res.pctPedidos)} puntos</strong>: las entregas
+    que cumplieron no son las que movieron el volumen.</div>`;
+}
+</script>
+
+<script>
+// ================= CUMPLIMIENTO POR DIA =================
+//
+// El grafico es SVG escrito a mano, sin libreria: el dashboard ya depende de
+// un CDN para leer Excel y no hacia falta sumar otro. Ademas asi funciona sin
+// internet, que es un pendiente conocido del modulo.
+function renderSerie(serie){
+  const cont = document.getElementById('serie');
+  const conDato = serie.filter(d => d.pct !== null);
+  if (!conDato.length){
+    cont.innerHTML = `<div class="panel"><div class="panel-head"><h2>Cumplimiento por día${tituloPlanta()}</h2></div>
+      <div class="panel-body"><div class="empty-state">${plantaElegida
+        ? `Ningún día guardado tiene entregas evaluables de ${esZona() ? 'esta zona' : 'esta planta'}.`
+        : 'Ningún día guardado tiene pedidos evaluables todavía.'}</div></div></div>`;
+    return;
+  }
+
+  const anchoBarra = 34, hueco = 10, alto = 190, margenIzq = 38, margenAbajo = 46, margenArriba = 14;
+  const ancho = margenIzq + serie.length * (anchoBarra + hueco) + 10;
+  const y = p => margenArriba + (alto - margenArriba) * (1 - p / 100);
+
+  const lineas = [0, 25, 50, 75, 100].map(v => `
+    <line x1="${margenIzq}" y1="${y(v)}" x2="4000" y2="${y(v)}" stroke="rgba(255,255,255,.07)" stroke-width="1"/>
+    <text x="${margenIzq - 7}" y="${y(v) + 3.5}" text-anchor="end" font-size="9.5" fill="rgba(238,242,247,.45)">${v}</text>`).join('');
+
+  const barras = serie.map((d, i) => {
+    const x = margenIzq + i * (anchoBarra + hueco);
+    const etiqueta = `<text x="${x + anchoBarra / 2}" y="${alto + 15}" text-anchor="middle" font-size="9.5" fill="rgba(238,242,247,.55)">${d.fecha.slice(5)}</text>
+      <text x="${x + anchoBarra / 2}" y="${alto + 28}" text-anchor="middle" font-size="9" fill="rgba(238,242,247,.32)">${fmtInt(d.m3) || '—'}</text>`;
+    if (d.pct === null){
+      return `<rect x="${x}" y="${y(0) - 3}" width="${anchoBarra}" height="3" fill="rgba(255,255,255,.12)"/>
+        <title>${d.fecha}: sin pedidos evaluables</title>${etiqueta}`;
+    }
+    const altura = Math.max(2, y(0) - y(d.pct));
+    return `
+      <g><title>${d.fecha} — ${NOMBRE_PCT}: ${d.pct}% (${fmtInt(d.m3Cumplidos)} de ${fmtInt(d.m3)} m³) · ${NOMBRE_PCT_PEDIDOS}: ${pctTexto(d.pctPedidos)} (${d.pedidosCumplidos} de ${d.pedidos})</title>
+        <rect x="${x}" y="${y(d.pct)}" width="${anchoBarra}" height="${altura}" rx="3" fill="${colorPct(d.pct)}" opacity="0.85"/>
+        <text x="${x + anchoBarra / 2}" y="${y(d.pct) - 5}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${colorPct(d.pct)}">${d.pct}</text>
+      </g>${etiqueta}`;
+  }).join('');
+
+  cont.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Cumplimiento por día${tituloPlanta()}</h2>
+        <span class="sub">la barra es la ${NOMBRE_PCT.toLowerCase()}; el número chico, los m³ evaluados</span>
+      </div>
+      <div class="panel-body" style="overflow-x:auto;">
+        <svg width="100%" height="${alto + 36}" style="min-width:${ancho}px; display:block;"
+             role="img" aria-label="Cumplimiento por día">
+          ${lineas}${barras}
+        </svg>
+        <div class="nota">La altura es el % de ${NOMBRE_PCT.toLowerCase()} y el número chico son los m³ evaluados. Una barra al ras significa que ese día no tuvo ningún m³ evaluable — no que haya cumplido 0%.</div>
+      </div>
+    </div>`;
+}
+</script>
+
+<script>
+// ================= POR PLANTA: OAT Y EL DIA =================
+function renderPlantas(dias, fechaDelDia){
+  const filas = plantasOatYDelDia(dias, fechaDelDia);
+  const cont = document.getElementById('plantas');
+  if (!filas.length){
+    cont.innerHTML = `<div class="panel"><div class="panel-head"><h2>Por planta</h2></div>
+      <div class="panel-body"><div class="empty-state">Ninguna planta tiene pedidos evaluables en el historial.</div></div></div>`;
+    return;
+  }
+  const barra = (pct) => pct === null ? '<div class="sin-dato">—</div>' : `
+    <div class="barra"><span style="width:${pct}%; background:${colorPct(pct)};"></span></div>`;
+
+  cont.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Cumplimiento por planta</h2>
+        <span class="sub">OAT = todo el historial · Del día = ${fechaDelDia}</span>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <table>
+          <thead><tr>
+            <th>Planta</th><th>Zona</th>
+            <th class="num">OAT · Frec. despacho</th><th style="width:120px;"></th><th class="num">OAT · Inicio carga</th><th class="num">m³ OAT</th>
+            <th class="num">Día · Frec. despacho</th><th style="width:120px;"></th><th class="num">Día · Inicio carga</th><th class="num">m³ del día</th>
+          </tr></thead>
+          <tbody>${filas.map(f => `
+            <tr>
+              <td><strong>${esc(f.planta)}</strong></td>
+              <td class="zona-tag">${esc(f.zona || 'Sin zona')}</td>
+              <td class="num" style="color:${colorPct(f.oat.pct)}; font-weight:700;">${pctTexto(f.oat.pct)}</td>
+              <td>${barra(f.oat.pct)}</td>
+              <td class="num" style="color:${colorPct(f.oat.pctPedidos)};">${pctTexto(f.oat.pctPedidos)}<span style="color:var(--muted); font-weight:400;"> · ${fmtInt(f.oat.pedidosCumplidos)}/${fmtInt(f.oat.pedidos)}</span></td>
+              <td class="num" style="color:var(--muted);">${fmtInt(f.oat.m3Cumplidos)}/${fmtInt(f.oat.m3)}</td>
+              <td class="num" style="color:${colorPct(f.dia ? f.dia.pct : null)}; font-weight:700;">${pctTexto(f.dia ? f.dia.pct : null)}</td>
+              <td>${barra(f.dia ? f.dia.pct : null)}</td>
+              <td class="num" style="color:${colorPct(f.dia ? f.dia.pctPedidos : null)};">${f.dia ? pctTexto(f.dia.pctPedidos) + `<span style="color:var(--muted); font-weight:400;"> · ${fmtInt(f.dia.pedidosCumplidos)}/${fmtInt(f.dia.pedidos)}</span>` : '<div class="sin-dato">—</div>'}</td>
+              <td class="num" style="color:var(--muted);">${f.dia ? fmtInt(f.dia.m3Cumplidos) + '/' + fmtInt(f.dia.m3) : '<span class="sin-dato">no despachó</span>'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="nota">Cada <strong>hora programada</strong> se juzga por su primer camión —si la colada arrancó a tiempo— y después pesa por los <strong>m³ que movió</strong>. La planta es la de ese primer camión, que es la misma que decide su tiempo de trayecto. <strong>Las dos columnas de porcentaje son la misma medida con distinta unidad</strong>: frecuencia de despacho pesa el volumen que movió cada entrega, inicio de carga las cuenta todas igual. Cuando discrepan mucho —Movil VI dio 75% y 50% sobre los tres primeros días— es que las entregas que cumplieron no son las que movieron el hormigón.</div>`;
+}
+
+// ================= DETALLE DE UNA PLANTA =================
+//
+// Reemplaza a la tabla de todas las plantas cuando hay una elegida: ahi la
+// comparacion entre plantas ya no tiene sentido (hay una sola fila) y lo que
+// hace falta es ver QUE entregas explican el porcentaje.
+function renderDetalle(dias, planta){
+  const filas = entregasDePlanta(dias, planta);
+  const cont = document.getElementById('plantas');
+  if (!filas.length){
+    cont.innerHTML = `<div class="panel"><div class="panel-head"><h2>Entregas de ${esc(planta)}</h2></div>
+      <div class="panel-body"><div class="empty-state">Esta planta no tiene entregas en el historial guardado.</div></div></div>`;
+    return;
+  }
+  // El color por el estado; el texto dice "Cumplido (manual)" si se paso a mano.
+  const estadoPill = (r) => {
+    const e = r.estado;
+    const color = e === 'Cumplido' ? COLOR.ok : e === 'Incumplido' ? COLOR.err : 'var(--muted)';
+    return `<span style="color:${color}; font-weight:700;">${estadoVisible(r)}</span>`;
+  };
+  cont.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Entregas de ${esc(planta)}</h2>
+        <span class="sub">${filas.length} entrega(s) · de la más reciente a la más vieja</span>
+      </div>
+      <div class="panel-body" style="padding:0; overflow-x:auto;">
+        <table>
+          <thead><tr>
+            <th>Fecha</th><th>Cliente</th><th>Obra</th>
+            <th class="num">Hora prog.</th><th class="num">Primer cargue</th>
+            <th class="num">Trayecto</th><th class="num">Diferencia</th>
+            <th>Estado</th><th class="num">Camiones</th><th class="num">m³</th>
+          </tr></thead>
+          <tbody>${filas.map(r => `
+            <tr>
+              <td style="white-space:nowrap;">${r.fecha}</td>
+              <td>${esc(r.cliente || '')}</td>
+              <td style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                  title="${esc(r.obraReal || r.obraProg || '')}"
+                  >${esc(r.obraReal || r.obraProg || '')}</td>
+              <td class="num">${minToStr(r.horaProg)}</td>
+              <td class="num">${minToStr(r.horaCargue)}</td>
+              <td class="num" style="color:var(--muted);">${r.trayecto !== null && r.trayecto !== undefined ? r.trayecto + ' min' : '—'}</td>
+              <td class="num">${r.diff !== null && r.diff !== undefined ? fmtDiff(r.diff) : '—'}</td>
+              <td>${estadoPill(r)}</td>
+              <td class="num">${fmtInt(r.cargues || 0)}</td>
+              <td class="num">${fmtInt(r.cantReal || 0)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="nota">La <strong>diferencia</strong> es entre la llegada estimada —primer cargue más carga, calidad y trayecto— y la hora programada: negativa es llegar antes. Una entrega entra al porcentaje solo si está <strong>Cumplido</strong> o <strong>Incumplido</strong>; las demás se muestran porque son parte del día, pero no se cuentan.</div>`;
+}
+
+function render(dias, fallidos){
+  renderFiltro(dias);
+  // El servicio (Bomba / Directo) filtra TODO lo de abajo, motivos incluidos.
+  dias = filtrarDiasPorServicio(dias, servicioElegido);
+  // Todo lo de abajo ve el historial YA filtrado. Los dias se conservan todos
+  // —incluso los que esa planta no despacho— para que el grafico no mienta
+  // sobre el eje de fechas.
+  const vista = filtrarDiasPorPlanta(dias, plantaElegida);
+  // El dia mas reciente del historial es el que se muestra como "del dia", y
+  // es el mismo con filtro o sin el: si la planta no despacho ese dia, sus
+  // anillos salen sin dato, que es la verdad.
+  const ultimo = vista.reduce((a, b) => a.fecha > b.fecha ? a : b);
+  renderKpis([...vista].sort((a, b) => a.fecha.localeCompare(b.fecha)), ultimo, fallidos);
+  renderSerie(serieDeCumplimiento(vista));
+  renderMotivos(dias);
+  renderElementos(vista, ultimo.fecha);
+  // Una planta muestra sus entregas; una zona, la tabla de sus plantas.
+  if (plantaElegida && !esZona()) renderDetalle(dias, plantaElegida);
+  else renderPlantas(vista, ultimo.fecha);
+}
+
+// ================= POR TIPO DE ELEMENTO (2026-10-08) =================
+// El cumplimiento de cada tipo de elemento, del historial (OAT) y del ultimo
+// dia, con el filtro de planta aplicado. El calculo es cumplimientoPorElemento(),
+// en logistica.logic.js; el orden es el del OAT, por volumen.
+function renderElementos(dias, fechaDelDia){
+  const cont = document.getElementById('elementos');
+  const oat = cumplimientoPorElemento(dias.flatMap(d => d.results));
+  const delDia = new Map(cumplimientoPorElemento(
+    (dias.find(d => d.fecha === fechaDelDia) || {results: []}).results).map(e => [e.tipo, e]));
+  if (!oat.length){ cont.innerHTML = ''; return; }
+  const barra = pct => pct === null ? '<div class="sin-dato">—</div>'
+    : `<div class="barra"><span style="width:${pct}%; background:${colorPct(pct)};"></span></div>`;
+  const celdas = e => e ? `
+      <td class="num" style="color:${colorPct(e.pct)}; font-weight:700;">${pctTexto(e.pct)}</td>
+      <td>${barra(e.pct)}</td>
+      <td class="num" style="color:${colorPct(e.pctPedidos)};">${pctTexto(e.pctPedidos)}<span style="color:var(--muted); font-weight:400;"> · ${fmtInt(e.pedidosCumplidos)}/${fmtInt(e.pedidos)}</span></td>
+      <td class="num" style="color:var(--muted);">${fmtInt(e.m3Cumplidos)}/${fmtInt(e.m3)}</td>`
+    : '<td colspan="4"><span class="sin-dato">no hubo ese día</span></td>';
+  cont.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Cumplimiento por elemento${tituloPlanta()}</h2>
+        <span class="sub">OAT = todo el historial · Del día = ${esc(fechaDelDia)}</span>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <table>
+          <thead><tr>
+            <th>Elemento</th>
+            <th class="num">OAT · Frec. despacho</th><th style="width:120px;"></th><th class="num">OAT · Inicio carga</th><th class="num">m³ OAT</th>
+            <th class="num">Día · Frec. despacho</th><th style="width:120px;"></th><th class="num">Día · Inicio carga</th><th class="num">m³ del día</th>
+          </tr></thead>
+          <tbody>${oat.map(e => `
+            <tr><td><strong>${esc(e.tipo)}</strong></td>${celdas(e)}${celdas(delDia.get(e.tipo))}</tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="nota" style="margin:-8px 0 20px;">Elementos agrupados por tipo: "COLUMNA M1" y "COLUMNA M5" cuentan como COLUMNA. Ordenados por los m³ que movieron en todo el historial.</div>`;
+}
+
+// ================= MOTIVOS DE INCUMPLIMIENTO =================
+// UN circulo con el reparto de motivos y, arriba, cuatro botones —Todos, VMO,
+// Cliente, Externo— que muestran la parte de cada responsable. Tocar uno
+// cambia el circulo y filtra el Pareto de abajo. Fueron tres circulos lado a
+// lado hasta que el usuario pidio uno solo para ahorrar espacio; la
+// comparacion entre responsables quedo en el porcentaje de cada boton.
+// Los calculos son motivosPorResponsable() y paretoDeMotivos(), en
+// logistica.logic.js; aca solo se dibuja.
+//
+// Colores: los 8 slots de la paleta categorica (modo oscuro), validados
+// contra el fondo de la pagina (#152535) con el validador de dataviz: pasan
+// todos. Que motivos llevan color lo decide motivosPorResponsable(); el resto
+// va en gris como "Otros" — con 11 motivos no hay colores distinguibles para todos.
+const COLORES_MOTIVO = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
+const COLOR_OTROS = 'rgba(238,242,247,.28)';
+let ordenMotivos = 'entregas';
+let responsableElegido = null;
+
+function colorDeMotivo(motivo, destacados){
+  const i = destacados.indexOf(motivo);
+  return i >= 0 ? COLORES_MOTIVO[i] : COLOR_OTROS;
+}
+
+function dona(r, destacados){
+  const R = 54, ancho = 15, C = 2 * Math.PI * R, GAP = 2;
+  let ini = 0;
+  const arcos = r.segmentos.map(g => {
+    const largo = C * g.valor / (r.valor || 1);
+    const visible = Math.max(0, largo - (r.segmentos.length > 1 ? GAP : 0));
+    const arco = `<circle cx="70" cy="70" r="${R}" fill="none" stroke="${colorDeMotivo(g.motivo, destacados)}"
+        stroke-width="${ancho}" stroke-dasharray="${visible} ${C - visible}" stroke-dashoffset="${-ini}"
+        transform="rotate(-90 70 70)"><title>${esc(g.motivo)}: ${g.pct}% (${ordenMotivos === 'm3' ? fmtInt(g.valor) + ' m³' : g.valor + ' entregas'})</title></circle>`;
+    ini += largo;
+    return arco;
+  }).join('');
+  const vacio = !r.casos;
+  const unidad = ordenMotivos === 'm3' ? `${fmtInt(r.valor)} m³` : `${r.casos} caso${r.casos === 1 ? '' : 's'}`;
+  return `
+    <div class="circulo-uno">
+      <svg width="150" height="150" viewBox="0 0 140 140" role="img"
+           aria-label="${esc(r.responsable)}: reparto de motivos">
+        <circle cx="70" cy="70" r="${R}" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="${ancho}"/>
+        ${arcos}
+        <text x="70" y="66" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">${esc(r.responsable)}</text>
+        <text x="70" y="86" text-anchor="middle" font-size="11" fill="var(--muted)">${vacio ? 'sin casos' : unidad}</text>
+      </svg>
+      <div class="circulo-lista">${vacio ? '<span style="color:var(--muted);">Ningún incumplido de este responsable tiene motivo cargado.</span>'
+        : r.motivos.map(m => `<div class="fila-motivo"><span class="punto" style="background:${colorDeMotivo(m.motivo, destacados)};"></span><span>${esc(m.motivo)}</span><strong>${m.pct}%</strong></div>`).join('')}</div>
+    </div>`;
+}
+
+function renderMotivos(dias){
+  const cont = document.getElementById('motivos');
+  const circ = motivosPorResponsable(dias, {planta: plantaElegida, orden: ordenMotivos});
+  const p = paretoDeMotivos(dias, {planta: plantaElegida, orden: ordenMotivos, responsable: responsableElegido});
+  const cob = circ.cobertura;
+  const titulo = `Motivos de incumplimiento${tituloPlanta()}`;
+  if (!cob.incumplidas){
+    cont.innerHTML = `<div class="panel"><div class="panel-head"><h2>${titulo}</h2></div>
+      <div class="panel-body"><div class="empty-state">No hay entregas incumplidas en los días guardados.</div></div></div>`;
+    return;
+  }
+  const faltan = cob.incumplidas - cob.completas;
+  const pctCob = Math.round(100 * cob.completas / cob.incumplidas);
+  const aviso = `<div class="nota" style="margin-top:0; margin-bottom:14px; ${pctCob < 80 ? 'color:var(--warn);' : ''}">
+      Calculado sobre <strong>${cob.completas} de ${cob.incumplidas}</strong> incumplidos (${pctCob}%).
+      ${faltan ? `Faltan cargar ${faltan} (${fmtInt(cob.m3Incompletos)} m³): ${cob.sinResponsable} sin responsable y ${cob.sinMotivo} sin motivo — se cargan en el dashboard del día y se guarda.` : ''}
+      ${pctCob < 80 ? ' Con tan pocos casos el orden puede cambiar.' : ''}
+    </div>`;
+
+  const filas = p.motivos.map((m, i) => {
+    const valor = p.orden === 'm3' ? m.m3 : m.entregas;
+    const max = p.orden === 'm3' ? p.motivos[0].m3 : p.motivos[0].entregas;
+    const resp = Object.entries(m.porResponsable).sort((a, b) => b[1] - a[1]).map(([q, n]) => `${q} ${n}`).join(' · ');
+    const dentro80 = i === 0 || p.motivos[i - 1].pctAcumulado < 80;
+    return `<tr style="${dentro80 ? '' : 'opacity:.6;'}">
+        <td style="font-weight:600;"><span class="punto" style="background:${colorDeMotivo(m.motivo, circ.destacados)};"></span>${esc(m.motivo)}</td>
+        <td style="width:30%;"><div class="barra"><span style="width:${max ? Math.max(2, 100 * valor / max) : 0}%; background:${dentro80 ? 'var(--vmo-red)' : 'rgba(255,255,255,.25)'};"></span></div></td>
+        <td class="num">${m.entregas}</td><td class="num">${fmtInt(m.m3)}</td>
+        <td class="num" style="font-weight:700;">${m.pct}%</td><td class="num">${m.pctAcumulado}%</td>
+        <td style="font-size:12px; color:var(--muted);">${esc(resp)}</td>
+      </tr>`;
+  }).join('');
+
+  cont.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h2>${titulo}</h2>
+        <label class="sub">Medir por
+          <select id="selOrdenMotivos" style="margin-left:6px;">
+            <option value="entregas" ${ordenMotivos === 'entregas' ? 'selected' : ''}>${NOMBRE_PCT_PEDIDOS}</option>
+            <option value="m3" ${ordenMotivos === 'm3' ? 'selected' : ''}>${NOMBRE_PCT}</option>
+          </select>
+        </label>
+      </div>
+      <div class="panel-body">
+        ${aviso}
+        <div class="chips-resp" role="tablist">
+          <button class="chip-resp ${!responsableElegido ? 'activo' : ''}" data-resp="">Todos <strong>100%</strong></button>
+          ${circ.responsables.map(r => `<button class="chip-resp ${responsableElegido === r.responsable ? 'activo' : ''}" data-resp="${esc(r.responsable)}"
+              title="${esc(r.responsable)}: ${r.pct}% de los incumplimientos (${ordenMotivos === 'm3' ? fmtInt(r.valor) + ' m³' : r.casos + ' casos'})">${esc(r.responsable)} <strong>${r.casos ? r.pct + '%' : '—'}</strong></button>`).join('')}
+        </div>
+        <div class="nota" style="margin:0 0 12px;">El porcentaje de cada botón es su parte de los incumplimientos${ordenMotivos === 'm3' ? ` (por ${NOMBRE_PCT.toLowerCase()})` : ` (por ${NOMBRE_PCT_PEDIDOS.toLowerCase()})`}; el círculo muestra cómo se reparten los motivos dentro de lo elegido.</div>
+        ${dona(responsableElegido ? circ.responsables.find(r => r.responsable === responsableElegido) : circ.todos, circ.destacados)}
+        <h3 style="font-size:13px; margin:18px 0 10px;">${responsableElegido ? `Pareto de ${esc(responsableElegido)}` : 'Pareto de todos los motivos'}</h3>
+        ${p.motivos.length ? `<table>
+          <thead><tr><th>Motivo</th><th></th><th class="num">Entregas</th><th class="num">m³</th>
+            <th class="num">% del total</th><th class="num">% acumulado</th><th>Responsable</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+        <div class="nota">En rojo, los motivos que juntos explican el 80% (por ${p.orden === 'm3' ? NOMBRE_PCT.toLowerCase() : NOMBRE_PCT_PEDIDOS.toLowerCase()}): por ahí conviene empezar. Solo entregas incumplidas de los días guardados.</div>`
+        : '<div class="empty-state">Ningún incumplido de este responsable tiene motivo cargado todavía.</div>'}
+      </div>
+    </div>`;
+
+  document.getElementById('selOrdenMotivos').addEventListener('change', e => { ordenMotivos = e.target.value; renderMotivos(dias); });
+  cont.querySelectorAll('.chip-resp').forEach(b => b.addEventListener('click', () => {
+    responsableElegido = b.dataset.resp || null;
+    renderMotivos(dias);
+  }));
+}
+
+cargarTodo();
+</script>
+
+</body>
+</html>

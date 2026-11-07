@@ -1,0 +1,3550 @@
+<!DOCTYPE html>
+<!-- by a_oller -->
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VMO — Sistema de Conduces</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <script src="/calendario.js?v=2026-10-19b"></script>
+  <style>
+    /* ── VARIABLES ── */
+    :root {
+      --bg-base:     #0D1829;
+      --bg-surface:  #152535;
+      --bg-elevated: #1C3045;
+      --bg-hover:    #243850;
+      --bg-active:   rgba(211,47,47,0.08);
+
+      --brand:       #D32F2F;
+      --brand-light: #EF5350;
+      --brand-dark:  #B71C1C;
+      --brand-glow:  rgba(211,47,47,0.22);
+
+      --text-primary:   #EEF2F7;
+      --text-secondary: rgba(238,242,247,0.62);
+      --text-muted:     rgba(238,242,247,0.32);
+
+      --border:        rgba(255,255,255,0.07);
+      --border-subtle: rgba(255,255,255,0.03);
+      --border-active: rgba(255,255,255,0.13);
+
+      --green:       #10B981;
+      --green-bg:    rgba(16,185,129,0.11);
+      --green-text:  #34D399;
+
+      --red-status:    #F87171;
+      --red-status-bg: rgba(248,113,113,0.11);
+
+      --amber:    #F59E0B;
+      --amber-bg: rgba(245,158,11,0.11);
+
+      --sidebar-w:  230px;
+      --header-h:   56px;
+      --r-sm:  8px;
+      --r-md:  12px;
+      --r-lg:  16px;
+
+      --font: 'Inter', system-ui, sans-serif;
+      --mono: 'Fira Code', 'Consolas', monospace;
+
+      --t: 0.18s ease;
+      --shadow-sm: 0 1px 4px rgba(0,0,0,0.45);
+      --shadow-md: 0 4px 18px rgba(0,0,0,0.55);
+      --shadow-lg: 0 12px 40px rgba(0,0,0,0.65);
+    }
+
+    /* ── RESET ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── BASE ── */
+    body {
+      font-family: var(--font);
+      font-size: 14px;
+      background-color: var(--bg-base);
+      background-image:
+        radial-gradient(rgba(211,47,47,0.03) 1px, transparent 1px),
+        radial-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+      background-size: 40px 40px, 20px 20px;
+      background-position: 0 0, 10px 10px;
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── KEYFRAMES ── */
+    @keyframes panelIn   { from { opacity:0; transform:translateY(7px) } to { opacity:1; transform:translateY(0) } }
+    @keyframes msgIn     { from { opacity:0; transform:translateY(5px) scale(.98) } to { opacity:1; transform:translateY(0) scale(1) } }
+    @keyframes dotBounce { 0%,80%,100% { transform:translateY(0) } 40% { transform:translateY(-5px) } }
+    @keyframes statusPulse {
+      0%,100% { box-shadow:0 0 0 2px rgba(16,185,129,.25) }
+      50%      { box-shadow:0 0 0 6px rgba(16,185,129,.0) }
+    }
+    @keyframes spin { to { transform:rotate(360deg) } }
+    @keyframes fadeSlide { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+    @keyframes bounce    { 0%,80%,100% { transform:translateY(0) } 40% { transform:translateY(-5px) } }
+
+    /* ── HEADER ── */
+    header {
+      height: var(--header-h);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 20px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      position: relative;
+      z-index: 10;
+    }
+    header::after {
+      content: '';
+      position: absolute;
+      bottom: -1px; left: 0;
+      width: 180px; height: 2px;
+      background: linear-gradient(90deg, var(--brand) 0%, transparent 100%);
+    }
+
+    .header-logo {
+      height: 32px; width: 32px;
+      object-fit: contain;
+      border-radius: 7px;
+      flex-shrink: 0;
+      background: white;
+      padding: 4px;
+    }
+    .header-brand { display:flex; flex-direction:column; gap:1px; }
+    .header-brand-name { font-size:14px; font-weight:700; color:var(--text-primary); letter-spacing:-.2px; }
+    .header-brand-sub  { font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.8px; }
+
+    /* MODULE TOGGLE */
+    .module-toggle {
+      margin: 0 auto;
+      display: flex;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 3px;
+      gap: 2px;
+    }
+    .module-btn {
+      padding: 6px 20px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: all var(--t);
+      border-radius: 7px;
+      letter-spacing: .1px;
+    }
+    .module-btn.active {
+      background: var(--brand);
+      color: white;
+      box-shadow: 0 2px 10px var(--brand-glow);
+    }
+    .module-btn:not(.active):hover { background:rgba(255,255,255,.06); color:var(--text-secondary); }
+
+    /* LOGOUT */
+    .btn-logout {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 13px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: all var(--t);
+      flex-shrink: 0;
+    }
+    .btn-logout:hover { border-color:var(--border-active); color:var(--text-secondary); background:rgba(255,255,255,.04); }
+    .btn-logout svg { width:13px; height:13px; }
+
+    /* HAMBURGER (mobile only — hidden on desktop) */
+    .btn-hamburger {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 32px; height: 32px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text-secondary);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-hamburger svg { width:16px; height:16px; }
+
+    /* SIDEBAR BACKDROP (mobile only) */
+    #sidebar-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.5);
+      z-index: 40;
+    }
+    #sidebar-backdrop.show { display: block; }
+
+    /* ── LAYOUT ── */
+    .module-container { flex:1; display:flex; overflow:hidden; }
+    .module-container.hidden { display:none; }
+
+    .dashboard {
+      flex: 1;
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      overflow: hidden;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 18px 10px;
+      gap: 2px;
+      overflow-y: auto;
+    }
+    .sidebar-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: var(--text-muted);
+      padding: 0 10px;
+      margin: 8px 0 5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sidebar-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: all var(--t);
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+      position: relative;
+    }
+    .nav-item:hover { background:rgba(255,255,255,.05); color:var(--text-primary); }
+    .nav-item.active { background:var(--bg-active); color:var(--text-primary); font-weight:600; }
+    .nav-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 5px; bottom: 5px;
+      width: 3px;
+      background: var(--brand);
+      border-radius: 0 3px 3px 0;
+    }
+    .nav-icon { width:16px; height:16px; opacity:.6; flex-shrink:0; transition:opacity var(--t); }
+    .nav-item.active .nav-icon,
+    .nav-item:hover .nav-icon { opacity:1; }
+
+    /* ── CONTENT ── */
+    .content-area { display:flex; flex-direction:column; overflow:hidden; background:var(--bg-base); }
+
+    .content-panel { display:none; flex-direction:column; flex:1; overflow:hidden; }
+    .content-panel.active { display:flex; animation:panelIn .2s ease; }
+
+    .panel-header {
+      padding: 16px 28px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .panel-title   { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1.4px; color:var(--text-muted); margin-bottom:4px; }
+    .panel-heading { font-size:16px; font-weight:700; color:var(--text-primary); }
+    .panel-accent  { display:block; width:22px; height:2px; background:var(--brand); border-radius:2px; margin-top:5px; }
+
+    /* STATUS DOT */
+    .status-indicator { display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--text-muted); }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: statusPulse 2.5s ease infinite;
+    }
+
+    /* ── CHAT ── */
+    #chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,.08) transparent;
+    }
+    #chat::-webkit-scrollbar { width:4px; }
+    #chat::-webkit-scrollbar-thumb { background:rgba(255,255,255,.08); border-radius:8px; }
+
+    /* EMPTY STATE */
+    .chat-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-align: center;
+      padding: 40px 24px;
+      animation: panelIn .3s ease;
+    }
+    .chat-empty-icon {
+      width: 50px; height: 50px;
+      border-radius: 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 6px;
+    }
+    .chat-empty-icon svg { width:24px; height:24px; opacity:.45; }
+    .chat-empty-title { font-size:15px; font-weight:600; color:var(--text-secondary); }
+    .chat-empty-sub { font-size:12.5px; color:var(--text-muted); max-width:280px; line-height:1.65; }
+    .quick-chips { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:10px; }
+    .quick-chip {
+      padding: 6px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-active);
+      border-radius: 20px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: all var(--t);
+    }
+    .quick-chip:hover { background:var(--bg-hover); color:var(--text-primary); border-color:rgba(211,47,47,.35); }
+
+    /* MESSAGES */
+    .msg {
+      max-width: 78%;
+      padding: 12px 16px;
+      border-radius: var(--r-md);
+      line-height: 1.65;
+      white-space: pre-wrap;
+      font-size: 14px;
+      animation: msgIn .2s ease;
+    }
+    .msg.user {
+      background: var(--brand);
+      color: white;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 4px 18px var(--brand-glow);
+    }
+    .msg.assistant {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+    .msg.thinking {
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      align-self: flex-start;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-radius: 10px;
+      padding: 9px 14px;
+      border: 1px solid var(--border);
+    }
+
+    /* DOTS */
+    .dots { display:flex; gap:4px; }
+    .dots span {
+      display: inline-block;
+      width:5px; height:5px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      animation: dotBounce 1.2s ease infinite;
+    }
+    .dots span:nth-child(2) { animation-delay:.15s; }
+    .dots span:nth-child(3) { animation-delay:.3s; }
+
+    /* CONSULTA TABLE */
+    .consulta-table {
+      align-self: flex-start;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+      animation: msgIn .2s ease;
+      font-size: 13px;
+      min-width: 330px;
+      max-width: 100%;
+    }
+    .consulta-table table  { width:100%; border-collapse:collapse; }
+    .consulta-table th {
+      background: rgba(0,0,0,.3);
+      color: var(--text-muted);
+      padding: 9px 14px;
+      text-align: left;
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      border-bottom: 1px solid var(--border);
+    }
+    .consulta-table td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+    }
+    .consulta-table td:first-child { font-family:var(--mono); font-size:12.5px; color:var(--text-primary); }
+    .consulta-table tr:last-child td { border-bottom:none; }
+    .consulta-table tr:hover td { background:rgba(255,255,255,.02); }
+
+    .consulta-export {
+      display: flex;
+      justify-content: flex-end;
+      padding: 6px 10px;
+      background: rgba(0,0,0,.2);
+      border-top: 1px solid var(--border);
+    }
+    .btn-export {
+      padding: 4px 12px;
+      background: transparent;
+      border: 1px solid var(--border-active);
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--t);
+      font-family: var(--font);
+    }
+    .btn-export:hover { color:var(--text-secondary); background:rgba(255,255,255,.05); border-color:var(--border-active); }
+
+    /* BADGES */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .3px;
+    }
+    .badge.pagado    { background:var(--green-bg);      color:var(--green-text); }
+    .badge.pendiente { background:var(--red-status-bg); color:var(--red-status); }
+    .badge.invalido  { background:rgba(255,255,255,.05); color:var(--text-muted); }
+    .badge.nocuenta  { background:var(--amber-bg);      color:var(--amber); }
+
+    /* ── Issue #20 — aprobación manual de pendientes ── */
+    .btn-tabla {
+      padding:5px 12px; background:var(--bg-elevated); color:var(--text-primary);
+      border:1px solid var(--border-active); border-radius:var(--r-sm);
+      font-size:12px; font-weight:600; cursor:pointer; font-family:var(--font);
+      transition:all var(--t); white-space:nowrap;
+    }
+    .btn-tabla:hover:not(:disabled) { background:var(--bg-hover); }
+    .btn-tabla:disabled { opacity:.45; cursor:not-allowed; }
+    .modal-backdrop {
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,.6);
+      z-index:400; align-items:center; justify-content:center; padding:16px;
+    }
+    .modal-backdrop.show { display:flex; }
+    .modal-box {
+      background:var(--bg-surface); border:1px solid var(--border-active);
+      border-radius:var(--r-md); width:100%; max-width:460px; padding:22px;
+    }
+    .aviso-corte {
+      background:var(--amber-bg); color:var(--amber); border-radius:var(--r-sm);
+      padding:10px 12px; font-size:12.5px; line-height:1.5; margin-bottom:12px;
+    }
+
+    /* INPUT AREA */
+    #input-area {
+      display: flex;
+      gap: 10px;
+      padding: 13px 28px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #input {
+      flex: 1;
+      padding: 11px 15px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      font-size: 14px;
+      outline: none;
+      resize: none;
+      height: 46px;
+      line-height: 1.4;
+      color: var(--text-primary);
+      transition: all var(--t);
+      font-family: var(--font);
+    }
+    #input::placeholder { color:var(--text-muted); }
+    #input:focus {
+      border-color: rgba(211,47,47,.45);
+      background: var(--bg-hover);
+      box-shadow: 0 0 0 3px rgba(211,47,47,.07);
+    }
+
+    #send {
+      padding: 0 18px;
+      background: var(--brand);
+      color: white;
+      border: none;
+      border-radius: var(--r-sm);
+      font-size: 13.5px;
+      cursor: pointer;
+      font-weight: 600;
+      font-family: var(--font);
+      box-shadow: 0 4px 14px var(--brand-glow);
+      transition: all var(--t);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    #send svg { width:15px; height:15px; flex-shrink:0; }
+    #send:hover:not(:disabled) { background:var(--brand-light); transform:translateY(-1px); box-shadow:0 6px 22px var(--brand-glow); }
+    #send:active:not(:disabled) { transform:translateY(0); }
+    #send:disabled { opacity:.4; cursor:not-allowed; }
+
+    /* ── FORM PANELS ── */
+    .panel-body {
+      padding: 28px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      overflow-y: auto;
+      max-width: 460px;
+    }
+
+    .form-group { display:flex; flex-direction:column; gap:7px; }
+    .form-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .form-label::before {
+      content: '';
+      width: 2px; height: 10px;
+      background: var(--brand);
+      border-radius: 2px;
+      opacity: .65;
+      flex-shrink: 0;
+    }
+    .form-label span { font-weight:400; text-transform:none; letter-spacing:0; opacity:.65; }
+
+    .form-select,
+    .form-input {
+      padding: 10px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      font-size: 13.5px;
+      color: var(--text-primary);
+      outline: none;
+      transition: all var(--t);
+      font-family: var(--font);
+      width: 100%;
+    }
+    .form-select:focus,
+    .form-input:focus {
+      border-color: rgba(211,47,47,.45);
+      background: var(--bg-hover);
+      box-shadow: 0 0 0 3px rgba(211,47,47,.07);
+    }
+    .form-select {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(255,255,255,0.28)' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 13px center;
+      padding-right: 34px;
+      cursor: pointer;
+    }
+    .form-select option { background:#152032; color:var(--text-primary); }
+    .form-input::placeholder { color:var(--text-muted); }
+    .form-input[readonly]     { cursor:pointer; }
+
+    .date-row { display:flex; gap:10px; }
+    .date-row .form-group { flex:1; }
+
+    /* PRIMARY BUTTON */
+    .btn-primary {
+      padding: 12px;
+      background: var(--brand);
+      color: white;
+      border: none;
+      border-radius: var(--r-sm);
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      width: 100%;
+      transition: all var(--t);
+      box-shadow: 0 4px 16px var(--brand-glow);
+      font-family: var(--font);
+      position: relative;
+      overflow: hidden;
+    }
+    .btn-primary:hover:not(:disabled) { background:var(--brand-light); transform:translateY(-1px); box-shadow:0 6px 22px var(--brand-glow); }
+    .btn-primary:active:not(:disabled) { transform:translateY(0); }
+    .btn-primary:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-primary.is-loading::after {
+      content: '';
+      position: absolute;
+      right: 16px; top: calc(50% - 6.5px);
+      width: 13px; height: 13px;
+      border: 2px solid rgba(255,255,255,.25);
+      border-top-color: rgba(255,255,255,.8);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    /* DIVIDER */
+    .divider { height:1px; background:var(--border); }
+
+    /* RESULT BOX */
+    .reporte-result {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      animation: panelIn .25s ease;
+    }
+    .result-label { font-size:12px; color:var(--text-muted); }
+
+    /* Boton de descarga (2026-10-19, el componente animado que pidio el
+       usuario): un circulo rojo con la flecha que al pasar el mouse se abre
+       y dice que baja. Se anima max-width y no width porque el ancho final
+       depende del texto ("Descargar Estimación" es mas largo que "Descargar
+       PDF"). En pantallas tactiles queda el circulo; tocarlo descarga igual. */
+    .download-btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      align-self: flex-start;
+      flex: none;
+      height: 52px;
+      min-width: 52px;
+      max-width: 52px;
+      padding: 0;
+      border: none;
+      border-radius: 26px;
+      background: var(--brand);
+      color: white;
+      overflow: hidden;
+      cursor: pointer;
+      font-family: var(--font);
+      box-shadow: 0 4px 14px var(--brand-glow);
+      transition: max-width .3s ease, box-shadow .2s ease;
+    }
+    .download-btn:hover, .download-btn:focus-visible { max-width: 280px; box-shadow: 0 6px 22px rgba(211,47,47,.4); }
+    .download-btn:focus-visible { outline: 2px solid var(--brand-light); outline-offset: 2px; }
+    .download-btn .descarga-flecha {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity .2s ease, transform .2s ease;
+    }
+    .download-btn .descarga-texto {
+      padding: 0 24px;
+      white-space: nowrap;
+      font-size: 15px;
+      font-weight: 700;
+      opacity: 0;
+      transition: opacity .2s ease;
+    }
+    .download-btn:hover .descarga-flecha, .download-btn:focus-visible .descarga-flecha { opacity: 0; transform: scale(.8); }
+    .download-btn:hover .descarga-texto, .download-btn:focus-visible .descarga-texto { opacity: 1; transition-delay: .1s; }
+    @media (prefers-reduced-motion: reduce) {
+      .download-btn, .download-btn .descarga-flecha, .download-btn .descarga-texto { transition: none; }
+    }
+
+    .thinking-reporte {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-muted);
+      padding: 4px 0;
+    }
+
+    /* ── LOGIN ── */
+    #login-screen {
+      position: fixed;
+      inset: 0;
+      background: var(--bg-base);
+      background-image:
+        radial-gradient(rgba(211,47,47,.03) 1px, transparent 1px),
+        radial-gradient(rgba(255,255,255,.015) 1px, transparent 1px);
+      background-size: 40px 40px, 20px 20px;
+      background-position: 0 0, 10px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .login-box {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 44px 40px;
+      width: 360px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.7);
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      position: relative;
+      overflow: hidden;
+    }
+    .login-box::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--brand) 0%, transparent 70%);
+    }
+    .login-logo { display:flex; align-items:center; gap:12px; }
+    .login-logo img { height:40px; width:40px; object-fit:contain; border-radius:9px; background:white; padding:5px; }
+    .login-logo-text h1 { font-size:19px; font-weight:700; color:var(--text-primary); }
+    .login-logo-text p  { font-size:10.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.6px; }
+    .login-field { display:flex; flex-direction:column; gap:7px; }
+    .login-field label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--text-muted); }
+    .login-field input {
+      padding: 11px 15px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      font-size: 14px;
+      color: var(--text-primary);
+      outline: none;
+      transition: all var(--t);
+      font-family: var(--font);
+    }
+    .login-field input:focus { border-color:rgba(211,47,47,.5); background:var(--bg-hover); box-shadow:0 0 0 3px rgba(211,47,47,.08); }
+    .login-field input::placeholder { color:var(--text-muted); }
+    .btn-login {
+      padding: 12px;
+      background: var(--brand);
+      color: white; border: none;
+      border-radius: var(--r-sm);
+      font-size: 14px; font-weight:700;
+      cursor: pointer;
+      transition: all var(--t);
+      box-shadow: 0 4px 14px var(--brand-glow);
+      font-family: var(--font);
+    }
+    .btn-login:hover { background:var(--brand-light); transform:translateY(-1px); }
+    .btn-login:active { transform:translateY(0); }
+    .login-error {
+      font-size: 12px;
+      color: var(--red-status);
+      text-align: center;
+      display: none;
+      background: var(--red-status-bg);
+      padding: 8px 12px;
+      border-radius: var(--r-sm);
+    }
+
+    /* ── ESTIMACIONES ── */
+    .panel-est-body {
+      padding: 28px 36px;
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 28px;
+      overflow-y: auto;
+      align-items: start;
+    }
+    .panel-est-left {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .macao2-ticker {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 260px;
+      flex-shrink: 0;
+      padding: 8px 12px;
+      background: var(--brand-glow);
+      border: 1px solid rgba(211,47,47,0.25);
+      border-radius: var(--r-md);
+    }
+    .macao2-ticker-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--brand);
+      flex-shrink: 0;
+      animation: macao2Pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes macao2Pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .35; }
+    }
+    .macao2-ticker-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .macao2-ticker-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 5px;
+      line-height: 1.4;
+    }
+    .macao2-ticker-label b { color: var(--text-primary); font-weight: 600; }
+    .macao2-ticker-track {
+      height: 4px;
+      background: var(--bg-elevated);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .macao2-ticker-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 4px;
+      transition: width .4s ease;
+    }
+
+    .dropzone {
+      border: 2px dashed var(--border-active);
+      border-radius: var(--r-lg);
+      padding: 52px 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: all .22s;
+      background: var(--bg-elevated);
+      text-align: center;
+    }
+    .dropzone:hover, .dropzone.drag-over {
+      border-color: var(--brand);
+      background: rgba(211,47,47,.04);
+    }
+    .dropzone.has-file { border-color:var(--green); border-style:solid; background:rgba(16,185,129,.03); }
+
+    .dropzone-icon {
+      width:44px; height:44px;
+      border-radius: 12px;
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 4px;
+    }
+    .dropzone-icon svg { width:22px; height:22px; opacity:.55; }
+    .dropzone-title { font-size:14.5px; font-weight:700; color:var(--text-primary); }
+    .dropzone-sub   { font-size:12px; color:var(--text-muted); }
+    .dropzone-file  {
+      font-size: 12.5px; font-weight:600;
+      color: var(--green-text);
+      background: var(--green-bg);
+      padding: 5px 14px;
+      border-radius: 20px;
+      margin-top: 4px;
+      font-family: var(--mono);
+    }
+
+    .resumen-box {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 20px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 13px;
+      animation: panelIn .25s ease;
+    }
+    .resumen-titulo { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); }
+    .resumen-linea  { font-size:13.5px; color:var(--text-secondary); display:flex; align-items:flex-start; gap:10px; line-height:1.5; }
+    .resumen-linea .tag {
+      font-size: 10px; font-weight:700;
+      padding: 2px 9px;
+      border-radius: 20px;
+      flex-shrink: 0; margin-top:2px;
+      text-transform: uppercase; letter-spacing:.3px;
+    }
+    .tag.ok    { background:var(--green-bg);      color:var(--green-text); }
+    .tag.dup   { background:var(--amber-bg);       color:var(--amber); }
+    .tag.error { background:var(--red-status-bg);  color:var(--red-status); }
+    .tag.excluido { background:var(--amber-bg);    color:var(--amber); }
+
+    /* Columna "Incluir" de la tabla de catalogo (pantalla de revision de
+       Estimaciones). Una fila excluida se marca con fondo ambar y una franja
+       al costado — NUNCA se atenua ni se tacha: su Cant. Proyecto y su Acum.
+       Anterior si van al documento generado, lo unico que se omite es la
+       columna "Esta Estimacion". */
+    .est-col-incluir { text-align:center !important; width:64px; }
+    .est-incluir-chk { width:16px; height:16px; accent-color:var(--brand); cursor:pointer; }
+    .est-incluir-chk:disabled { cursor:not-allowed; opacity:.35; }
+    tr.est-fila-excluida td { background:rgba(245,158,11,0.045); }
+    tr.est-fila-excluida td:first-child { box-shadow:inset 3px 0 0 var(--amber); }
+
+    .resumen-lista { font-size:11px; color:var(--text-muted); padding-left:12px; display:flex; flex-direction:column; gap:3px; font-family:var(--mono); }
+    .resumen-acciones { display:flex; gap:10px; margin-top:4px; }
+
+    /* ACORDEÓN */
+    .acord-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      user-select: none;
+    }
+    .acord-row.togglable { cursor: pointer; transition: background var(--t); }
+    .acord-row.togglable:hover { background: rgba(255,255,255,.07); }
+    .acord-row.open { border-radius: var(--r-sm) var(--r-sm) 0 0; border-bottom-color: transparent; }
+    .acord-left { display:flex; align-items:center; gap:10px; }
+    .acord-count { font-size:14px; font-weight:700; color:var(--text-primary); }
+    .acord-arrow { color:var(--text-muted); font-size:11px; transition:transform .2s; }
+    .acord-row.open .acord-arrow { transform:rotate(180deg); }
+    .acord-detail {
+      display: none;
+      padding: 8px 14px 12px;
+      background: rgba(0,0,0,.18);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 var(--r-sm) var(--r-sm);
+      margin-top: -4px;
+    }
+    .acord-row.open + .acord-detail { display: block; }
+    .acord-item {
+      font-size: 11.5px; color: var(--text-muted);
+      padding: 4px 0; font-family: var(--mono);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .acord-item:last-child { border-bottom: none; }
+    .acord-motivo { color: var(--red-status); margin-left: 6px; }
+
+    /* REVISIÓN DE ESTIMACIÓN — tabla de catálogo + sin-match */
+    .tag.muted { background:transparent; color:var(--text-muted); border:1px solid var(--border); }
+    .est-cant-input {
+      width: 88px; background:var(--bg-elevated); border:1px solid var(--border); color:var(--text-primary);
+      border-radius:6px; padding:6px 8px; font-size:12.5px; font-family:var(--font);
+    }
+    .est-cant-input:focus { outline:none; border-color:var(--brand); }
+    .est-campos-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+    .est-campos-row .form-group { flex:1; min-width:140px; }
+    .est-sinmatch-box { border:1px solid var(--red-status); border-radius:var(--r-md); overflow:hidden; margin-top:8px; }
+    .est-sinmatch-box .consulta-table { border:none; border-radius:0; }
+    .est-sinmatch select {
+      width:100%; background:var(--bg-elevated); border:1px solid var(--border); color:var(--text-primary);
+      border-radius:6px; padding:6px 8px; font-size:12px; font-family:var(--font);
+    }
+    .est-sinmatch select:invalid { border-color: var(--red-status); }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+
+    .btn-confirmar {
+      flex: 1; padding:11px;
+      background: var(--brand); color:white; border:none;
+      border-radius: var(--r-sm);
+      font-size: 13px; font-weight:700;
+      cursor: pointer; transition: all var(--t);
+      font-family: var(--font);
+    }
+    .btn-confirmar:hover { background:var(--brand-light); transform:translateY(-1px); }
+
+    .btn-cancelar {
+      padding: 11px 18px;
+      background: transparent;
+      border: 1px solid var(--border-active);
+      border-radius: var(--r-sm);
+      color: var(--text-muted);
+      font-size: 13px; font-weight:600;
+      cursor: pointer; transition: all var(--t);
+      font-family: var(--font);
+    }
+    .btn-cancelar:hover { color:var(--text-secondary); background:rgba(255,255,255,.04); border-color:var(--border-active); }
+
+    /* ══════════════════════════════════════════════════════════
+       MOBILE (phone-friendly) — only applies below 860px.
+       Nothing above this breakpoint changes the desktop view.
+       ══════════════════════════════════════════════════════════ */
+    @media (max-width: 860px) {
+      .btn-hamburger { display: flex; }
+
+      header {
+        height: auto;
+        min-height: var(--header-h);
+        flex-wrap: wrap;
+        row-gap: 8px;
+        padding: 10px 12px;
+      }
+      .header-brand-sub { display: none; }
+      .module-toggle { order: 3; width: 100%; margin: 0; justify-content: center; }
+      /* Con Comercial son 4 modulos: a 20px de padding no entran en 375px. */
+      .module-btn { flex: 1; padding: 6px 6px; font-size: 12.5px; }
+      .btn-logout-text { display: none; }
+      .btn-logout { padding: 7px 9px; }
+
+      .dashboard { grid-template-columns: 1fr; }
+
+      header { position: relative; z-index: 50; }
+
+      .sidebar {
+        position: fixed;
+        top: 97px; bottom: 0; left: 0;
+        width: 250px;
+        z-index: 45;
+        transform: translateX(-100%);
+        transition: transform .22s ease;
+        box-shadow: var(--shadow-lg);
+      }
+      .sidebar.open { transform: translateX(0); }
+
+      .panel-header { padding: 14px 16px; flex-wrap: wrap; row-gap: 12px; }
+      #chat { padding: 16px; }
+      .msg { max-width: 88%; }
+      #input-area { padding: 10px 12px; }
+      #send { padding: 0 14px; }
+      #send-text { display: none; }
+
+      .consulta-table { min-width: 0; max-width: 100%; overflow-x: auto; }
+      .consulta-table table { min-width: 480px; }
+
+      .panel-body { padding: 18px; max-width: 100%; }
+      .date-row { flex-direction: column; }
+
+      .panel-est-body { grid-template-columns: minmax(0, 1fr); padding: 18px; gap: 18px; }
+      .macao2-ticker { width: 100%; }
+      .est-campos-row { flex-direction: column; }
+
+      .login-box { width: calc(100vw - 40px); max-width: 360px; padding: 32px 24px; }
+
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- ── LOGIN ── -->
+  <div id="login-screen">
+    <div class="login-box">
+      <div class="login-logo">
+        <img src="/logo.png" onerror="this.style.display='none'" alt="VMO" />
+        <div class="login-logo-text">
+          <h1>VMO</h1>
+          <p>Sistema de Conduces</p>
+        </div>
+      </div>
+      <div class="login-field">
+        <label>Usuario</label>
+        <input type="text" id="login-user" placeholder="Usuario" autocomplete="username" />
+      </div>
+      <div class="login-field">
+        <label>Contraseña</label>
+        <input type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password" />
+      </div>
+      <div class="login-error" id="login-error">Usuario o contraseña incorrectos</div>
+      <button class="btn-login" onclick="doLogin()">Iniciar sesión</button>
+    </div>
+  </div>
+
+  <!-- ── HEADER ── -->
+  <header>
+    <button class="btn-hamburger" onclick="toggleSidebar()" aria-label="Menú">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+        <path d="M3 5h14M3 10h14M3 15h14"/>
+      </svg>
+    </button>
+    <img class="header-logo" src="/logo.png" onerror="this.style.display='none'" alt="VMO" />
+    <div class="header-brand">
+      <span class="header-brand-name">VMO</span>
+      <span class="header-brand-sub">Gestión y validación</span>
+    </div>
+
+    <div class="module-toggle">
+      <button class="module-btn active" onclick="switchModule('conduces', this)">Conduces</button>
+      <button class="module-btn" onclick="switchModule('estimaciones', this)">Estimaciones</button>
+      <button class="module-btn" onclick="switchModule('logistica', this)">Logística</button>
+      <button class="module-btn" onclick="switchModule('comercial', this)">Comercial</button>
+    </div>
+
+    <button class="btn-logout" onclick="doLogout()">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 3h4a1 1 0 011 1v12a1 1 0 01-1 1h-4M8 13l-3-3 3-3M5 10h9"/>
+      </svg>
+      <span class="btn-logout-text">Salir</span>
+    </button>
+  </header>
+
+  <div id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+  <!-- ── MÓDULO: CONDUCES ── -->
+  <div id="module-conduces" class="module-container">
+    <div class="dashboard">
+
+      <div class="sidebar">
+        <div class="sidebar-label">Conduces</div>
+        <button class="nav-item active" onclick="mostrarPanel('validar', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="14" height="14" rx="3.5"/>
+            <path d="M7 10l2.5 2.5L13 7.5"/>
+          </svg>
+          Validar Conduces
+        </button>
+        <button class="nav-item" onclick="mostrarPanel('reportes', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+            <path d="M3 17h14M7 17v-5M10 17V7M13 17v-9"/>
+          </svg>
+          Generar Reporte
+        </button>
+        <button class="nav-item" onclick="mostrarPanel('facturas', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3H5a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V8l-4-5z"/>
+            <path d="M12 3v5h5M7 11h6M7 14h4"/>
+          </svg>
+          Generar Factura
+        </button>
+      </div>
+
+      <div class="content-area">
+
+        <!-- PANEL: VALIDAR -->
+        <div class="content-panel active" id="panel-validar">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Asistente</div>
+              <div class="panel-heading">Validar Conduces</div>
+              <span class="panel-accent"></span>
+            </div>
+            <div class="status-indicator">
+              <span class="status-dot"></span>
+              En línea
+            </div>
+          </div>
+
+          <div id="chat">
+            <div class="chat-empty" id="chat-empty">
+              <div class="chat-empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+                </svg>
+              </div>
+              <p class="chat-empty-title">Asistente VMO</p>
+              <p class="chat-empty-sub">Escribe los IDs de conduces para validar su estado, o pide un reporte.</p>
+              <div class="quick-chips">
+                <button class="quick-chip" onclick="setPrompt('30376 30537 30538')">Validar IDs</button>
+                <button class="quick-chip" onclick="setPrompt('¿Cuántos conduces están pendientes?')">Total pendientes</button>
+                <button class="quick-chip" onclick="setPrompt('Generar reporte general')">Reporte general</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="input-area">
+            <textarea id="input" placeholder="Escribe IDs de conduces o una consulta..." rows="1"></textarea>
+            <button id="send" onclick="sendMessage()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2" fill="currentColor" stroke="none"/>
+              </svg>
+              <span id="send-text">Enviar</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- PANEL: REPORTES -->
+        <div class="content-panel" id="panel-reportes">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Documentos</div>
+              <div class="panel-heading">Generar Reporte</div>
+              <span class="panel-accent"></span>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="form-group">
+              <div class="form-label">Compañía</div>
+              <select class="form-select" id="select-compania">
+                <option value="">Reporte General</option>
+              </select>
+            </div>
+            <div class="date-row">
+              <div class="form-group">
+                <div class="form-label">Desde</div>
+                <input type="text" class="form-input" id="date-desde-display" readonly placeholder="yyyy-mm-dd" style="cursor:pointer">
+                <input type="hidden" id="fecha-desde" />
+              </div>
+              <div class="form-group">
+                <div class="form-label">Hasta</div>
+                <input type="text" class="form-input" id="date-hasta-display" readonly placeholder="yyyy-mm-dd" style="cursor:pointer">
+                <input type="hidden" id="fecha-hasta" />
+              </div>
+            </div>
+            <button class="btn-primary" id="btn-generar" onclick="generarReporte()">Generar Reporte</button>
+            <div class="divider"></div>
+            <div id="reporte-result" style="display:none"></div>
+          </div>
+        </div>
+
+        <!-- PANEL: FACTURAS -->
+        <div class="content-panel" id="panel-facturas">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Documentos</div>
+              <div class="panel-heading">Generar Factura</div>
+              <span class="panel-accent"></span>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="form-group">
+              <div class="form-label">Proveedor</div>
+              <select class="form-select" id="factura-compania">
+                <option value="">Seleccionar proveedor...</option>
+              </select>
+            </div>
+            <div class="date-row">
+              <div class="form-group">
+                <div class="form-label">Desde</div>
+                <input type="text" class="form-input" id="factura-desde-display" readonly placeholder="yyyy-mm-dd" style="cursor:pointer">
+                <input type="hidden" id="factura-desde">
+              </div>
+              <div class="form-group">
+                <div class="form-label">Hasta</div>
+                <input type="text" class="form-input" id="factura-hasta-display" readonly placeholder="yyyy-mm-dd" style="cursor:pointer">
+                <input type="hidden" id="factura-hasta">
+              </div>
+            </div>
+            <div class="form-group">
+              <div class="form-label">Conduces específicos <span>(opcional — ignora fechas)</span></div>
+              <textarea class="form-input" id="factura-conduces"
+                placeholder="IDs separados por coma o por línea&#10;Ej: 30376, 30537, 30538"
+                style="resize:vertical;min-height:80px;font-family:var(--mono);font-size:12.5px"></textarea>
+            </div>
+            <button class="btn-primary" id="btn-factura" onclick="generarFactura()">Generar Factura</button>
+            <div class="divider"></div>
+            <div id="factura-result" style="display:none"></div>
+          </div>
+        </div>
+
+      </div><!-- /content-area conduces -->
+    </div><!-- /dashboard -->
+  </div><!-- /module-conduces -->
+
+  <!-- ── MÓDULO: ESTIMACIONES ── -->
+  <div id="module-estimaciones" class="module-container hidden">
+    <div class="dashboard">
+
+      <div class="sidebar">
+        <div class="sidebar-label">Moon Palace</div>
+        <button class="nav-item active" onclick="mostrarPanelEst('procesar', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 13V5M7 8l3-3 3 3"/>
+            <path d="M4 15a2 2 0 002 2h8a2 2 0 002-2"/>
+          </svg>
+          Procesar Facturas
+        </button>
+        <button class="nav-item" onclick="mostrarPanelEst('estimacion', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+            <rect x="3" y="2" width="14" height="16" rx="2"/>
+            <path d="M7 7h6M7 10h4M7 13h5"/>
+          </svg>
+          Generar Estimación
+        </button>
+        <button class="nav-item" onclick="mostrarPanelEst('pendientes', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="10" cy="10" r="7"/>
+            <path d="M10 6v4l2.5 2.5"/>
+          </svg>
+          Pendientes por Revisión
+        </button>
+        <button class="nav-item" onclick="mostrarPanelEst('claves', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 2.5l6.5 3v4.5c0 3.6-2.6 6.4-6.5 7.5-3.9-1.1-6.5-3.9-6.5-7.5V5.5z"/>
+            <path d="M10 7v3.5M10 13h.01"/>
+          </svg>
+          Resoluciones Manuales
+        </button>
+      </div>
+
+      <div class="content-area">
+
+        <!-- PANEL: PROCESAR FACTURAS -->
+        <div class="content-panel active" id="panel-est-procesar">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Moon Palace</div>
+              <div class="panel-heading">Procesar Facturas</div>
+              <span class="panel-accent"></span>
+            </div>
+            <div class="macao2-ticker" id="macao2-ticker" style="display:none">
+              <div class="macao2-ticker-dot"></div>
+              <div class="macao2-ticker-body">
+                <div class="macao2-ticker-label">MACAO 2 — <b id="macao2-ticker-count"></b><span id="macao2-ticker-errores" style="color:var(--red-status)"></span></div>
+                <div class="macao2-ticker-track">
+                  <div class="macao2-ticker-fill" id="macao2-ticker-fill" style="width:0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-est-body">
+
+            <div class="panel-est-left">
+              <div class="dropzone" id="dropzone" onclick="document.getElementById('zip-input').click()">
+                <div class="dropzone-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                </div>
+                <div class="dropzone-title" id="dropzone-title">Arrastra el ZIP aquí</div>
+                <div class="dropzone-sub" id="dropzone-sub">o haz clic para seleccionar &nbsp;·&nbsp; Formato .zip</div>
+                <div class="dropzone-file" id="dropzone-file" style="display:none"></div>
+                <input type="file" id="zip-input" accept=".zip" style="display:none" onchange="onZipSeleccionado(this.files[0])">
+              </div>
+
+              <div class="dropzone" id="dropzone-excel" onclick="document.getElementById('excel-input').click()" style="margin-top:12px">
+                <div class="dropzone-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                </div>
+                <div class="dropzone-title" id="dropzone-excel-title">Arrastra el Excel de conduces aquí</div>
+                <div class="dropzone-sub" id="dropzone-excel-sub">o haz clic para seleccionar &nbsp;·&nbsp; Formato .xlsx</div>
+                <div class="dropzone-file" id="dropzone-excel-file" style="display:none"></div>
+                <input type="file" id="excel-input" accept=".xlsx" style="display:none" onchange="onExcelSeleccionado(this.files[0])">
+              </div>
+
+              <button class="btn-primary" id="btn-procesar" onclick="procesarZip()" style="display:none">
+                Procesar Facturas
+              </button>
+            </div>
+
+            <div id="proceso-resultado" style="display:none"></div>
+
+          </div>
+        </div>
+
+        <!-- PANEL: GENERAR ESTIMACIÓN -->
+        <div class="content-panel" id="panel-est-estimacion">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Moon Palace</div>
+              <div class="panel-heading">Generar Estimación</div>
+              <span class="panel-accent"></span>
+            </div>
+          </div>
+          <div class="panel-est-body">
+            <div class="panel-est-left">
+              <div class="form-group">
+                <div class="form-label">Empresa</div>
+                <select class="form-select" id="est-empresa" onchange="actualizarFases()">
+                  <option value="">Seleccionar empresa...</option>
+                  <option value="VMO">VMO</option>
+                  <option value="DOMICEM">DOMICEM</option>
+                </select>
+              </div>
+              <div class="form-group" id="est-fase-group" style="display:none">
+                <div class="form-label">Fase</div>
+                <select class="form-select" id="est-fase">
+                  <option value="">Seleccionar fase...</option>
+                </select>
+              </div>
+              <div class="date-row">
+                <div class="form-group">
+                  <div class="form-label">Desde</div>
+                  <input type="text" class="form-input" id="est-desde-display" readonly placeholder="yyyy-mm-dd" style="cursor:pointer">
+                  <input type="hidden" id="est-fecha-desde" />
+                </div>
+                <div class="form-group">
+                  <div class="form-label">Hasta</div>
+                  <input type="text" class="form-input" id="est-hasta-display" readonly placeholder="yyyy-mm-dd" style="cursor:pointer">
+                  <input type="hidden" id="est-fecha-hasta" />
+                </div>
+              </div>
+              <button class="btn-primary" id="btn-continuar-est" onclick="continuarEstimacion()">Continuar</button>
+            </div>
+            <div id="est-resultado" style="display:none"></div>
+          </div>
+        </div>
+
+        <!-- PANEL: PENDIENTES POR REVISIÓN -->
+        <div class="content-panel" id="panel-est-pendientes">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Moon Palace</div>
+              <div class="panel-heading">Pendientes por Revisión</div>
+              <span class="panel-accent"></span>
+            </div>
+          </div>
+          <div class="panel-body" style="max-width:100%;">
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:4px;">
+              Quedan aquí hasta que alguien resuba el mismo documento ya corregido, o hasta que se aprueben a mano
+              (solo falta sello / falta firma / escaneo vertical), dejando registrado quién aprueba y por qué. No se reprocesan automáticamente.
+            </div>
+            <div style="font-weight:600;font-size:13px;margin:10px 0 4px;">MACAO 2 (falta sello)</div>
+            <div id="pendientes-lista-macao2"></div>
+            <div style="font-weight:600;font-size:13px;margin:16px 0 4px;">Otras fases (falta firma)</div>
+            <div id="pendientes-lista-otras"></div>
+            <div style="font-weight:600;font-size:13px;margin:16px 0 4px;">Aprobados manualmente</div>
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:4px;">
+              Conduces que entraron por aprobación manual. La marca es solo interna: el documento del cliente sale idéntico.
+            </div>
+            <div id="aprobados-lista"></div>
+            <div style="font-weight:600;font-size:13px;margin:16px 0 4px;">Descartados</div>
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:4px;">
+              Conduces que se decidió NO facturar. No entran a ninguna estimación y ya no bloquean el cierre del período.
+              La fila y el PDF se archivan, no se borran: Reponer los devuelve a la lista de arriba con su motivo original.
+            </div>
+            <div id="descartados-lista"></div>
+          </div>
+        </div>
+
+        <!-- PANEL: RESOLUCIONES MANUALES (issue #25 — aviso pasivo) -->
+        <div class="content-panel" id="panel-est-claves">
+          <div class="panel-header">
+            <div>
+              <div class="panel-title">Moon Palace</div>
+              <div class="panel-heading">Resoluciones Manuales</div>
+              <span class="panel-accent"></span>
+            </div>
+          </div>
+          <div class="panel-body" style="max-width:100%;">
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:4px;">
+              Una clave resuelta a mano le gana al catálogo para siempre: si después se agrega un alias, nada la revalida.
+              Acá se compara cada resolución guardada contra lo que el catálogo y los alias vigentes dirían hoy.
+              Es solo un aviso: no cambia ningún número ni frena la generación.
+            </div>
+            <div id="claves-resumen"></div>
+
+            <div style="font-weight:600;font-size:13px;margin:16px 0 4px;color:var(--red-status);">
+              Discrepan — el catálogo de hoy diría otra clave
+            </div>
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:6px;">
+              Es el caso que costó $4,070 en CAVERNAS. Revisar cuál de las dos claves corresponde antes de la próxima estimación.
+            </div>
+            <div id="claves-discrepan"></div>
+
+            <div style="font-weight:600;font-size:13px;margin:18px 0 4px;">Sin auto-match — la resolución manual es la única fuente</div>
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:6px;">
+              Hoy la descripción no matchea nada del catálogo ni de los alias. No es un error.
+            </div>
+            <div id="claves-sinmatch"></div>
+
+            <div style="font-weight:600;font-size:13px;margin:18px 0 4px;">Coinciden — la resolución ya es redundante</div>
+            <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:6px;">
+              El auto-match da exactamente lo mismo que se resolvió a mano.
+            </div>
+            <div id="claves-coinciden"></div>
+          </div>
+        </div>
+
+      </div><!-- /content-area estimaciones -->
+    </div><!-- /dashboard -->
+  </div><!-- /module-estimaciones -->
+
+  <!-- ── MÓDULO: LOGÍSTICA ── -->
+  <!-- Mismo armado que Estimaciones: sidebar con las secciones del módulo y un
+       panel por sección. La diferencia es que cada panel es un iframe a una
+       página autocontenida de static/, porque Logística se escribió así.
+       Cada iframe carga su src recién la primera vez que se entra a su sección:
+       el del día baja una librería del CDN y los otros dos piden el historial
+       al servidor — no hay por qué pagar las tres al abrir el módulo.
+       OJO: los paneles NO pueden llevar `display` en el style inline; le
+       ganaría al display:none de .content-panel y se verían los tres juntos. -->
+  <div id="module-logistica" class="module-container hidden">
+    <div class="dashboard">
+
+      <div class="sidebar">
+        <div class="sidebar-label">Despacho</div>
+        <button class="nav-item active" onclick="mostrarPanelLog('dia', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="10" cy="10" r="7"/>
+            <path d="M10 6v4l2.5 2.5"/>
+          </svg>
+          Cumplimiento del día
+        </button>
+        <button class="nav-item" onclick="mostrarPanelLog('estadisticas', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 17h14"/>
+            <rect x="4.5" y="9" width="3" height="6" rx="1"/>
+            <rect x="9" y="5" width="3" height="10" rx="1"/>
+            <rect x="13.5" y="11" width="3" height="4" rx="1"/>
+          </svg>
+          Estadísticas
+        </button>
+        <button class="nav-item" onclick="mostrarPanelLog('indicadores', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3.5 14a6.5 6.5 0 1 1 13 0"/>
+            <path d="M10 14l3-4"/>
+            <circle cx="10" cy="14" r="1"/>
+          </svg>
+          Indicadores
+        </button>
+        <button class="nav-item" onclick="mostrarPanelLog('comparacion', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 17h14"/>
+            <path d="M4 13l4-4 3 3 5-6"/>
+            <circle cx="4" cy="13" r="1"/>
+            <circle cx="16" cy="6" r="1"/>
+          </svg>
+          Comparación
+        </button>
+        <button class="nav-item" onclick="mostrarPanelLog('cancelados', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 2.5h7l3 3v12H5z"/>
+            <path d="M12 2.5v3h3"/>
+            <path d="M8 10l4 4M12 10l-4 4"/>
+          </svg>
+          Reporte cancelados
+        </button>
+        <button class="nav-item" onclick="mostrarPanelLog('reporte-dia', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 2.5h7l3 3v12H5z"/>
+            <path d="M12 2.5v3h3"/>
+            <path d="M8 15v-3M10.5 15v-5M13 15v-2"/>
+          </svg>
+          Reporte del día
+        </button>
+        <button class="nav-item" onclick="mostrarPanelLog('historial', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="14" height="13" rx="2"/>
+            <path d="M3 8h14M7 2.5v3M13 2.5v3"/>
+          </svg>
+          Historial
+        </button>
+      </div>
+
+      <div class="content-area">
+        <div class="content-panel active" id="panel-log-dia">
+          <iframe id="iframe-log-dia" data-src="/logistica.html" title="Cumplimiento del día" style="flex:1; width:100%; border:none; background:#0D1829;"></iframe>
+        </div>
+        <div class="content-panel" id="panel-log-historial">
+          <iframe id="iframe-log-historial" data-src="/logistica-historial.html" title="Historial de días" style="flex:1; width:100%; border:none; background:#0D1829;"></iframe>
+        </div>
+        <div class="content-panel" id="panel-log-estadisticas">
+          <iframe id="iframe-log-estadisticas" data-src="/logistica-estadisticas.html" title="Estadísticas de cumplimiento" style="flex:1; width:100%; border:none; background:#0D1829;"></iframe>
+        </div>
+        <div class="content-panel" id="panel-log-indicadores">
+          <iframe id="iframe-log-indicadores" data-src="/logistica-indicadores.html" title="Indicadores" style="flex:1; width:100%; border:none; background:#0D1829;"></iframe>
+        </div>
+        <div class="content-panel" id="panel-log-comparacion">
+          <iframe id="iframe-log-comparacion" data-src="/logistica-comparacion.html" title="Comparación por día" style="flex:1; width:100%; border:none; background:#0D1829;"></iframe>
+        </div>
+        <div class="content-panel" id="panel-log-cancelados">
+          <iframe id="iframe-log-cancelados" data-src="/logistica-cancelados.html" title="Reporte de cancelados" style="flex:1; width:100%; border:none; background:#0D1829;"></iframe>
+        </div>
+        <div class="content-panel" id="panel-log-reporte-dia">
+          <iframe id="iframe-log-reporte-dia" data-src="/logistica-reporte-dia.html" title="Reporte del día" style="flex:1; width:100%; border:none; background:#0D1829;"></iframe>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── MÓDULO: COMERCIAL (2026-10-19) ──
+       El dashboard comercial que antes era un Excel. Mismo armado que
+       Logística: un iframe por sección que carga la primera vez que se entra.
+       Ambiente separado: su propia base (comercial/db/comercial.db). -->
+  <div id="module-comercial" class="module-container hidden" data-modulo="comercial">
+    <div class="dashboard">
+
+      <div class="sidebar">
+        <div class="sidebar-label">Comercial</div>
+        <button class="nav-item active" onclick="mostrarPanelCom('dashboard', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="6" height="6" rx="1.5"/>
+            <rect x="11" y="3" width="6" height="4" rx="1.5"/>
+            <rect x="11" y="9" width="6" height="8" rx="1.5"/>
+            <rect x="3" y="11" width="6" height="6" rx="1.5"/>
+          </svg>
+          Dashboard
+        </button>
+        <button class="nav-item" onclick="mostrarPanelCom('subir', this)">
+          <svg class="nav-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 13V3"/>
+            <path d="M6 7l4-4 4 4"/>
+            <path d="M4 13v3a1 1 0 001 1h10a1 1 0 001-1v-3"/>
+          </svg>
+          Subir información
+        </button>
+      </div>
+
+      <div class="content-area">
+        <div class="content-panel active" id="panel-com-dashboard">
+          <iframe id="iframe-com-dashboard" data-src="/comercial-dashboard.html" title="Dashboard comercial" style="flex:1; width:100%; border:none; background:#0D1829;"></iframe>
+        </div>
+        <div class="content-panel" id="panel-com-subir">
+          <iframe id="iframe-com-subir" data-src="/comercial-subir.html" title="Subir información comercial" style="flex:1; width:100%; border:none; background:#0D1829;"></iframe>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── MODAL APROBAR PENDIENTE (issue #20) ── -->
+  <div class="modal-backdrop" id="aprobar-modal">
+    <div class="modal-box">
+      <div style="font-weight:700;font-size:14.5px;margin-bottom:4px;">Aprobar conduce a mano</div>
+      <div id="aprobar-modal-doc" style="font-size:12.5px;color:var(--text-secondary);margin-bottom:12px;"></div>
+      <div id="aprobar-modal-aviso" class="aviso-corte" style="display:none;"></div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <div class="form-label">Quién aprueba</div>
+        <input type="text" class="form-input" id="aprobar-quien" maxlength="120" oninput="_validarModalAprobar()">
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <div class="form-label">Motivo de la aprobación</div>
+        <input type="text" class="form-input" id="aprobar-motivo" maxlength="500" oninput="_validarModalAprobar()">
+      </div>
+      <div id="aprobar-modal-error" style="display:none;color:var(--red-status);font-size:12.5px;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-tabla" style="flex:1;padding:11px;" onclick="cerrarModalAprobar()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" id="aprobar-modal-btn" disabled onclick="confirmarAprobarPendiente()">Aprobar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL DESCARTAR PENDIENTE (issue #38) ── -->
+  <div class="modal-backdrop" id="descartar-modal">
+    <div class="modal-box">
+      <div style="font-weight:700;font-size:14.5px;margin-bottom:4px;">Descartar conduce</div>
+      <div id="descartar-modal-doc" style="font-size:12.5px;color:var(--text-secondary);margin-bottom:12px;"></div>
+      <div class="aviso-corte">Descartar significa que este conduce NO se le factura a nadie. No entra a ninguna estimación. Queda archivado con tu nombre y motivo, y se puede reponer.</div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <div class="form-label">Quién descarta</div>
+        <input type="text" class="form-input" id="descartar-quien" maxlength="120" oninput="_validarModalDescartar()">
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <div class="form-label">Motivo del descarte</div>
+        <input type="text" class="form-input" id="descartar-motivo" maxlength="500" oninput="_validarModalDescartar()">
+      </div>
+      <div id="descartar-modal-error" style="display:none;color:var(--red-status);font-size:12.5px;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-tabla" style="flex:1;padding:11px;" onclick="cerrarModalDescartar()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;" id="descartar-modal-btn" disabled onclick="confirmarDescartarPendiente()">Descartar</button>
+      </div>
+    </div>
+  </div>
+
+
+  <script>
+    let token = localStorage.getItem('vmo_token');
+
+    function authHeaders() {
+      return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+    }
+
+    function escapeHtml(texto) {
+      const div = document.createElement('div');
+      div.textContent = texto == null ? '' : String(texto);
+      return div.innerHTML;
+    }
+
+    // escapeHtml no escapa comillas (innerHTML de un nodo de texto no las
+    // necesita) — insuficiente dentro de un atributo HTML entre comillas
+    // dobles. Usar esta para valores que van dentro de id="..."/value="..."
+    function escapeAttr(texto) {
+      return escapeHtml(texto).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Lo de adentro del boton de descarga: la flecha que se ve cerrado y el
+    // texto que aparece al abrirse (ver .download-btn en el CSS).
+    function contenidoDescarga(texto) {
+      return `<span class="descarga-flecha" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg></span><span class="descarga-texto">${escapeHtml(texto)}</span>`;
+    }
+
+    // Listener delegado — evita interpolar URLs dentro de onclick="...", que
+    // requeriria escapar correctamente HTML Y JavaScript a la vez (escapeAttr()
+    // por si solo NO alcanza: el navegador decodifica entidades HTML ANTES de
+    // compilar el contenido de onclick como JS, asi que una comilla escapada
+    // como &#39; vuelve a ser ' justo antes de ejecutarse). data-download-url
+    // es un atributo HTML normal — ahi escapeAttr() si es la defensa correcta.
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-download-url]');
+      if (btn) descargarArchivo(btn.dataset.downloadUrl, '');
+    });
+
+    async function descargarArchivo(url, nombreSugerido) {
+      try {
+        const res = await fetch(url, { headers: authHeaders() });
+        if (!res.ok) { alert('No se pudo descargar el archivo.'); return; }
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = nombreSugerido || '';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+      } catch (e) {
+        alert('No se pudo descargar el archivo.');
+      }
+    }
+
+    function switchModule(mod, btn) {
+      document.querySelectorAll('.module-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('module-conduces').classList.toggle('hidden', mod !== 'conduces');
+      document.getElementById('module-estimaciones').classList.toggle('hidden', mod !== 'estimaciones');
+      document.getElementById('module-logistica').classList.toggle('hidden', mod !== 'logistica');
+      document.getElementById('module-comercial').classList.toggle('hidden', mod !== 'comercial');
+      if (mod === 'logistica') cargarIframeLog(panelLogActivo());
+      if (mod === 'comercial') cargarIframeCom(panelComActivo());
+      if (mod === 'estimaciones') iniciarTickerMacao2();
+      else detenerTickerMacao2();
+      closeSidebar();
+    }
+
+    /* ── Logistica: el sidebar del modulo ──
+       Mismo patron que mostrarPanelEst(), con una diferencia: cada panel es un
+       iframe y su src se asigna recien la primera vez que se entra a su
+       seccion. */
+
+    function panelLogActivo() {
+      const activo = document.querySelector('#module-logistica .content-panel.active');
+      return activo ? activo.id.replace('panel-log-', '') : 'dia';
+    }
+
+    // Una marca distinta por carga del portal. Los iframes de abajo los crea
+    // JavaScript, y una carga hecha por script NO respeta el bypass de cache
+    // de Ctrl+Shift+R: sin esto el usuario se queda con la pagina vieja, o
+    // peor, con el HTML nuevo y el .js viejo — que deja la pantalla colgada en
+    // "Cargando..." con un ReferenceError y nada visible. Paso el 2026-10-01.
+    const VERSION_SESION = Date.now();
+
+    function cargarIframeLog(id) {
+      const fr = document.getElementById('iframe-log-' + id);
+      if (fr && !fr.src) fr.src = fr.dataset.src + '?v=' + VERSION_SESION;
+      return fr;
+    }
+
+    function mostrarPanelLog(id, btn) {
+      document.querySelectorAll('#module-logistica .content-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('#module-logistica .nav-item').forEach(b => b.classList.remove('active'));
+      document.getElementById('panel-log-' + id).classList.add('active');
+      if (btn) btn.classList.add('active');
+      cargarIframeLog(id);
+      closeSidebar();
+    }
+
+    /* ── Comercial: el sidebar del modulo (2026-10-19) ──
+       Igual que Logistica: un iframe por seccion, cargado la primera vez. */
+
+    function panelComActivo() {
+      const activo = document.querySelector('#module-comercial .content-panel.active');
+      return activo ? activo.id.replace('panel-com-', '') : 'dashboard';
+    }
+
+    function cargarIframeCom(id) {
+      const fr = document.getElementById('iframe-com-' + id);
+      if (fr && !fr.src) fr.src = fr.dataset.src + '?v=' + VERSION_SESION;
+      return fr;
+    }
+
+    function mostrarPanelCom(id, btn) {
+      document.querySelectorAll('#module-comercial .content-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('#module-comercial .nav-item').forEach(b => b.classList.remove('active'));
+      document.getElementById('panel-com-' + id).classList.add('active');
+      if (btn) btn.classList.add('active');
+      cargarIframeCom(id);
+      closeSidebar();
+    }
+
+    /* Se subio informacion comercial: el dashboard, si ya estaba abierto,
+       vuelve a pedir los datos. */
+    window.addEventListener('message', (ev) => {
+      if (ev.origin !== window.location.origin) return;
+      if (!ev.data || ev.data.tipo !== 'comercial:datos-guardados') return;
+      const fr = document.getElementById('iframe-com-dashboard');
+      if (fr && fr.src) fr.contentWindow.postMessage({tipo: 'comercial:recargar'}, window.location.origin);
+    });
+
+    /* Abrir un dia desde el Historial: son dos iframes hermanos y no se hablan
+       entre si, asi que la pagina del historial le pide al portal. Se navega
+       por el hash y no con postMessage al otro iframe porque asi funciona
+       igual si todavia no se cargo. */
+    window.addEventListener('message', (ev) => {
+      if (ev.origin !== window.location.origin) return;
+      /* Se guardo un dia: el Historial y las Estadisticas ya habian cargado
+         su lista y mostraban la vieja hasta recargar la pagina entera
+         (2026-10-08). Se recargan los que ya estaban abiertos; los que no,
+         van a pedir la lista nueva cuando se entre por primera vez. */
+      if (ev.data && ev.data.tipo === 'logistica:dia-guardado') {
+        ['historial', 'estadisticas', 'indicadores', 'comparacion', 'cancelados', 'reporte-dia'].forEach(id => {
+          const fr = document.getElementById('iframe-log-' + id);
+          if (fr && fr.src) fr.contentWindow.location.reload();
+        });
+        return;
+      }
+      if (!ev.data || ev.data.tipo !== 'logistica:abrir-dia') return;
+      const fecha = String(ev.data.fecha || '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return;
+      const destino = '/logistica.html#dia=' + encodeURIComponent(fecha);
+      const fr = cargarIframeLog('dia');
+      // Si ya estaba en ese mismo dia el src no cambia y el iframe no recarga;
+      // el dashboard escucha hashchange justamente por eso.
+      if (fr.src.endsWith(destino)) fr.contentWindow.location.hash = 'dia=' + fecha;
+      else fr.src = destino;
+      mostrarPanelLog('dia', document.querySelector('#module-logistica .nav-item'));
+    });
+
+    let macao2TickerInterval = null;
+
+    async function consultarTickerMacao2() {
+      try {
+        const res = await fetch('/api/estimaciones/progreso-macao2', { headers: authHeaders() });
+        const data = await res.json();
+        const el = document.getElementById('macao2-ticker');
+        if (!data.activo) {
+          el.style.display = 'none';
+          detenerTickerMacao2();
+          return;
+        }
+        el.style.display = 'flex';
+        document.getElementById('macao2-ticker-count').textContent = `${data.procesados}/${data.total} (${data.porcentaje}%)`;
+        document.getElementById('macao2-ticker-errores').textContent = data.errores > 0 ? ` · ${data.errores} sin sello` : '';
+        document.getElementById('macao2-ticker-fill').style.width = `${data.porcentaje}%`;
+      } catch (e) {
+        document.getElementById('macao2-ticker').style.display = 'none';
+      }
+    }
+
+    function iniciarTickerMacao2() {
+      if (macao2TickerInterval) return;
+      consultarTickerMacao2();
+      macao2TickerInterval = setInterval(consultarTickerMacao2, 5000);
+    }
+
+    function detenerTickerMacao2() {
+      if (macao2TickerInterval) {
+        clearInterval(macao2TickerInterval);
+        macao2TickerInterval = null;
+      }
+    }
+
+    function mostrarPanelEst(id, btn) {
+      document.querySelectorAll('#module-estimaciones .content-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('#module-estimaciones .nav-item').forEach(b => b.classList.remove('active'));
+      document.getElementById('panel-est-' + id).classList.add('active');
+      btn.classList.add('active');
+      closeSidebar();
+      if (id === 'pendientes') cargarPendientesRevision();
+      if (id === 'claves') cargarClavesResueltas();
+    }
+
+    /* ── Issue #25 — aviso pasivo de resoluciones manuales desactualizadas ── */
+
+    function _fmtM3(v)  { return v == null ? '—' : Number(v).toLocaleString('es-DO', {maximumFractionDigits:2}) + ' m³'; }
+    function _fmtUSD(v) { return v == null ? '—' : '$' + Number(v).toLocaleString('es-DO', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+    function _celdaClave(clave, descripcion, precio) {
+      if (clave == null) return '<span style="color:var(--text-muted);">sin match</span>';
+      const desc = descripcion == null
+        ? '<span style="color:var(--red-status);">clave fuera del catálogo</span>'
+        : escapeHtml(descripcion);
+      return `<div><b>${escapeHtml(clave)}</b> · ${precio == null ? 'sin P.U.' : _fmtUSD(precio)}</div>`
+           + `<div style="font-size:11px;color:var(--text-muted);line-height:1.35;">${desc}</div>`;
+    }
+
+    function _renderTablaClaves(cont, filas, mensajeVacio, modo) {
+      if (!filas.length) {
+        cont.innerHTML = `<div class="resumen-linea"><span class="tag ok">OK</span>${mensajeVacio}</div>`;
+        return;
+      }
+      // Las discrepancias van en la caja de borde rojo (la misma que ya marca
+      // las facturas sin match en la pantalla de revisión) para que se
+      // distingan de un vistazo de los otros dos desenlaces.
+      const abre = modo === 'discrepan'
+        ? '<div class="est-sinmatch-box"><div class="consulta-table" style="align-self:stretch;max-width:100%;"><table>'
+        : '<div class="consulta-table" style="align-self:stretch;max-width:100%;"><table>';
+      const cierra = modo === 'discrepan' ? '</table></div></div>' : '</table></div>';
+      let html = abre + `<thead><tr>
+        <th>Empresa</th><th>Fase</th><th>Descripción en la factura</th><th>Conduces</th><th>Cantidad</th>
+        <th>Resuelta a mano</th><th>Catálogo hoy</th><th>Importe resuelta</th><th>Importe catálogo</th><th>Diferencia</th>
+      </tr></thead><tbody>`;
+      for (const f of filas) {
+        const dif = f.diferencia;
+        const colorDif = dif == null ? 'var(--text-muted)'
+                       : dif > 0 ? 'var(--red-status)'
+                       : dif < 0 ? 'var(--amber)' : 'var(--text-muted)';
+        const signo = (dif != null && dif > 0) ? '+' : '';
+        const obsoleta = f.clave_resuelta_obsoleta
+          ? ' <span class="badge invalido" title="La clave guardada ya no existe en el catálogo de esta fase: el generador la ignora y pide reasignarla a mano.">obsoleta</span>'
+          : '';
+        html += `<tr>
+          <td>${escapeHtml(f.empresa)}</td>
+          <td>${escapeHtml(f.fase)}</td>
+          <td style="max-width:280px;white-space:normal;font-size:11.5px;line-height:1.4;">${escapeHtml(f.descripcion)}</td>
+          <td>${f.facturas}</td>
+          <td>${_fmtM3(f.cantidad)}</td>
+          <td style="max-width:200px;white-space:normal;">${_celdaClave(f.clave_resuelta, f.descripcion_resuelta, f.precio_resuelta)}${obsoleta}</td>
+          <td style="max-width:200px;white-space:normal;">${_celdaClave(f.clave_auto, f.descripcion_auto, f.precio_auto)}</td>
+          <td>${_fmtUSD(f.importe_resuelta)}</td>
+          <td>${_fmtUSD(f.importe_auto)}</td>
+          <td style="color:${colorDif};font-weight:${dif ? 700 : 400};">${dif == null ? '—' : signo + _fmtUSD(dif)}</td>
+        </tr>`;
+      }
+      cont.innerHTML = html + '</tbody>' + cierra;
+    }
+
+    async function cargarClavesResueltas() {
+      const contResumen = document.getElementById('claves-resumen');
+      const conts = ['claves-discrepan', 'claves-sinmatch', 'claves-coinciden'].map(id => document.getElementById(id));
+      const cargando = '<div class="thinking-reporte"><div class="dots"><span></span><span></span><span></span></div>Cargando...</div>';
+      contResumen.innerHTML = cargando;
+      conts.forEach(c => c.innerHTML = '');
+      try {
+        const res = await fetch('/api/estimaciones/claves-resueltas', { headers: authHeaders() });
+        if (!res.ok) throw new Error('http ' + res.status);
+        const d = await res.json();
+        const r = d.resumen;
+        const tagDisc = r.facturas_discrepan ? 'error' : 'ok';
+        let resumen = `<div class="resumen-box" style="padding:14px 18px;gap:8px;">
+          <div class="resumen-linea"><span class="tag muted">Total</span><span>${r.facturas_revisadas} conduces con clave resuelta a mano, en ${r.grupos} descripciones distintas.</span></div>
+          <div class="resumen-linea"><span class="tag ${tagDisc}">${r.facturas_discrepan ? 'Revisar' : 'OK'}</span><span>`;
+        // El texto va dentro de UN solo <span>: .resumen-linea es flex, así que
+        // cada <b> suelto sería un item aparte y la frase se partiría en
+        // columnas con el gap del contenedor (feo en desktop, ilegible en móvil).
+        if (r.facturas_discrepan) {
+          resumen += `<b>${r.facturas_discrepan}</b> conduces (${_fmtM3(r.cantidad_discrepan)}) discrepan del catálogo vigente`
+                   + ` — diferencia de <b>${_fmtUSD(r.diferencia_total)}</b> según qué clave se use`
+                   + (r.discrepan_sin_precio ? ` (${r.discrepan_sin_precio} sin P.U., no entran en esa suma)` : '') + '.';
+        } else {
+          resumen += 'Ninguna resolución manual discrepa del catálogo vigente.';
+        }
+        resumen += `</span></div>
+          <div class="resumen-linea"><span class="tag muted">Sin match</span><span>${r.facturas_sin_auto_match} conduces dependen solo de la resolución manual.</span></div>
+          <div class="resumen-linea"><span class="tag ok">Redundantes</span><span>${r.facturas_coinciden} conduces resuelven hoy a la misma clave por catálogo o alias.</span></div>`;
+        if (r.claves_obsoletas) {
+          resumen += `<div class="resumen-linea"><span class="tag error">Obsoletas</span><span><b>${r.claves_obsoletas}</b> conduces apuntan a una clave que ya no existe en el catálogo de su fase: el generador las ignora y pide reasignarlas a mano.</span></div>`;
+        }
+        contResumen.innerHTML = resumen + '</div>';
+        _renderTablaClaves(conts[0], d.discrepan, 'Ninguna resolución manual discrepa del catálogo vigente.', 'discrepan');
+        _renderTablaClaves(conts[1], d.sin_auto_match, 'Todas las descripciones resueltas a mano matchean algo hoy.', 'sinmatch');
+        _renderTablaClaves(conts[2], d.coinciden, 'Ninguna resolución manual es redundante.', 'coinciden');
+      } catch (e) {
+        contResumen.innerHTML = '<div class="resumen-linea"><span class="tag error">Error</span>No se pudo cargar la revisión de resoluciones manuales.</div>';
+      }
+    }
+
+    function _renderTablaPendientes(cont, filas, mensajeVacio) {
+      if (filas.length === 0) {
+        cont.innerHTML = `<div class="resumen-linea"><span class="tag ok">OK</span>${mensajeVacio}</div>`;
+        return;
+      }
+      let html = `<div class="consulta-table" style="align-self:stretch;max-width:100%;"><table>
+        <thead><tr><th>Archivo</th><th>ID Documento</th><th>Fecha</th><th>Cliente</th><th>Fase</th><th>Motivo</th><th>Acción</th></tr></thead><tbody>`;
+      for (const p of filas) {
+        // Issue #20: Aprobar solo para falta sello / falta firma; los otros
+        // motivos se resuelven corrigiendo el documento o el Excel, no acá.
+        const aprobar = p.aprobable
+          ? `<button class="btn-tabla" data-aprobar-archivo="${escapeAttr(p.archivo_pdf)}">Aprobar</button>`
+          : `<span title="Este motivo no se puede aprobar a mano: se resuelve corrigiendo el documento o el Excel." style="color:var(--text-muted);">—</span>`;
+        // Issue #38: Descartar sirve para CUALQUIER motivo — no mete m³ en el
+        // documento del cliente, solo saca el conduce de la lista dejando
+        // rastro. Es la salida legítima del bloqueo del cierre.
+        const accion = aprobar +
+          ` <button class="btn-tabla" data-descartar-archivo="${escapeAttr(p.archivo_pdf)}" title="Este conduce no corresponde facturarlo — se archiva con motivo y se puede reponer.">Descartar</button>`;
+        // El ancla del 400 pendientes_en_el_periodo del panel de cierre.
+        html += `<tr id="pendiente-${escapeAttr(p.archivo_pdf)}">
+          <td>${escapeHtml(p.archivo_pdf)}</td>
+          <td>${escapeHtml(p.id_documento)}</td>
+          <td>${escapeHtml(p.fecha)}</td>
+          <td>${escapeHtml(p.cliente)}</td>
+          <td>${escapeHtml(p.fase)}</td>
+          <td><span class="badge pendiente">${escapeHtml(p.motivo)}</span></td>
+          <td>${accion}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div>`;
+      cont.innerHTML = html;
+    }
+
+    let _pendientesPorArchivo = {};  // issue #20: fila completa por archivo_pdf, para el modal
+
+    async function cargarPendientesRevision() {
+      const contMacao2 = document.getElementById('pendientes-lista-macao2');
+      const contOtras  = document.getElementById('pendientes-lista-otras');
+      const cargando = '<div class="thinking-reporte"><div class="dots"><span></span><span></span><span></span></div>Cargando...</div>';
+      contMacao2.innerHTML = cargando;
+      contOtras.innerHTML  = cargando;
+      try {
+        const res  = await fetch('/api/estimaciones/pendientes-revision', { headers: authHeaders() });
+        const data = await res.json();
+        _pendientesPorArchivo = {};
+        for (const p of [...(data.macao2 || []), ...(data.otras_fases || [])]) {
+          _pendientesPorArchivo[p.archivo_pdf] = p;
+        }
+        _renderTablaPendientes(contMacao2, data.macao2 || [], 'No hay documentos de MACAO 2 pendientes por revisión.');
+        _renderTablaPendientes(contOtras, data.otras_fases || [], 'No hay documentos de otras fases pendientes por revisión.');
+      } catch (e) {
+        const errorHtml = '<div class="resumen-linea"><span class="tag error">Error</span>No se pudo cargar la lista.</div>';
+        contMacao2.innerHTML = errorHtml;
+        contOtras.innerHTML  = errorHtml;
+      }
+      cargarAprobadosManualmente();
+      cargarDescartados();
+    }
+
+    /* ── Issue #20 — aprobación manual: modal, aprobados y reversa ── */
+
+    let _aprobarArchivoActual = null;
+
+    function _avisoCorteAprobar(fila) {
+      // La franja de aviso ANTES de aprobar: sin ella, aprobar debajo del
+      // corte parecería funcionar sin mover un solo número.
+      if (fila.cuenta_para_estimaciones) return null;
+      if (!fila.fecha) {
+        return 'Este conduce no tiene fecha legible. Aprobarlo lo registra, pero no se puede afirmar que vaya a sumar a ninguna estimación.';
+      }
+      return `Este conduce es del ${fila.fecha} y el período de ${fila.fase} está cerrado hasta el ${fila.corte}. Aprobarlo lo registra, pero no va a sumar a ninguna estimación.`;
+    }
+
+    function abrirModalAprobar(archivoPdf) {
+      const fila = _pendientesPorArchivo[archivoPdf];
+      if (!fila) return;
+      _aprobarArchivoActual = archivoPdf;
+      document.getElementById('aprobar-modal-doc').textContent =
+        `${fila.archivo_pdf} — ${fila.id_documento || 'sin ID'} — bloqueado por "${fila.motivo}"`;
+      const avisoEl = document.getElementById('aprobar-modal-aviso');
+      const aviso = _avisoCorteAprobar(fila);
+      avisoEl.textContent = aviso || '';
+      avisoEl.style.display = aviso ? 'block' : 'none';
+      document.getElementById('aprobar-quien').value = '';
+      document.getElementById('aprobar-motivo').value = '';
+      document.getElementById('aprobar-modal-error').style.display = 'none';
+      _validarModalAprobar();
+      document.getElementById('aprobar-modal').classList.add('show');
+      document.getElementById('aprobar-quien').focus();
+    }
+
+    function cerrarModalAprobar() {
+      _aprobarArchivoActual = null;
+      document.getElementById('aprobar-modal').classList.remove('show');
+    }
+
+    function _validarModalAprobar() {
+      const quien  = document.getElementById('aprobar-quien').value.trim();
+      const motivo = document.getElementById('aprobar-motivo').value.trim();
+      const btnAprobar = document.getElementById('aprobar-modal-btn');
+      btnAprobar.disabled = !(quien && motivo);
+      // Deshabilitado por campos vacios, no por trabajo en curso: sin spinner.
+      btnAprobar.classList.remove('is-loading');
+    }
+
+    async function confirmarAprobarPendiente() {
+      if (!_aprobarArchivoActual) return;
+      const btn = document.getElementById('aprobar-modal-btn');
+      const errorEl = document.getElementById('aprobar-modal-error');
+      errorEl.style.display = 'none';
+      btn.disabled = true;
+      btn.classList.add('is-loading');
+      try {
+        const res = await fetch('/api/estimaciones/pendientes-revision/aprobar', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            archivo_pdf: _aprobarArchivoActual,
+            aprobado_por: document.getElementById('aprobar-quien').value.trim(),
+            motivo: document.getElementById('aprobar-motivo').value.trim(),
+          }),
+        });
+        if (!res.ok) {
+          // 400 = entrada/estado que el operador puede corregir, se muestra
+          // tal cual; 500 = no es culpa del operador, mensaje genérico.
+          let detalle = 'Error del servidor, revisar el log.';
+          if (res.status === 400) {
+            const data = await res.json().catch(() => ({}));
+            detalle = typeof data.detail === 'string' ? data.detail : 'Solicitud inválida.';
+          }
+          errorEl.textContent = detalle;
+          errorEl.style.display = 'block';
+          _validarModalAprobar();
+          return;
+        }
+        cerrarModalAprobar();
+        cargarPendientesRevision();
+      } catch (e) {
+        errorEl.textContent = 'No se pudo conectar con el servidor.';
+        errorEl.style.display = 'block';
+        _validarModalAprobar();
+      }
+    }
+
+    /* ── Issue #38 — descarte manual: modal, descartados y reposición ── */
+
+    let _descartarArchivoActual = null;
+
+    function abrirModalDescartar(archivoPdf) {
+      const fila = _pendientesPorArchivo[archivoPdf];
+      if (!fila) return;
+      _descartarArchivoActual = archivoPdf;
+      document.getElementById('descartar-modal-doc').textContent =
+        `${fila.archivo_pdf} — ${fila.id_documento || 'sin ID'} — ${fila.cantidad != null ? fila.cantidad + ' m³' : 'sin cantidad'} — bloqueado por "${fila.motivo}"`;
+      document.getElementById('descartar-quien').value = '';
+      document.getElementById('descartar-motivo').value = '';
+      document.getElementById('descartar-modal-error').style.display = 'none';
+      _validarModalDescartar();
+      document.getElementById('descartar-modal').classList.add('show');
+      document.getElementById('descartar-quien').focus();
+    }
+
+    function cerrarModalDescartar() {
+      _descartarArchivoActual = null;
+      document.getElementById('descartar-modal').classList.remove('show');
+    }
+
+    function _validarModalDescartar() {
+      const quien  = document.getElementById('descartar-quien').value.trim();
+      const motivo = document.getElementById('descartar-motivo').value.trim();
+      const btn = document.getElementById('descartar-modal-btn');
+      btn.disabled = !(quien && motivo);
+      // Deshabilitado por campos vacíos, no por trabajo en curso: sin spinner.
+      btn.classList.remove('is-loading');
+    }
+
+    async function confirmarDescartarPendiente() {
+      if (!_descartarArchivoActual) return;
+      const btn = document.getElementById('descartar-modal-btn');
+      const errorEl = document.getElementById('descartar-modal-error');
+      errorEl.style.display = 'none';
+      btn.disabled = true;
+      btn.classList.add('is-loading');
+      try {
+        const res = await fetch('/api/estimaciones/pendientes-revision/descartar', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            archivo_pdf: _descartarArchivoActual,
+            descartado_por: document.getElementById('descartar-quien').value.trim(),
+            motivo: document.getElementById('descartar-motivo').value.trim(),
+          }),
+        });
+        if (!res.ok) {
+          let detalle = 'Error del servidor, revisar el log.';
+          if (res.status === 400) {
+            const data = await res.json().catch(() => ({}));
+            detalle = typeof data.detail === 'string' ? data.detail : 'Solicitud inválida.';
+          }
+          errorEl.textContent = detalle;
+          errorEl.style.display = 'block';
+          _validarModalDescartar();
+          return;
+        }
+        cerrarModalDescartar();
+        cargarPendientesRevision();
+      } catch (e) {
+        errorEl.textContent = 'No se pudo conectar con el servidor.';
+        errorEl.style.display = 'block';
+        _validarModalDescartar();
+      }
+    }
+
+    async function cargarDescartados() {
+      const cont = document.getElementById('descartados-lista');
+      if (!cont) return;
+      cont.innerHTML = '<div class="thinking-reporte"><div class="dots"><span></span><span></span><span></span></div>Cargando...</div>';
+      try {
+        const res  = await fetch('/api/estimaciones/descartados', { headers: authHeaders() });
+        const data = await res.json();
+        const filas = data.filas || [];
+        if (filas.length === 0) {
+          cont.innerHTML = '<div class="resumen-linea"><span class="tag muted">ninguno</span>No hay conduces descartados.</div>';
+          return;
+        }
+        let html = `<div class="consulta-table" style="align-self:stretch;max-width:100%;"><table>
+          <thead><tr><th>Archivo</th><th>ID Documento</th><th>Fecha</th><th>Fase</th><th>Cantidad</th><th>Bloqueado por</th><th>Descartó</th><th>Motivo</th><th>Descartado el</th><th>Acción</th></tr></thead><tbody>`;
+        for (const f of filas) {
+          html += `<tr>
+            <td>${escapeHtml(f.archivo_pdf)}</td>
+            <td>${escapeHtml(f.id_documento)}</td>
+            <td>${escapeHtml(f.fecha)}</td>
+            <td>${escapeHtml(f.fase)}</td>
+            <td>${f.cantidad == null ? '—' : escapeHtml(String(f.cantidad))}</td>
+            <td><span class="badge pendiente">${escapeHtml(f.motivo_bloqueo)}</span></td>
+            <td>${escapeHtml(f.descartado_por)}</td>
+            <td>${escapeHtml(f.descartado_motivo)}</td>
+            <td>${escapeHtml((f.descartado_fecha || '').slice(0, 16).replace('T', ' '))}</td>
+            <td><button class="btn-tabla" data-reponer-archivo="${escapeAttr(f.archivo_pdf)}">Reponer</button></td>
+          </tr>`;
+        }
+        html += `</tbody></table></div>`;
+        cont.innerHTML = html;
+      } catch (e) {
+        cont.innerHTML = '<div class="resumen-linea"><span class="tag error">Error</span>No se pudo cargar la lista.</div>';
+      }
+    }
+
+    async function reponerDescartado(archivoPdf) {
+      try {
+        const res = await fetch('/api/estimaciones/pendientes-revision/reponer', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ archivo_pdf: archivoPdf }),
+        });
+        if (!res.ok) {
+          let detalle = 'Error del servidor, revisar el log.';
+          if (res.status === 400) {
+            const data = await res.json().catch(() => ({}));
+            detalle = typeof data.detail === 'string' ? data.detail : 'Solicitud inválida.';
+          }
+          alert(`No se pudo reponer: ${detalle}`);
+        }
+      } catch (e) {
+        alert('No se pudo conectar con el servidor.');
+      }
+      cargarPendientesRevision();
+    }
+
+    async function cargarAprobadosManualmente() {
+      const cont = document.getElementById('aprobados-lista');
+      cont.innerHTML = '<div class="thinking-reporte"><div class="dots"><span></span><span></span><span></span></div>Cargando...</div>';
+      try {
+        const res  = await fetch('/api/estimaciones/aprobados-manualmente', { headers: authHeaders() });
+        const data = await res.json();
+        const filas = data.filas || [];
+        if (filas.length === 0) {
+          cont.innerHTML = '<div class="resumen-linea"><span class="tag muted">ninguno</span>No hay conduces aprobados manualmente.</div>';
+          return;
+        }
+        let html = `<div class="consulta-table" style="align-self:stretch;max-width:100%;"><table>
+          <thead><tr><th>ID Documento</th><th>Fecha</th><th>Fase</th><th>Bloqueado por</th><th>Aprobó</th><th>Motivo</th><th>Aprobado el</th><th>Cuenta</th><th>Acción</th></tr></thead><tbody>`;
+        for (const f of filas) {
+          const cuenta = f.cuenta_para_estimaciones
+            ? '<span class="badge pagado">sí</span>'
+            : `<span class="badge nocuenta" title="Debajo del corte de conteo${f.corte ? ' (' + escapeAttr(f.corte) + ')' : ''}: no suma a ninguna estimación.">no</span>`;
+          const accion = f.reversible
+            ? `<button class="btn-tabla" data-revertir-id="${escapeAttr(f.id_documento)}">Revertir</button>`
+            : `<button class="btn-tabla" disabled title="${escapeAttr(f.motivo_no_reversible || '')}">Revertir</button>`;
+          html += `<tr>
+            <td>${escapeHtml(f.id_documento)}</td>
+            <td>${escapeHtml(f.fecha)}</td>
+            <td>${escapeHtml(f.fase)}</td>
+            <td><span class="badge pendiente">${escapeHtml(f.motivo_bloqueo)}</span></td>
+            <td>${escapeHtml(f.aprobado_por)}</td>
+            <td>${escapeHtml(f.aprobado_motivo)}</td>
+            <td>${escapeHtml((f.aprobado_fecha || '').slice(0, 16).replace('T', ' '))}</td>
+            <td>${cuenta}</td>
+            <td>${accion}</td>
+          </tr>`;
+        }
+        html += `</tbody></table></div>`;
+        cont.innerHTML = html;
+      } catch (e) {
+        cont.innerHTML = '<div class="resumen-linea"><span class="tag error">Error</span>No se pudo cargar la lista.</div>';
+      }
+    }
+
+    async function revertirAprobacion(idDocumento) {
+      try {
+        const res = await fetch('/api/estimaciones/pendientes-revision/revertir', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ id_documento: idDocumento }),
+        });
+        if (!res.ok) {
+          let detalle = 'Error del servidor, revisar el log.';
+          if (res.status === 400) {
+            const data = await res.json().catch(() => ({}));
+            detalle = typeof data.detail === 'string' ? data.detail : 'Solicitud inválida.';
+          }
+          alert(`No se pudo revertir: ${detalle}`);
+        }
+      } catch (e) {
+        alert('No se pudo conectar con el servidor.');
+      }
+      cargarPendientesRevision();
+    }
+
+    document.addEventListener('click', (e) => {
+      const btnAprobar = e.target.closest('[data-aprobar-archivo]');
+      if (btnAprobar) { abrirModalAprobar(btnAprobar.dataset.aprobarArchivo); return; }
+      const btnDescartar = e.target.closest('[data-descartar-archivo]');
+      if (btnDescartar) { abrirModalDescartar(btnDescartar.dataset.descartarArchivo); return; }
+      const btnReponer = e.target.closest('[data-reponer-archivo]');
+      if (btnReponer) { reponerDescartado(btnReponer.dataset.reponerArchivo); return; }
+      const linkPendiente = e.target.closest('[data-ir-pendiente]');
+      if (linkPendiente) { e.preventDefault(); irAPendiente(linkPendiente.dataset.irPendiente); return; }
+      const btnRevertir = e.target.closest('[data-revertir-id]');
+      if (btnRevertir && !btnRevertir.disabled) revertirAprobacion(btnRevertir.dataset.revertirId);
+    });
+
+    function mostrarPanel(id, btn) {
+      document.querySelectorAll('#module-conduces .content-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('#module-conduces .nav-item').forEach(b => b.classList.remove('active'));
+      document.getElementById('panel-' + id).classList.add('active');
+      btn.classList.add('active');
+      closeSidebar();
+    }
+
+    /* ── MOBILE SIDEBAR (drawer) — no-op on desktop, .sidebar has no
+       transform/overlay styling outside the <=860px media query ── */
+    function toggleSidebar() {
+      const sidebar = document.querySelector('.module-container:not(.hidden) .sidebar');
+      if (!sidebar) return;
+      const isOpen = sidebar.classList.toggle('open');
+      document.getElementById('sidebar-backdrop').classList.toggle('show', isOpen);
+    }
+    function closeSidebar() {
+      document.querySelectorAll('.sidebar.open').forEach(s => s.classList.remove('open'));
+      document.getElementById('sidebar-backdrop').classList.remove('show');
+    }
+
+    async function doLogin() {
+      const usuario    = document.getElementById('login-user').value.trim();
+      const contrasena = document.getElementById('login-pass').value;
+      const errorEl    = document.getElementById('login-error');
+      errorEl.style.display = 'none';
+      try {
+        const res = await fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario, contrasena })
+        });
+        if (!res.ok) { errorEl.style.display = 'block'; return; }
+        const data = await res.json();
+        token = data.token;
+        localStorage.setItem('vmo_token', token);
+        document.getElementById('login-screen').style.display = 'none';
+        cargarCompanias();
+      } catch (e) { errorEl.style.display = 'block'; }
+    }
+
+    async function doLogout() {
+      await fetch('/logout', { method: 'POST', headers: authHeaders() });
+      localStorage.removeItem('vmo_token');
+      localStorage.removeItem('claude_history');
+      localStorage.removeItem('chat_msgs');
+      location.reload();
+    }
+
+    let history = [];
+
+    function hideChatEmpty() {
+      const el = document.getElementById('chat-empty');
+      if (el) el.style.display = 'none';
+    }
+
+    function setPrompt(text) {
+      document.getElementById('input').value = text;
+      document.getElementById('input').focus();
+    }
+
+    function addMsg(text, role) {
+      hideChatEmpty();
+      const chat = document.getElementById('chat');
+      const div  = document.createElement('div');
+      div.className = `msg ${role}`;
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return div;
+    }
+
+    function addThinking(text) {
+      hideChatEmpty();
+      const chat = document.getElementById('chat');
+      const div  = document.createElement('div');
+      div.className = 'msg thinking';
+      div.innerHTML  = `${text} <div class="dots"><span></span><span></span><span></span></div>`;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return div;
+    }
+
+    async function generarReporte() {
+      const compania = document.getElementById('select-compania').value;
+      const desde    = document.getElementById('fecha-desde').value;
+      const hasta    = document.getElementById('fecha-hasta').value;
+
+      if (!desde || !hasta) { alert('Por favor selecciona ambas fechas.'); return; }
+
+      const btn    = document.getElementById('btn-generar');
+      const result = document.getElementById('reporte-result');
+      btn.disabled = true;
+      btn.classList.add('is-loading');
+
+      result.style.display = 'flex';
+      result.className = 'reporte-result';
+      result.innerHTML = `<div class="thinking-reporte">Generando reporte <div class="dots"><span></span><span></span><span></span></div></div>`;
+
+      try {
+        let url, body;
+        if (!compania) {
+          url  = '/api/generar-reporte';
+          body = { fecha_desde: desde, fecha_hasta: hasta };
+        } else {
+          url  = '/api/generar-reporte-compania';
+          body = { compania, fecha_desde: desde, fecha_hasta: hasta };
+        }
+
+        const [res] = await Promise.all([
+          fetch(url, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) }),
+          new Promise(resolve => setTimeout(resolve, 1600))
+        ]);
+
+        const data = await res.json();
+        result.innerHTML = `
+          <div class="result-label">${data.cached ? 'Reporte generado anteriormente' : 'Reporte listo'}</div>
+          <button class="download-btn" data-download-url="${escapeAttr(data.download_url)}" aria-label="Descargar Reporte">${contenidoDescarga('Descargar Reporte')}</button>`;
+      } catch (e) {
+        result.innerHTML = `<div class="result-label" style="color:var(--red-status)">Error generando el reporte.</div>`;
+      }
+
+      btn.disabled = false;
+      btn.classList.remove('is-loading');
+    }
+
+    function csvCampo(valor) {
+      let texto = String(valor ?? '');
+      // Neutraliza formulas — un valor que empieza con =/+/-/@ se ejecutaria
+      // como formula al abrir el CSV en Excel. \s* antes cubre un tab/espacio
+      // colado antes del caracter de formula, que igual dispara la formula.
+      if (/^\s*[=+\-@]/.test(texto)) texto = "'" + texto;
+      // Quoting CSV estandar: si tiene coma, comilla o salto de linea, se
+      // envuelve en comillas dobles y se escapan las comillas internas.
+      if (/[",\n\r]/.test(texto)) texto = '"' + texto.replace(/"/g, '""') + '"';
+      return texto;
+    }
+
+    function exportarCSV(rows) {
+      const headers = ['id_conduce', 'fecha', 'compania', 'estado'];
+      const lineas  = [headers.join(',')];
+      rows.forEach(r => {
+        lineas.push([r.id_conduce, r.fecha || '', r.compania || '', r.estado].map(csvCampo).join(','));
+      });
+      const blob = new Blob([lineas.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = 'consulta_conduces.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function renderTablaConsulta(rows) {
+      hideChatEmpty();
+      const chat = document.getElementById('chat');
+      const wrap = document.createElement('div');
+      wrap.className = 'consulta-table';
+
+      const filas = rows.map(r => {
+        if (r.estado === 'INVALIDO' || r.estado === 'NO ENCONTRADO') {
+          return `<tr>
+            <td><strong>${escapeHtml(r.id_conduce)}</strong></td>
+            <td colspan="3"><span class="badge invalido">${escapeHtml(r.estado)}</span></td>
+          </tr>`;
+        }
+        const badgeClass = r.estado === 'PAGADO' ? 'pagado' : 'pendiente';
+        return `<tr>
+          <td><strong>${escapeHtml(r.id_conduce)}</strong></td>
+          <td>${escapeHtml(r.fecha) || '—'}</td>
+          <td>${escapeHtml(r.compania) || '—'}</td>
+          <td><span class="badge ${badgeClass}">${escapeHtml(r.estado)}</span></td>
+        </tr>`;
+      }).join('');
+
+      wrap.innerHTML = `
+        <table>
+          <thead><tr>
+            <th>ID Conduce</th><th>Fecha</th><th>Compania</th><th>Estado</th>
+          </tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+        <div class="consulta-export">
+          <button class="btn-export">Exportar CSV</button>
+        </div>`;
+
+      wrap.querySelector('.btn-export').addEventListener('click', () => exportarCSV(rows));
+      chat.appendChild(wrap);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const input   = document.getElementById('input');
+      const btn     = document.getElementById('send');
+      const message = input.value.trim();
+      if (!message) return;
+
+      input.value  = '';
+      btn.disabled = true;
+
+      addMsg(message, 'user');
+      const thinking = addThinking('Procesando');
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ message, history })
+        });
+
+        const data = await res.json();
+        thinking.remove();
+
+        if (data.consulta_data) {
+          renderTablaConsulta(data.consulta_data);
+        } else {
+          addMsg(data.response, 'assistant');
+        }
+
+        history = data.history;
+      } catch (err) {
+        thinking.remove();
+        addMsg('Error al conectar con el servidor.', 'assistant');
+      }
+
+      btn.disabled = false;
+      input.focus();
+    }
+
+    async function cargarCompanias() {
+      try {
+        const res  = await fetch('/companias', { headers: authHeaders() });
+        const data = await res.json();
+        ['select-compania', 'factura-compania'].forEach(id => {
+          const select = document.getElementById(id);
+          data.companias.forEach(comp => {
+            const opt = document.createElement('option');
+            opt.value = comp; opt.textContent = comp;
+            select.appendChild(opt);
+          });
+        });
+      } catch (e) {}
+    }
+
+    document.getElementById('login-pass').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+
+    window.addEventListener('load', async () => {
+      if (token) {
+        const res = await fetch('/companias', { headers: authHeaders() });
+        if (res.ok) {
+          document.getElementById('login-screen').style.display = 'none';
+          const data = await res.json();
+          ['select-compania', 'factura-compania'].forEach(id => {
+            const select = document.getElementById(id);
+            data.companias.forEach(comp => {
+              const opt = document.createElement('option');
+              opt.value = comp; opt.textContent = comp;
+              select.appendChild(opt);
+            });
+          });
+        } else {
+          localStorage.removeItem('vmo_token');
+          token = null;
+        }
+      }
+    });
+
+    document.getElementById('input').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    });
+
+    // ── CALENDARIO ──
+    // Los filtros Desde/Hasta usan el calendario de toda la app en modo rango
+    // (static/calendario.js, 2026-10-19): el primer clic es el inicio, el
+    // segundo el final, y la pagina sigue leyendo los inputs ocultos.
+    [
+      ['date-desde-display', 'date-hasta-display', 'fecha-desde', 'fecha-hasta'],
+      ['factura-desde-display', 'factura-hasta-display', 'factura-desde', 'factura-hasta'],
+      ['est-desde-display', 'est-hasta-display', 'est-fecha-desde', 'est-fecha-hasta'],
+    ].forEach(([desde, hasta, desdeOculto, hastaOculto]) => VMOCalendario.rango({
+      desde: document.getElementById(desde), hasta: document.getElementById(hasta),
+      desdeOculto: document.getElementById(desdeOculto), hastaOculto: document.getElementById(hastaOculto),
+    }));
+
+    // ── DROPZONE ──
+    (function() {
+      const dz = document.getElementById('dropzone');
+      dz.addEventListener('dragover',  function(e) { e.preventDefault(); dz.classList.add('drag-over'); });
+      dz.addEventListener('dragleave', function()  { dz.classList.remove('drag-over'); });
+      dz.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dz.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file && file.name.endsWith('.zip')) onZipSeleccionado(file);
+      });
+
+      const dzExcel = document.getElementById('dropzone-excel');
+      dzExcel.addEventListener('dragover',  function(e) { e.preventDefault(); dzExcel.classList.add('drag-over'); });
+      dzExcel.addEventListener('dragleave', function()  { dzExcel.classList.remove('drag-over'); });
+      dzExcel.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dzExcel.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file && file.name.endsWith('.xlsx')) onExcelSeleccionado(file);
+      });
+    })();
+
+    let zipFilePendiente   = null;
+    let excelFilePendiente = null;
+
+    // El boton "Procesar Facturas" solo se habilita con AMBOS archivos
+    // seleccionados — issue #15, el Excel es obligatorio junto al ZIP.
+    function actualizarBotonProcesar() {
+      document.getElementById('btn-procesar').style.display =
+        (zipFilePendiente && excelFilePendiente) ? 'block' : 'none';
+    }
+
+    function onZipSeleccionado(file) {
+      zipFilePendiente = file;
+      const dz = document.getElementById('dropzone');
+      dz.classList.add('has-file');
+      document.getElementById('dropzone-title').textContent = 'Archivo seleccionado';
+      document.getElementById('dropzone-sub').textContent   = 'Haz clic para cambiar';
+      const fileEl = document.getElementById('dropzone-file');
+      fileEl.textContent   = file.name;
+      fileEl.style.display = 'inline-block';
+      document.getElementById('proceso-resultado').style.display = 'none';
+      actualizarBotonProcesar();
+    }
+
+    function onExcelSeleccionado(file) {
+      excelFilePendiente = file;
+      const dz = document.getElementById('dropzone-excel');
+      dz.classList.add('has-file');
+      document.getElementById('dropzone-excel-title').textContent = 'Archivo seleccionado';
+      document.getElementById('dropzone-excel-sub').textContent   = 'Haz clic para cambiar';
+      const fileEl = document.getElementById('dropzone-excel-file');
+      fileEl.textContent   = file.name;
+      fileEl.style.display = 'inline-block';
+      document.getElementById('proceso-resultado').style.display = 'none';
+      actualizarBotonProcesar();
+    }
+
+    async function procesarZip() {
+      if (!zipFilePendiente || !excelFilePendiente) return;
+
+      const btn       = document.getElementById('btn-procesar');
+      const resultado = document.getElementById('proceso-resultado');
+      btn.disabled    = true;
+      btn.classList.add('is-loading');
+      btn.textContent = 'Procesando...';
+      resultado.style.display = 'none';
+
+      const formData = new FormData();
+      formData.append('archivo', zipFilePendiente);
+      formData.append('excel', excelFilePendiente);
+
+      let res;
+      try {
+        res = await fetch('/api/estimaciones/procesar-zip', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+      } catch (e) {
+        // El fetch en si fallo (sin conexion, servidor caido) — este es el
+        // unico caso real de "no se pudo conectar con el servidor".
+        resultado.style.display = 'block';
+        resultado.innerHTML = `<div class="resumen-box"><div class="resumen-linea"><span class="tag error">Error</span>No se pudo conectar con el servidor.</div></div>`;
+        btn.disabled    = false;
+        btn.classList.remove('is-loading');
+        btn.textContent = 'Procesar Facturas';
+        return;
+      }
+
+      let data = null;
+      try { data = await res.json(); } catch (e) { /* respuesta sin cuerpo JSON */ }
+
+      if (!res.ok) {
+        // Falta el campo `excel` -> FastAPI responde 422 con `detail` como
+        // array de errores de validacion (no el {error,detalle} del resto
+        // del proyecto) — se detecta aparte para dar un mensaje especifico.
+        let mensaje;
+        if (res.status === 422 && data && Array.isArray(data.detail)) {
+          mensaje = 'Falta el Excel de conduces — hay que subir el ZIP y el Excel juntos.';
+        } else {
+          mensaje = mensajeErrorEstimacion(data ? data.detail : null);
+        }
+        resultado.style.display = 'block';
+        resultado.innerHTML = `<div class="resumen-box"><div class="resumen-linea"><span class="tag error">Error</span>${escapeHtml(mensaje)}</div></div>`;
+        btn.disabled    = false;
+        btn.classList.remove('is-loading');
+        btn.textContent = 'Procesar Facturas';
+        return;
+      }
+
+      mostrarResumen(data);
+      btn.disabled    = false;
+      btn.classList.remove('is-loading');
+      btn.textContent = 'Procesar Facturas';
+    }
+
+    let sesionEstActual = null;
+
+    function acordRow(tagClass, label, items, renderItem) {
+      const n = items.length;
+      if (n > 0) {
+        const detalle = items.map(i => `<div class="acord-item">${renderItem(i)}</div>`).join('');
+        return `
+          <div class="acord-row togglable" onclick="this.classList.toggle('open')">
+            <div class="acord-left"><span class="tag ${tagClass}">${label}</span><span class="acord-count">${n}</span></div>
+            <span class="acord-arrow">&#9660;</span>
+          </div>
+          <div class="acord-detail">${detalle}</div>`;
+      }
+      return `
+        <div class="acord-row">
+          <div class="acord-left"><span class="tag ${tagClass}">${label}</span><span class="acord-count">0</span></div>
+        </div>`;
+    }
+
+    // Issue #15 — categorias nuevas (corregidas por el Excel / conflictos del
+    // Excel) solo se renderizan si tienen elementos, a diferencia de las
+    // demas filas del acordeon que siempre se muestran con su conteo en 0.
+    function acordRowSiHay(tagClass, label, items, renderItem) {
+      return items.length > 0 ? acordRow(tagClass, label, items, renderItem) : '';
+    }
+
+    function renderCorregida(c) {
+      const campo = c.campo === 'cantidad' ? 'cantidad ' : '';
+      return `${escapeHtml(c.nombre)}<span class="acord-motivo">— ${campo}Vision leía: "${escapeHtml(c.vision ?? '')}" → Excel: "${escapeHtml(c.excel)}"</span>`;
+    }
+
+    function renderConflictoExcel(c) {
+      return `${escapeHtml(c.llave)}<span class="acord-motivo">— ${escapeHtml(c.motivo)}</span>`;
+    }
+
+    function mostrarResumen(data) {
+      const resultado = document.getElementById('proceso-resultado');
+      resultado.style.display = 'block';
+      sesionEstActual = data.session_id;
+
+      const validos     = data.importadas_lista       || [];
+      const sinFirma    = data.importadas_sin_firma_lista || [];
+      const dups        = data.duplicadas              || [];
+      const erroresVis  = data.errores_vision_lista    || [];
+      const pendientes  = data.pendientes_lista        || [];
+      const corregidas  = data.corregidas_lista        || [];
+      const conflictosExcel = data.conflictos_excel    || [];
+      const totalImportar = validos.length + sinFirma.length;
+      const reprocesables = erroresVis.filter(e => e.reprocesable);
+      const noReprocesables = erroresVis.filter(e => !e.reprocesable);
+
+      let html = `<div class="resumen-box">
+        <div class="resumen-titulo">Resumen de procesamiento (Haiku)</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          ${acordRow('ok',    'OK — listas para incorporar', validos,    f => escapeHtml(f))}
+          ${acordRow('dup',   'Importado sin firma (con sello, se incorpora igual)', sinFirma, f => escapeHtml(f))}
+          ${acordRow('error', 'Errores de lectura (reprocesables con Opus)', reprocesables, renderErrorVision)}
+          ${acordRowSiHay('error', 'No se pueden reprocesar (hay que corregir el archivo)', noReprocesables, renderErrorVision)}
+          ${acordRow('dup',   'Pendientes por revisión (no se tocan — ver motivo)', pendientes, p => `${escapeHtml(p.nombre)}<span class="acord-motivo">— ${escapeHtml(p.motivo)}</span>`)}
+          ${acordRow('dup',   'Duplicados', dups, f => escapeHtml(f))}
+          ${acordRowSiHay('dup', 'Corregidos con el Excel', corregidas, renderCorregida)}
+          ${acordRowSiHay('error', 'Conflictos en el Excel', conflictosExcel, renderConflictoExcel)}
+        </div>`;
+
+      html += `<div class="resumen-acciones" style="flex-direction:column;gap:8px;">`;
+      if (reprocesables.length > 0) {
+        html += `<button class="btn-confirmar" onclick="incorporarYReprocesar()">Incorporar válidos (${totalImportar}) y reprocesar errores con Opus (${reprocesables.length})</button>`;
+      } else if (totalImportar > 0) {
+        html += `<button class="btn-confirmar" onclick="incorporarYReprocesar()">Incorporar ${totalImportar} facturas a la base de datos</button>`;
+      }
+      html += `<div style="display:flex;gap:8px;margin-top:4px;">
+          <button class="download-btn" data-download-url="${escapeAttr(data.excel_url)}" aria-label="Descargar Excel">${contenidoDescarga('Descargar Excel')}</button>
+          <button class="btn-cancelar" onclick="cancelarImportacion()">Cancelar</button>
+        </div>
+      </div></div>`;
+
+      resultado.innerHTML = html;
+    }
+
+    // Un error de Vision con su motivo; los que no son `reprocesable` (nombre
+    // de archivo invalido, PDF de varias paginas o demasiado grande) no los
+    // arregla Opus: hay que corregir el archivo y volver a subirlo.
+    function renderErrorVision(e) {
+      return `${escapeHtml(e.nombre)}<span class="acord-motivo">— ${escapeHtml(e.motivo)}</span>`;
+    }
+
+    function barraReprocesoHtml(actual, total, modelo) {
+      const pct = total > 0 ? Math.round((actual / total) * 100) : 0;
+      return `<div class="resumen-box">
+        <div class="resumen-titulo">Reprocesando con ${(modelo || 'opus').toUpperCase()}...</div>
+        <div class="macao2-ticker-label" style="margin-bottom:6px;">${actual} / ${total} (${pct}%)</div>
+        <div class="macao2-ticker-track"><div class="macao2-ticker-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }
+
+    async function incorporarYReprocesar() {
+      if (!sesionEstActual) return;
+      const resultado = document.getElementById('proceso-resultado');
+      const btn = resultado.querySelector('.btn-confirmar');
+      if (btn) { btn.disabled = true; btn.textContent = 'Procesando...'; }
+
+      try {
+        const res  = await fetch('/api/estimaciones/incorporar-y-reprocesar', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ session_id: sesionEstActual })
+        });
+        const data = await res.json();
+
+        if (data.reprocesando) {
+          resultado.innerHTML = barraReprocesoHtml(0, data.total_reprocesar, 'opus');
+          pollReprocesoProgreso(sesionEstActual, data.incorporados_ahora);
+        } else {
+          mostrarResultadoFinal(data.incorporados_ahora, data.errores_vision_lista || [], [], data.importadas_sin_firma_lista || []);
+        }
+      } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Reintentar'; }
+      }
+    }
+
+    async function pollReprocesoProgreso(sessionId, incorporadosPrevio) {
+      const resultado = document.getElementById('proceso-resultado');
+      const intervalo = setInterval(async () => {
+        try {
+          const res  = await fetch(`/api/estimaciones/reprocesar-progreso/${sessionId}`, { headers: authHeaders() });
+          const data = await res.json();
+          resultado.innerHTML = barraReprocesoHtml(data.actual, data.total, data.modelo);
+
+          if (!data.activo) {
+            clearInterval(intervalo);
+            mostrarResultadoFinal(
+              data.incorporados_total, data.errores_vision_lista || [], data.pendientes_nuevos || [],
+              data.importadas_sin_firma_lista || [], data.corregidas_lista || []
+            );
+          }
+        } catch (e) {
+          clearInterval(intervalo);
+        }
+      }, 1200);
+    }
+
+    function mostrarResultadoFinal(incorporados, erroresVis, pendientesNuevos, sinFirma, corregidas) {
+      sinFirma   = sinFirma || [];
+      corregidas = corregidas || [];
+      const resultado = document.getElementById('proceso-resultado');
+      let html = `<div class="resumen-box">
+        <div class="resumen-titulo">Resultado</div>
+        <div class="resumen-linea"><span class="tag ok">OK</span>${incorporados} facturas incorporadas a la base de datos.</div>`;
+
+      if (sinFirma.length > 0) {
+        html += `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;">
+          ${acordRow('dup', 'Importado sin firma (con sello, se incorporó igual)', sinFirma, f => escapeHtml(f))}
+        </div>`;
+      }
+
+      if (corregidas.length > 0) {
+        html += `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;">
+          ${acordRowSiHay('dup', 'Corregidos con el Excel', corregidas, renderCorregida)}
+        </div>`;
+      }
+
+      const reprocesables = erroresVis.filter(e => e.reprocesable);
+      const noReprocesables = erroresVis.filter(e => !e.reprocesable);
+      if (reprocesables.length > 0) {
+        html += `<div style="display:flex;flex-direction:column;gap:4px;">
+          ${acordRow('error', 'Siguen con error tras reprocesar con Opus', reprocesables, renderErrorVision)}
+        </div>
+        <div class="resumen-acciones">
+          <button class="btn-confirmar" onclick="incorporarYReprocesar()">Reprocesar de nuevo con Opus (${reprocesables.length})</button>
+        </div>`;
+      }
+      if (noReprocesables.length > 0) {
+        html += `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;">
+          ${acordRow('error', 'No se pueden reprocesar (hay que corregir el archivo)', noReprocesables, renderErrorVision)}
+        </div>`;
+      }
+      if (erroresVis.length === 0) {
+        html += `<div class="resumen-linea"><span class="tag ok">Listo</span>No quedan errores pendientes de reprocesar.</div>`;
+      }
+
+      if (pendientesNuevos.length > 0) {
+        html += `<div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;">
+          ${acordRow('dup', 'Nuevos pendientes por revisión (ver motivo)', pendientesNuevos, p => `${escapeHtml(p.nombre)}<span class="acord-motivo">— ${escapeHtml(p.motivo)}</span>`)}
+        </div>`;
+      }
+
+      html += `</div>`;
+      resultado.innerHTML = html;
+
+      if (erroresVis.length === 0) {
+        setTimeout(() => { resetDropzone(); sesionEstActual = null; }, 4000);
+      }
+    }
+
+    function cancelarImportacion() {
+      document.getElementById('proceso-resultado').style.display = 'none';
+      sesionEstActual = null;
+      resetDropzone();
+    }
+
+    function resetDropzone() {
+      zipFilePendiente = null;
+      const dz = document.getElementById('dropzone');
+      dz.classList.remove('has-file');
+      document.getElementById('dropzone-title').textContent   = 'Arrastra el ZIP aqui';
+      document.getElementById('dropzone-sub').textContent     = 'o haz clic para seleccionar \u00b7 Formato .zip';
+      document.getElementById('dropzone-file').style.display  = 'none';
+      document.getElementById('zip-input').value = '';
+
+      excelFilePendiente = null;
+      const dzExcel = document.getElementById('dropzone-excel');
+      dzExcel.classList.remove('has-file');
+      document.getElementById('dropzone-excel-title').textContent = 'Arrastra el Excel de conduces aqui';
+      document.getElementById('dropzone-excel-sub').textContent   = 'o haz clic para seleccionar \u00b7 Formato .xlsx';
+      document.getElementById('dropzone-excel-file').style.display = 'none';
+      document.getElementById('excel-input').value = '';
+
+      document.getElementById('btn-procesar').style.display = 'none';
+    }
+
+    // ── GENERAR ESTIMACIÓN ──
+    const FASES = {
+        VMO:     ['CANCHAS', 'CEDIS', 'EXTERIORES', 'PATIO DE MANIOBRAS-TRA', 'PODIUM-1-2-3'],
+        DOMICEM: ['CAVERNAS', 'MACAO 2', 'PATIO DE MANIOBRAS-TRB', 'VIVIENDAS']
+      };
+
+      function actualizarFases() {
+        const empresa    = document.getElementById('est-empresa').value;
+        const faseGroup  = document.getElementById('est-fase-group');
+        const faseSelect = document.getElementById('est-fase');
+        faseSelect.innerHTML = '<option value="">Seleccionar fase...</option>';
+        if (empresa && FASES[empresa]) {
+          FASES[empresa].forEach(function(f) {
+            const opt = document.createElement('option');
+            opt.value = f;
+            opt.textContent = f;
+            faseSelect.appendChild(opt);
+          });
+          faseGroup.style.display = 'block';
+        } else {
+          faseGroup.style.display = 'none';
+        }
+        document.getElementById('est-resultado').style.display = 'none';
+      }
+
+      // Traduce los codigos de error del backend a mensajes especificos —
+      // nunca un "hubo un error" generico (T7 del plan de construccion)
+      function mensajeErrorEstimacion(detail) {
+        if (!detail) return 'Ocurrió un error inesperado. Intenta de nuevo.';
+        const err = (typeof detail === 'object' && detail !== null) ? detail.error : detail;
+        const det = (typeof detail === 'object' && detail !== null) ? detail.detalle : null;
+        const mapa = {
+          rango_fechas_invalido: 'La fecha "Desde" no puede ser posterior a "Hasta".',
+          catalogo_no_definido: 'No hay catálogo de productos definido para esta fase todavía — avisar a soporte técnico.',
+          plantilla_no_encontrada: 'Falta la plantilla Excel de esta fase en el servidor — avisar a soporte técnico.',
+          oc_contrato_no_definido: 'Falta el OC/Contrato de esta fase en el servidor — avisar a soporte técnico.',
+          catalogo_desincronizado: 'El catálogo de productos de esta fase cambió y la plantilla no fue actualizada — avisar a soporte técnico.',
+          campos_faltantes: 'Faltan cantidades para estos productos del catálogo: ',
+          facturas_sin_resolver: 'Hay facturas sin asignar a un producto del catálogo: ',
+          precios_faltantes: 'Estos productos no tienen precio unitario cargado todavía: ',
+          excede_capacidad_rgo: 'Estos productos tienen demasiadas facturas en el período (miles) — revisa que el rango de fechas sea el correcto: ',
+          sin_facturas_en_periodo: 'No hay ninguna factura para este rango de fechas y fase — revisa que el período sea el correcto, o que no hayas excluido todos los productos con entregas.',
+          excluidos_desconocidos: 'Se intentó excluir productos que no existen en el catálogo de esta fase — avisar a soporte técnico: ',
+          excel_formato_invalido: 'El Excel de conduces no tiene el formato esperado (encabezados) — revisa que sea el archivo correcto.',
+          excel_ilegible: 'No se pudo leer el Excel de conduces — puede estar corrupto o en un formato distinto a .xlsx.',
+          cierre_requiere_confirmacion: 'El cierre tiene avisos (re-cierre o hueco) y requiere confirmación explícita.',
+          cierre_solapado: 'Ese período ya está cerrado, total o parcialmente, con otro número. Cerrarlo de nuevo contaría esos m³ dos veces. Si hay que corregir el número, reabrí primero: ',
+          pendientes_en_el_periodo: 'Hay conduces del período todavía en Pendientes por Revisión. Cerrar así los perdería para siempre: aprobalos o descartalos primero. ',
+          estimacion_no_cerrada: 'Esa estimación no está cerrada — no hay nada que reabrir.',
+        };
+        let msg = mapa[err] || `Error inesperado: ${err || JSON.stringify(detail)}`;
+        if (Array.isArray(det)) {
+          if (err === 'excede_capacidad_rgo') {
+            msg += det.map(d => `${d.clave} (${d.count} facturas)`).join(', ');
+          } else if (err === 'cierre_solapado') {
+            msg += det.map(d => `${d.numero_estimacion} (${d.fecha_desde} a ${d.fecha_hasta})`).join(', ');
+          } else if (err === 'pendientes_en_el_periodo') {
+            // detalle es una lista de OBJETOS, no de strings: sin esta rama
+            // el join() de abajo imprimiría "[object Object]".
+            msg += det.map(d => `${d.id_documento || d.archivo_pdf} (${d.fecha}, ${d.cantidad} m³)`).join(', ');
+          } else {
+            msg += det.join(', ');
+          }
+        } else if (typeof det === 'string') {
+          msg += ` (${det})`;
+        }
+        return msg;
+      }
+
+      function mostrarErrorEstimacion(detail) {
+        const resultado = document.getElementById('est-resultado');
+        resultado.style.display = 'block';
+        resultado.innerHTML = `<div class="resumen-box"><div class="resumen-linea"><span class="tag error">Error</span>${escapeHtml(mensajeErrorEstimacion(detail))}</div></div>`;
+      }
+
+      let revisionEstActual = null; // { empresa, fase, desde, hasta, catalogo, sin_match, sin_resolver, facturas_periodo }
+
+      async function continuarEstimacion() {
+        const empresa = document.getElementById('est-empresa').value;
+        const fase    = document.getElementById('est-fase').value;
+        const desde   = document.getElementById('est-fecha-desde').value;
+        const hasta   = document.getElementById('est-fecha-hasta').value;
+
+        if (!empresa)         { alert('Selecciona una empresa.'); return; }
+        if (!fase)            { alert('Selecciona una fase.'); return; }
+        if (!desde || !hasta) { alert('Selecciona el rango de fechas.'); return; }
+
+        const btn       = document.getElementById('btn-continuar-est');
+        const resultado = document.getElementById('est-resultado');
+        btn.disabled    = true;
+        btn.classList.add('is-loading');
+        resultado.style.display = 'none';
+
+        try {
+          const url = `/api/estimaciones/vista-previa?empresa=${encodeURIComponent(empresa)}&fase=${encodeURIComponent(fase)}&fecha_desde=${encodeURIComponent(desde)}&fecha_hasta=${encodeURIComponent(hasta)}`;
+          const res  = await fetch(url, { headers: authHeaders() });
+          const data = await res.json();
+          if (!res.ok) { mostrarErrorEstimacion(data.detail); return; }
+          revisionEstActual = {
+            empresa, fase, desde, hasta,
+            catalogo: data.catalogo, sin_match: data.sin_match,
+            sin_resolver: data.sin_resolver, facturas_periodo: data.facturas_periodo,
+            aviso_acumulado_por_factura: data.aviso_acumulado_por_factura,
+          };
+          renderRevisionEstimacion();
+        } catch (e) {
+          mostrarErrorEstimacion(null);
+        } finally {
+          btn.disabled = false;
+          btn.classList.remove('is-loading');
+        }
+      }
+
+      // Issue #12 — contratos paralelos (principal vs PPACT). "Este período"
+      // por serie se arma sumando/contando facturas_periodo (datos crudos)
+      // filtrado por clave+serie — no es un campo agregado que traiga el
+      // backend, mismo patron que ya usaba esta pantalla para otras tablas.
+      function _estFacturasSerie(clave, serie) {
+        return (revisionEstActual.facturas_periodo || []).filter(f => f.clave === clave && f.serie === serie);
+      }
+
+      function _estFilaProductoSerie(c, serie) {
+        const facturas = _estFacturasSerie(c.clave, serie);
+        const suma = facturas.reduce((acc, f) => acc + (f.cantidad || 0), 0);
+        const badge = facturas.length > 0
+          ? `<span class="tag ok">${facturas.length} facturas (${suma})</span>`
+          : `<span class="tag muted">sin entregas</span>`;
+        const info = c[serie] || { calculado: null };
+        const acumValor = info.calculado != null ? info.calculado : '';
+        // Cant. Proyecto: en "principal" es el tope real del contrato
+        // (cantidad_proyecto_principal). PPACT no tiene techo (confirmado
+        // issue #12), asi que no hay un numero fijo que precargar ahi —
+        // pero en los documentos reales de PPACT esa columna siempre sale
+        // igual al "Acumulado Anterior" de la misma fila (sin tope real, el
+        // negocio pone el mismo numero como referencia) — se replica ese
+        // mismo criterio acá. Sigue 100% editable en ambos casos.
+        const cantValor = serie === 'principal'
+          ? (c.principal && c.principal.tope != null ? c.principal.tope : '')
+          : acumValor;
+        // Tilde "Incluir": destildar excluye el producto de ESTA estimacion.
+        // El renglon igual sale completo en REO-01 (clave, concepto, U.M.,
+        // Cant. Proyecto, P.U. y Acum. Anterior) — solo se omite la columna
+        // "Esta Estimacion" y su hoja de generadores. Por eso la fila NO se
+        // atenua ni se tacha: los 2 inputs de esta fila si van al documento.
+        // Los productos sin entregas se dejan deshabilitados: destildarlos no
+        // cambiaria nada (no generan renglon de estimacion de todos modos).
+        const sinEntregas = facturas.length === 0;
+        return `<tr id="est-fila-${serie}-${escapeAttr(c.clave)}">
+          <td class="est-col-incluir"><input type="checkbox" class="est-incluir-chk"
+              id="est-incl-${serie}-${escapeAttr(c.clave)}" checked ${sinEntregas ? 'disabled' : ''}
+              onchange="alternarExclusionProducto('${escapeAttr(serie)}', '${escapeAttr(c.clave)}')"
+              title="${sinEntregas ? 'Sin entregas en el período — no cambia nada' : 'Destildar para excluir este producto de esta estimación'}"></td>
+          <td>${escapeHtml(c.clave)}</td>
+          <td>${escapeHtml(c.descripcion)}</td>
+          <td><input type="number" step="any" class="est-cant-input" id="est-cant-${serie}-${escapeAttr(c.clave)}" placeholder="0" value="${cantValor}"></td>
+          <td><input type="number" step="any" class="est-cant-input" id="est-acum-${serie}-${escapeAttr(c.clave)}" placeholder="0" value="${acumValor}"></td>
+          <td id="est-badge-${serie}-${escapeAttr(c.clave)}">${badge}</td>
+        </tr>`;
+      }
+
+      // Marca/desmarca visualmente la fila y cambia el badge a "excluido".
+      // No toca los inputs: su valor sigue yendo al documento.
+      function alternarExclusionProducto(serie, clave) {
+        const chk = document.getElementById(`est-incl-${serie}-${clave}`);
+        const fila = document.getElementById(`est-fila-${serie}-${clave}`);
+        const celdaBadge = document.getElementById(`est-badge-${serie}-${clave}`);
+        if (!chk || !fila || !celdaBadge) return;
+        const facturas = _estFacturasSerie(clave, serie);
+        const suma = facturas.reduce((acc, f) => acc + (f.cantidad || 0), 0);
+        fila.classList.toggle('est-fila-excluida', !chk.checked);
+        celdaBadge.innerHTML = chk.checked
+          ? `<span class="tag ok">${facturas.length} facturas (${suma})</span>`
+          : `<span class="tag excluido">excluido — ${facturas.length} facturas</span>`;
+      }
+
+      // Claves destildadas de una serie — se mandan al backend como `excluidos`
+      function _estExcluidos(serie) {
+        const { catalogo } = revisionEstActual;
+        return catalogo
+          .filter(c => {
+            const chk = document.getElementById(`est-incl-${serie}-${c.clave}`);
+            return chk && !chk.disabled && !chk.checked;
+          })
+          .map(c => c.clave);
+      }
+
+      function _estSeccionSerie(serie, titulo) {
+        const { catalogo } = revisionEstActual;
+        const filas = catalogo.map(c => _estFilaProductoSerie(c, serie)).join('');
+        const matcheados = catalogo.filter(c => _estFacturasSerie(c.clave, serie).length > 0).length;
+        const separador = serie === 'ppact'
+          ? 'margin-top:22px;padding-top:18px;border-top:1px solid var(--border);'
+          : '';
+        return `
+          <div style="${separador}">
+            <div class="resumen-titulo" style="font-size:12px;color:var(--text-primary);">${titulo}</div>
+            <div class="est-campos-row">
+              <div class="form-group">
+                <label class="form-label" for="est-numero-${serie}">N° de Estimación</label>
+                <input type="text" class="form-input" id="est-numero-${serie}" placeholder="N09">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="est-fecha-est-${serie}">Fecha de Estimación</label>
+                <input type="date" class="form-input" id="est-fecha-est-${serie}">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="est-semana-${serie}">Semana Calendario</label>
+                <input type="number" class="form-input" id="est-semana-${serie}" placeholder="34">
+              </div>
+            </div>
+            <div class="resumen-titulo">Catálogo de productos (${matcheados}/${catalogo.length} con entregas en el período)</div>
+            <div class="consulta-table"><table>
+              <thead><tr><th class="est-col-incluir">Incluir</th><th>Clave</th><th>Descripción</th><th>Cant. Proyecto</th><th>Acum. Anterior</th><th>Este período</th></tr></thead>
+              <tbody>${filas}</tbody>
+            </table></div>
+            <div class="resumen-acciones">
+              <button class="btn-primary" id="btn-generar-est-${serie}" onclick="confirmarGenerarEstimacion('${serie}')" style="width:auto;flex:1;">Generar Estimación${serie === 'ppact' ? ' (PPACT)' : ''}</button>
+            </div>
+            <div id="est-generar-resultado-${serie}"></div>
+          </div>`;
+      }
+
+      function renderRevisionEstimacion() {
+        const { empresa, fase, desde, hasta, catalogo, sin_match, sin_resolver, aviso_acumulado_por_factura } = revisionEstActual;
+        const resultado = document.getElementById('est-resultado');
+        resultado.style.display = 'block';
+
+        // "Serie PPACT" solo aparece si al menos 1 producto tiene excedente
+        // real (ppact.calculado != null) — tener un tope de contrato
+        // principal cargado (principal.tope != null) NO alcanza por si solo,
+        // los 9 productos de MACAO 2 tienen tope pero solo los que ya lo
+        // cruzaron tienen ppact.calculado distinto de null (issue #12, AC #10)
+        const hayPpact = catalogo.some(c => c.ppact && c.ppact.calculado != null);
+
+        // Issue #16 (AC #6) — facturas en el hueco entre la fecha base y este
+        // periodo: su acumulado se calculo factura por factura, no con la
+        // regla de lote. Franja de advertencia arriba de la tabla de
+        // revision; NO bloquea la generacion, solo avisa.
+        let avisoAcumuladoHtml = '';
+        if (aviso_acumulado_por_factura && aviso_acumulado_por_factura.facturas > 0) {
+          const n = aviso_acumulado_por_factura.facturas;
+          avisoAcumuladoHtml = `
+            <div class="resumen-titulo" style="margin-top:6px;color:var(--red-status)">El acumulado anterior incluye ${n} facturas calculadas una por una, no con la regla de lote. Cerrá la estimación anterior para que esto no aplique.</div>`;
+        }
+
+        let sinMatchHtml = '';
+        if (sin_match && sin_match.length > 0) {
+          const opciones = catalogo.map(c => `<option value="${escapeAttr(c.clave)}">${escapeHtml(c.clave)} — ${escapeHtml(c.descripcion)}</option>`).join('');
+          const filasSin = sin_match.map((s, i) => `
+            <tr>
+              <td>${escapeHtml(s.descripcion)}</td>
+              <td>${s.cantidad_facturas}</td>
+              <td>${s.cantidad_total}</td>
+              <td class="est-sinmatch">
+                <label class="sr-only" for="est-reasig-${i}">Asignar "${escapeHtml(s.descripcion)}" a producto del catálogo</label>
+                <select id="est-reasig-${i}" onchange="chequearHabilitarGenerarEst()" required>
+                  <option value="">— elegir producto —</option>
+                  ${opciones}
+                </select>
+              </td>
+            </tr>`).join('');
+          sinMatchHtml = `
+            <div class="resumen-titulo" style="margin-top:6px;color:var(--red-status)">Sin match — requieren asignación manual (${sin_match.length})</div>
+            <div class="est-sinmatch-box">
+              <div class="consulta-table"><table>
+                <thead><tr><th>Descripción (factura)</th><th>Facturas</th><th>Cantidad</th><th>Asignar a</th></tr></thead>
+                <tbody>${filasSin}</tbody>
+              </table></div>
+            </div>`;
+        }
+
+        let sinResolverHtml = '';
+        if (sin_resolver && sin_resolver.length > 0) {
+          const filasSinResolver = sin_resolver.map(d => `<tr><td>${escapeHtml(d)}</td></tr>`).join('');
+          sinResolverHtml = `
+            <div class="resumen-titulo" style="margin-top:6px;color:var(--red-status)">${sin_resolver.length} factura(s) entre la fecha base y este período no se pudieron sumar automático al acumulado — revisar a mano.</div>
+            <div class="est-sinmatch-box">
+              <div class="consulta-table"><table>
+                <thead><tr><th>Descripción (factura)</th></tr></thead>
+                <tbody>${filasSinResolver}</tbody>
+              </table></div>
+            </div>`;
+        }
+
+        resultado.innerHTML = `
+          <div class="resumen-box">
+            <div class="resumen-titulo">Revisar antes de generar — ${escapeHtml(empresa)} · ${escapeHtml(fase)} · ${escapeHtml(desde)} a ${escapeHtml(hasta)}</div>
+
+            ${avisoAcumuladoHtml}
+
+            ${sinMatchHtml}
+
+            ${sinResolverHtml}
+
+            ${_estSeccionSerie('principal', 'Serie Principal')}
+
+            ${hayPpact ? _estSeccionSerie('ppact', 'Serie PPACT') : ''}
+
+            ${_estSeccionCerrar()}
+          </div>`;
+
+        chequearHabilitarGenerarEst();
+      }
+
+      // ── Issue #17 — cerrar estimación (paso explícito, separado de generar) ──
+      // Generar el archivo NO cierra: se genera varias veces mientras se
+      // revisa. Cerrar es lo que registra en el libro mayor en qué quedó esta
+      // estimación (cantidades por clave y serie, con su período y su número)
+      // para que la próxima arranque de ahí sin reprocesar las facturas.
+      function _estSeccionCerrar() {
+        return `
+          <div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--border);">
+            <div class="resumen-titulo" style="font-size:12px;color:var(--text-primary);">Cerrar estimación</div>
+            <div class="resumen-linea" style="font-size:12px;color:var(--text-secondary);">Cuando la estimación generada ya está revisada y emitida, cerrala: queda registrado en qué quedó este período (por clave y serie) y la próxima estimación arranca de ahí. Se puede volver a cerrar el mismo número — reemplaza por completo lo anterior.</div>
+            <div class="est-campos-row">
+              <div class="form-group">
+                <label class="form-label" for="est-cerrar-numero">N° de Estimación a cerrar</label>
+                <input type="text" class="form-input" id="est-cerrar-numero" placeholder="N09">
+              </div>
+            </div>
+            <div class="resumen-acciones">
+              <button class="btn-primary" id="btn-cerrar-est" onclick="cerrarEstimacion()" style="width:auto;flex:1;">Cerrar Estimación</button>
+            </div>
+            <div id="est-cerrar-resultado"></div>
+          </div>`;
+      }
+
+      // Resumen de lo que va a quedar registrado: cantidades por clave y
+      // serie, calculadas de facturas_periodo (los mismos datos crudos que ve
+      // la tabla de revisión) — es exactamente lo que el backend va a sumar.
+      function _estResumenCierre() {
+        const { catalogo } = revisionEstActual;
+        const lineas = [];
+        catalogo.forEach(c => {
+          ['principal', 'ppact'].forEach(serie => {
+            const facturas = _estFacturasSerie(c.clave, serie);
+            const suma = facturas.reduce((acc, f) => acc + (f.cantidad || 0), 0);
+            if (suma > 0) lineas.push(`  • clave ${c.clave} (${serie}): ${suma}`);
+          });
+        });
+        return lineas;
+      }
+
+      function _estMensajeAvisosCierre(avisos) {
+        return (avisos || []).map(a => {
+          if (a.tipo === 're_cierre') {
+            return `  • La estimación ${a.numero_estimacion} YA ESTÁ CERRADA (${a.fecha_desde} a ${a.fecha_hasta}, cerrada el ${(a.cerrada_en || '').slice(0, 10)}). Volver a cerrarla BORRA sus ${a.filas} línea(s) por ${a.cantidad_total} y las reemplaza por lo que dé la clasificación de hoy, que puede no ser la misma. Si ese documento ya se entregó, esto lo cambia sin dejar rastro.`;
+          }
+          if (a.tipo === 'hueco') {
+            return `  • Queda un hueco: lo último cubierto llega al ${a.ultima_cubierta}, se esperaba empezar el ${a.desde_esperado}. Las entregas que caigan en ese hueco NO van a contar para el acumulado de ninguna estimación futura.`;
+          }
+          return `  • ${JSON.stringify(a)}`;
+        }).join('\n');
+      }
+
+      function _estRenderPendientesBloquean(detalle) {
+        // Se respeta el orden que vino del backend (fecha, id_documento).
+        const filas = detalle.map(d => `<tr>
+            <td>${escapeHtml(d.id_documento || '—')}</td>
+            <td>${escapeHtml(d.fecha)}</td>
+            <td>${d.cantidad == null ? '—' : escapeHtml(String(d.cantidad))}</td>
+            <td><span class="badge pendiente">${escapeHtml(d.motivo)}</span></td>
+            <td><a href="#pendiente-${escapeAttr(d.archivo_pdf)}" data-ir-pendiente="${escapeAttr(d.archivo_pdf)}">${escapeHtml(d.archivo_pdf)}</a></td>
+          </tr>`).join('');
+        return `<div class="resumen-linea" style="margin-top:10px"><span class="tag error">No se cerró</span>
+            Hay ${detalle.length} conduce(s) de este período todavía en Pendientes por Revisión.
+            Cerrar así los dejaría fuera de esta estimación Y detrás del corte: no entrarían en ninguna futura.
+            Aprobalos o descartalos primero.</div>
+          <div class="consulta-table" style="align-self:stretch;max-width:100%;margin-top:8px;"><table>
+            <thead><tr><th>ID Documento</th><th>Fecha</th><th>Cantidad</th><th>Motivo</th><th>Archivo</th></tr></thead>
+            <tbody>${filas}</tbody></table></div>`;
+      }
+
+      function irAPendiente(archivoPdf) {
+        // El "link" es un ancla a la fila ya renderizada en el panel de
+        // Pendientes por Revisión de esta misma página, no una vista nueva.
+        const btn = document.querySelector('#module-estimaciones .nav-item[onclick*="\'pendientes\'"]');
+        if (btn) mostrarPanelEst('pendientes', btn);
+        // cargarPendientesRevision() es async: se espera a que la fila exista
+        // antes de saltar (la tabla se re-renderiza entera en cada carga).
+        let intentos = 0;
+        const buscar = () => {
+          const fila = document.getElementById('pendiente-' + archivoPdf);
+          if (fila) { fila.scrollIntoView({ block: 'center' }); return; }
+          if (++intentos < 20) setTimeout(buscar, 150);
+        };
+        buscar();
+      }
+
+      async function _postCerrarEstimacion(payload) {
+        const res = await fetch('/api/estimaciones/cerrar', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        return { res, data };
+      }
+
+      async function cerrarEstimacion() {
+        const { empresa, fase, desde, hasta } = revisionEstActual;
+        const numero_estimacion = document.getElementById('est-cerrar-numero').value.trim()
+          || (document.getElementById('est-numero-principal') ? document.getElementById('est-numero-principal').value.trim() : '');
+        if (!numero_estimacion) {
+          alert('Completa el N° de Estimación a cerrar.');
+          return;
+        }
+
+        const lineas = _estResumenCierre();
+        const ok = confirm(
+          `Vas a cerrar la estimación ${numero_estimacion} de ${empresa} · ${fase}\n` +
+          `Período: ${desde} a ${hasta}\n\n` +
+          `Queda registrado:\n${lineas.length ? lineas.join('\n') : '  (nada — ninguna clave con cantidad en el período)'}\n\n` +
+          'La próxima estimación va a arrancar de este registro. ¿Cerrar?'
+        );
+        if (!ok) return;
+
+        const btn = document.getElementById('btn-cerrar-est');
+        const out = document.getElementById('est-cerrar-resultado');
+        btn.disabled = true;
+        btn.classList.add('is-loading');
+        out.innerHTML = '';
+        try {
+          let payload = { empresa, fase, numero_estimacion, fecha_desde: desde, fecha_hasta: hasta, confirmar_aviso: false };
+          let { res, data } = await _postCerrarEstimacion(payload);
+
+          // 409: hay avisos de re-cierre/hueco — no bloquean, pero exigen
+          // esta segunda confirmación explícita antes de escribir
+          if (res.status === 409 && data.detail && data.detail.error === 'cierre_requiere_confirmacion') {
+            const okAviso = confirm(
+              `Atención antes de cerrar:\n\n${_estMensajeAvisosCierre(data.detail.avisos)}\n\n` +
+              'Puede ser legítimo (un período que la empresa salteó), pero revisalo. ¿Cerrar igual?'
+            );
+            if (!okAviso) return;
+            ({ res, data } = await _postCerrarEstimacion({ ...payload, confirmar_aviso: true }));
+          }
+
+          // Issue #38: el bloqueo por pendientes del período NO es un aviso
+          // confirmable — se lista cada conduce que lo traba, con link al
+          // panel de Pendientes por Revisión para aprobarlo o descartarlo.
+          if (res.status === 400 && data.detail && data.detail.error === 'pendientes_en_el_periodo') {
+            out.innerHTML = _estRenderPendientesBloquean(data.detail.detalle || []);
+            return;
+          }
+
+          if (!res.ok) {
+            out.innerHTML = `<div class="resumen-linea" style="margin-top:10px"><span class="tag error">Error</span>${escapeHtml(mensajeErrorEstimacion(data.detail))}</div>`;
+            return;
+          }
+          out.innerHTML = `<div class="resumen-linea" style="margin-top:10px"><span class="tag ok">Cerrada</span>Estimación ${escapeHtml(numero_estimacion)} cerrada: ${data.cerradas} registro(s) por clave y serie (${escapeHtml(desde)} a ${escapeHtml(hasta)}).</div>`;
+        } catch (e) {
+          out.innerHTML = `<div class="resumen-linea" style="margin-top:10px"><span class="tag error">Error</span>No se pudo conectar con el servidor.</div>`;
+        } finally {
+          btn.disabled = false;
+          btn.classList.remove('is-loading');
+        }
+      }
+
+      function chequearHabilitarGenerarEst() {
+        const selects = document.querySelectorAll('#est-resultado .est-sinmatch select');
+        const faltan = Array.from(selects).some(s => !s.value);
+        ['principal', 'ppact'].forEach(serie => {
+          const btn = document.getElementById(`btn-generar-est-${serie}`);
+          if (!btn) return;
+          btn.disabled = faltan;
+          // Deshabilitado por facturas sin asignar, no por trabajo: sin spinner.
+          btn.classList.remove('is-loading');
+          btn.title = faltan ? 'Asigna todas las facturas sin match antes de generar' : '';
+        });
+      }
+
+      async function confirmarGenerarEstimacion(serie) {
+        const { empresa, fase, desde, hasta, catalogo, sin_match } = revisionEstActual;
+
+        const numero_estimacion = document.getElementById(`est-numero-${serie}`).value.trim();
+        const fecha_estimacion  = document.getElementById(`est-fecha-est-${serie}`).value;
+        const semana            = parseInt(document.getElementById(`est-semana-${serie}`).value, 10);
+
+        if (!numero_estimacion || !fecha_estimacion || !semana) {
+          alert('Completa N° de Estimación, Fecha de Estimación y Semana Calendario.');
+          return;
+        }
+
+        // Excluir un producto cambia un documento oficial que se le manda al
+        // cliente — se confirma antes, diciendo exactamente cuantas entregas
+        // quedan afuera y que es lo que igual sale en el documento.
+        const excluidos = _estExcluidos(serie);
+        if (excluidos.length > 0) {
+          const detalle = excluidos.map(clave => {
+            const c = catalogo.find(x => x.clave === clave);
+            const n = _estFacturasSerie(clave, serie).length;
+            return `  • ${clave} — ${c ? c.descripcion : ''} (${n} facturas)`;
+          }).join('\n');
+          const ok = confirm(
+            `Vas a excluir ${excluidos.length} producto(s) de esta estimación:\n\n${detalle}\n\n` +
+            'Igual van a salir en el documento con su Cant. Proyecto y su Acumulado Anterior. ' +
+            'Lo único que queda vacío es la columna "Esta Estimación", y no se les arma su hoja de conduces.\n\n' +
+            '¿Generar así?'
+          );
+          if (!ok) return;
+        }
+
+        const productos = catalogo.map(c => ({
+          clave: c.clave,
+          cantidad_proyecto: parseFloat(document.getElementById(`est-cant-${serie}-${c.clave}`).value) || 0,
+          acumulado_anterior_cantidad: parseFloat(document.getElementById(`est-acum-${serie}-${c.clave}`).value) || 0,
+        }));
+
+        const reasignaciones = {};
+        if (sin_match && sin_match.length > 0) {
+          sin_match.forEach((s, i) => {
+            // la descripcion nunca se serializa a un atributo HTML (puede traer
+            // comillas dobles, ej. el simbolo de pulgadas) — se lee del objeto
+            // JS original por indice, evitando el bug de escapado encontrado
+            // al probar con datos reales (ver CLAUDE.md 2026-08-20)
+            const sel = document.getElementById(`est-reasig-${i}`);
+            reasignaciones[s.descripcion] = sel.value;
+          });
+        }
+
+        const btn = document.getElementById(`btn-generar-est-${serie}`);
+        const out = document.getElementById(`est-generar-resultado-${serie}`);
+        btn.disabled = true;
+        btn.classList.add('is-loading');
+        out.innerHTML = '';
+
+        try {
+          const res  = await fetch('/api/estimaciones/generar', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({
+              empresa, fase, fecha_desde: desde, fecha_hasta: hasta,
+              numero_estimacion, fecha_estimacion, semana,
+              productos, reasignaciones, serie,
+              excluidos: _estExcluidos(serie),
+            })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            out.innerHTML = `<div class="resumen-linea" style="margin-top:10px"><span class="tag error">Error</span>${escapeHtml(mensajeErrorEstimacion(data.detail))}</div>`;
+            return;
+          }
+          // download_url_pdf viene null si LibreOffice no esta instalado o
+          // la conversion fallo (el .xlsx igual se genero bien) — el boton
+          // de PDF simplemente no se renderiza en ese caso, nunca queda
+          // deshabilitado (issue #6)
+          const botonPdf = data.download_url_pdf
+            ? `<button class="download-btn" data-download-url="${escapeAttr(data.download_url_pdf)}" aria-label="Descargar PDF">${contenidoDescarga('Descargar PDF')}</button>`
+            : '';
+          out.innerHTML = `
+            <div class="resumen-linea" style="margin-top:10px"><span class="tag ok">Lista</span>${data.total_facturas} facturas incorporadas en ${data.productos_con_entregas} productos</div>
+            <div class="resumen-acciones">
+              <button class="download-btn" data-download-url="${escapeAttr(data.download_url)}" aria-label="Descargar Estimación">${contenidoDescarga('Descargar Estimación')}</button>
+              ${botonPdf}
+            </div>`;
+        } catch (e) {
+          out.innerHTML = `<div class="resumen-linea" style="margin-top:10px"><span class="tag error">Error</span>No se pudo conectar con el servidor.</div>`;
+        } finally {
+          chequearHabilitarGenerarEst();
+        }
+      }
+
+    // ── FACTURA ──
+    async function generarFactura() {
+      const compania    = document.getElementById('factura-compania').value;
+      const desde       = document.getElementById('factura-desde').value;
+      const hasta       = document.getElementById('factura-hasta').value;
+      const conducesRaw = document.getElementById('factura-conduces').value;
+
+      if (!compania) { alert('Selecciona un proveedor.'); return; }
+
+      const conduces = conducesRaw
+        ? conducesRaw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean)
+        : [];
+
+      if (!conduces.length && (!desde || !hasta)) {
+        alert('Selecciona un rango de fechas o ingresa conduces especificos.');
+        return;
+      }
+
+      const btn       = document.getElementById('btn-factura');
+      const resultDiv = document.getElementById('factura-result');
+      btn.disabled    = true;
+      btn.classList.add('is-loading');
+      btn.textContent = 'Generando...';
+      resultDiv.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/generar-factura', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ compania, fecha_desde: desde || null, fecha_hasta: hasta || null, conduces })
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `
+          <div class="reporte-result">
+            <div class="result-label">${data.cached ? 'Factura ya existente' : 'Factura generada'}</div>
+            <button class="download-btn" data-download-url="${escapeAttr(data.download_url)}" aria-label="Descargar Factura">${contenidoDescarga('Descargar Factura')}</button>
+          </div>`;
+      } catch (e) {
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<div class="result-label" style="color:var(--red-status)">Error al generar la factura.</div>';
+      } finally {
+        btn.disabled    = false;
+        btn.classList.remove('is-loading');
+        btn.textContent = 'Generar Factura';
+      }
+    }
+  </script>
+
+</body>
+</html>

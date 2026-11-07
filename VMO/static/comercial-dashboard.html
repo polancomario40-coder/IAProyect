@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard comercial — VMO Concretos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="/comercial.logic.js?v=2026-10-23b"></script>
+<script src="/comercial.api.js?v=2026-10-19"></script>
+<style>
+  :root{
+    color-scheme: dark;
+    --vmo-red:#D32F2F; --vmo-red-dark:#F87171;
+    --ink:#EEF2F7; --muted:rgba(238,242,247,0.58); --faint:rgba(238,242,247,0.35); --line:rgba(255,255,255,0.07);
+    --bg:#0D1829; --card:#152535; --elevated:#1C3045; --hover:#243850;
+    --ok:#34D399; --warn:#F59E0B; --err:#F87171;
+    --brand-glow:rgba(211,47,47,0.22);
+    /* Series (paleta categorica validada, pasos para fondo oscuro). m3 va en
+       azul y RD$ en violeta en todos los graficos de una sola serie. */
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    --otros:#5b6b80;
+    --m3:#3987e5; --rd:#9085e9;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Inter','Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  header{background:var(--card); padding:16px 28px; border-bottom:1px solid var(--line); position:relative;
+    display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  header::after{content:''; position:absolute; bottom:-1px; left:0; width:180px; height:2px;
+    background:linear-gradient(90deg, var(--vmo-red) 0%, transparent 100%);}
+  header .tag{text-transform:uppercase; letter-spacing:1px; font-size:10.5px; color:var(--muted);}
+  header h1{margin:2px 0 0; font-size:17px; font-weight:700; letter-spacing:-.2px;}
+  header .sub{font-size:12.5px; color:var(--muted); margin-top:3px;}
+  header select{background:var(--elevated); color:var(--ink); border:1px solid var(--line); border-radius:8px;
+    padding:7px 10px; font:inherit; font-size:13px; font-weight:600;}
+
+  .wrap{max-width:1280px; margin:0 auto; padding:18px 24px 50px;}
+
+  /* ── Filtros ── */
+  .filtros{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px;
+    display:flex; flex-direction:column; gap:10px; margin-bottom:16px;}
+  .meses{display:flex; gap:4px; flex-wrap:wrap; align-items:center;}
+  .meses .lbl, .fila-filtros .lbl{font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted);
+    font-weight:700; margin-right:6px;}
+  .chip{border:1px solid var(--line); background:var(--elevated); color:var(--ink); border-radius:99px;
+    padding:5px 11px; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;}
+  .chip:hover:not(:disabled){background:var(--hover);}
+  .chip[aria-pressed="true"]{background:var(--vmo-red); border-color:var(--vmo-red); color:#fff;}
+  .chip:disabled{opacity:.3; cursor:default;}
+  .chip:focus-visible, .desplegar:focus-visible, .limpiar:focus-visible{outline:2px solid var(--vmo-red-dark); outline-offset:2px;}
+  .fila-filtros{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .filtro{position:relative;}
+  .desplegar{display:flex; align-items:center; gap:6px; border:1px solid var(--line); background:var(--elevated);
+    color:var(--ink); border-radius:8px; padding:7px 11px; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;
+    max-width:260px;}
+  .desplegar .val{color:var(--muted); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .desplegar.activo{border-color:var(--vmo-red-dark);}
+  .desplegar.activo .val{color:var(--vmo-red-dark); font-weight:700;}
+  .lista{position:absolute; top:calc(100% + 6px); left:0; z-index:20; width:300px; max-height:340px; display:flex;
+    flex-direction:column; background:var(--elevated); border:1px solid rgba(255,255,255,.12); border-radius:12px;
+    box-shadow:0 14px 40px rgba(0,0,0,.5);}
+  .lista input[type=search]{margin:10px; padding:8px 10px; border-radius:8px; border:1px solid var(--line);
+    background:var(--card); color:var(--ink); font:inherit; font-size:13px;}
+  .lista .opciones{overflow:auto; padding:4px 6px 8px;}
+  .lista label{display:flex; gap:8px; align-items:flex-start; padding:6px 8px; border-radius:7px; font-size:12.5px; cursor:pointer;}
+  .lista label:hover{background:var(--hover);}
+  .lista input[type=checkbox]{accent-color:var(--vmo-red); margin-top:2px;}
+  .lista .pie{display:flex; justify-content:space-between; padding:8px 10px; border-top:1px solid var(--line);}
+  .lista .pie button{background:none; border:none; color:var(--vmo-red-dark); font:inherit; font-size:12.5px; font-weight:700; cursor:pointer;}
+  .limpiar{margin-left:auto; background:none; border:none; color:var(--vmo-red-dark); font:inherit; font-size:12.5px;
+    font-weight:700; cursor:pointer; padding:6px 4px;}
+
+  /* ── Numeros ── */
+  /* 2026-10-22: siete en una fila partian los numeros en dos renglones
+     ("RD$ / 2,567 M"). Van cuatro arriba con lo vendido y tres abajo contra
+     el plan, y el numero nunca se parte. */
+  .kpis{display:grid; grid-template-columns:repeat(12, 1fr); gap:12px; margin-bottom:16px;}
+  .kpi{grid-column:span 3; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; position:relative; overflow:hidden;}
+  .kpi.ppto{grid-column:span 4;}
+  .kpi::before{content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--vmo-red);}
+  .kpi .l{font-size:10.5px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); font-weight:700;}
+  .kpi .v{font-size:24px; font-weight:700; margin-top:6px; font-variant-numeric:tabular-nums; letter-spacing:-.4px; white-space:nowrap;}
+  .kpi .d{font-size:12px; color:var(--muted); margin-top:3px;}
+  .barra-cump{height:6px; border-radius:3px; background:rgba(255,255,255,.08); margin-top:9px; overflow:hidden;}
+  .barra-cump span{display:block; height:100%; border-radius:3px;}
+
+  /* ── Graficos ── */
+  .grilla{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px;}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 18px; min-width:0;}
+  .card.ancha{grid-column:1 / -1;}
+  .card h3{margin:0; font-size:13px; font-weight:700; letter-spacing:.2px;}
+  .card .cab{display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:12px;}
+  .card .unidad{font-size:11.5px; color:var(--muted);}
+  .vacio{font-size:13px; color:var(--muted); padding:20px 0;}
+
+  .barrasH{display:flex; flex-direction:column; gap:7px;}
+  .bh{display:grid; grid-template-columns:minmax(90px, 210px) 1fr auto; gap:10px; align-items:center;
+    background:none; border:none; color:inherit; font:inherit; font-size:12.5px; text-align:left; padding:2px 4px; border-radius:6px; cursor:pointer;}
+  .bh:hover{background:var(--hover);}
+  .bh.sel{background:rgba(211,47,47,.12);}
+  .bh:focus-visible{outline:2px solid var(--vmo-red-dark);}
+  .bh .n{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px;}
+  .bh .pista{height:14px; position:relative;}
+  .bh .barra{position:absolute; left:0; top:0; bottom:0; border-radius:0 4px 4px 0; min-width:2px;}
+  .bh .x{font-variant-numeric:tabular-nums; font-size:12px; color:var(--ink); min-width:72px; text-align:right;}
+  .ver-mas{margin-top:10px; background:none; border:1px solid var(--line); color:var(--ink); border-radius:8px;
+    padding:7px 12px; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;}
+  .clientes-lista{max-height:none;}
+  .clientes-lista.recortada{max-height:none;}
+
+  .cols{display:flex; align-items:flex-end; height:220px; padding-top:4px;}
+  .col{flex:1; min-width:0; height:100%; display:flex; flex-direction:column; align-items:center; gap:5px;
+    background:none; border:none; color:inherit; font:inherit; padding:0 3px; cursor:pointer; border-radius:6px;}
+  /* Linea del precio de venta por mes, en su franja arriba de las barras. */
+  .precio-titulo{font-size:10.5px; color:var(--muted); display:flex; align-items:center; gap:6px; margin-bottom:2px;}
+  .precio-titulo i{display:inline-block; width:14px; height:2px; background:var(--rd); border-radius:1px;}
+  .precio-mes{position:relative; height:58px; margin-bottom:6px; border-bottom:1px dashed rgba(255,255,255,.08);}
+  .precio-mes svg{position:absolute; inset:0; width:100%; height:100%; overflow:visible;}
+  .precio-mes .pt{position:absolute; width:9px; height:9px; margin:-4.5px 0 0 -4.5px; border-radius:50%;
+    background:var(--rd); box-shadow:0 0 0 2px var(--card); cursor:default;}
+  .precio-mes .pt.tenue{opacity:.35;}
+  .precio-mes .pv{position:absolute; transform:translate(-50%, -100%); margin-top:-7px; font-size:10.5px;
+    font-weight:600; color:var(--ink); white-space:nowrap; font-variant-numeric:tabular-nums; pointer-events:none;}
+  .col:hover .cb span{filter:brightness(1.15);}
+  .col:focus-visible{outline:2px solid var(--vmo-red-dark);}
+  .col.tenue .cb span{opacity:.35;}
+  .col .cv{font-size:11px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .col .cb{flex:1; width:100%; max-width:44px; display:flex; align-items:flex-end;
+    border-bottom:1px solid rgba(255,255,255,.12);}
+  .col .cb span{display:block; width:100%; background:var(--m3); border-radius:4px 4px 0 0; min-height:2px;}
+  .col .cm{font-size:11px; color:var(--muted);}
+  .solo-movil{display:none;}
+  .solo-escritorio{display:inline;}
+  .card{display:flex; flex-direction:column;}
+  .dona-wrap{display:flex; align-items:center; gap:18px; flex-wrap:wrap; flex:1;}
+  .dona-wrap svg{flex:none;}
+  .leyenda{flex:1; min-width:180px; display:flex; flex-direction:column; gap:5px;}
+  .ley{display:grid; grid-template-columns:12px 1fr auto auto; gap:8px; align-items:center;
+    background:none; border:none; color:inherit; font:inherit; font-size:12.5px; text-align:left; padding:3px 4px; border-radius:6px; cursor:pointer;}
+  .ley:hover{background:var(--hover);}
+  .ley.sel{background:rgba(211,47,47,.12);}
+  .ley:disabled{cursor:default; background:none;}
+  .ley .sw{width:12px; height:12px; border-radius:3px;}
+  .ley .n{overflow-wrap:anywhere; line-height:1.3;}
+  .ley .x{font-variant-numeric:tabular-nums; color:var(--ink); font-size:12px;}
+  .ley .p{font-variant-numeric:tabular-nums; color:var(--muted); font-size:12px; min-width:34px; text-align:right;}
+
+  svg text{font-family:inherit;}
+  .tip{position:fixed; z-index:50; pointer-events:none; background:#0b1422; border:1px solid rgba(255,255,255,.14);
+    border-radius:8px; padding:7px 10px; font-size:12px; line-height:1.45; box-shadow:0 8px 24px rgba(0,0,0,.45);
+    max-width:280px; display:none;}
+  .tip strong{display:block; font-size:12.5px;}
+  .estado-carga{padding:60px 20px; text-align:center; color:var(--muted); font-size:14px;}
+  .estado-carga.error{color:var(--err);}
+  footer{text-align:center; padding:20px; color:var(--muted); font-size:11.5px;}
+
+  @media (max-width:760px){
+    .wrap{padding:14px 16px 40px;}
+    header{padding:14px 16px;}
+    .kpi, .kpi.ppto{grid-column:span 6;}
+    .kpi{padding:12px 12px 12px 14px;}
+    .kpi .v{font-size:19px;}
+    .col .cv{font-size:10px;}
+    .solo-movil{display:inline;}
+    .solo-escritorio{display:none;}
+    .kpi:last-child{grid-column:span 12;}
+    .grilla{grid-template-columns:1fr;}
+    .bh{grid-template-columns:minmax(70px, 120px) 1fr auto;}
+    .lista{width:min(300px, calc(100vw - 32px));}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="tag">VMO Concretos · Comercial</div>
+    <h1>Dashboard comercial</h1>
+    <div class="sub" id="subtitulo">Análisis de venta y volumen</div>
+  </div>
+  <select id="anio" aria-label="Año" hidden></select>
+</header>
+
+<div class="wrap" id="contenido">
+  <div class="estado-carga" id="estadoCarga">Cargando los despachos...</div>
+</div>
+
+<footer>VMO Concretos · Comercial</footer>
+<div class="tip" id="tip" role="tooltip"></div>
+
+<script>
+// Dashboard comercial (2026-10-19). El navegador pide los despachos del ano
+// una vez y todas las cuentas salen de dashboard(), en comercial.logic.js —
+// cambiar un filtro recalcula al instante, sin volver al servidor.
+const $ = id => document.getElementById(id);
+const MES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const COLORES = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'].map(v => `var(${v})`);
+const FILTROS = [
+  {dim: 'vendedor', nombre: 'Vendedor'}, {dim: 'zona', nombre: 'Zona'}, {dim: 'planta', nombre: 'Planta'},
+  {dim: 'rango_fc', nombre: 'Rango FC'}, {dim: 'condicion', nombre: 'Condición'}, {dim: 'cliente', nombre: 'Cliente', buscar: true},
+];
+
+let datos = null, opciones = null, filtros = {}, abierto = null, verTodosClientes = false;
+// Lo escrito en el buscador de un filtro: marcar una opcion redibuja la lista
+// y sin esto la busqueda se borraba a cada clic.
+let busqueda = {};
+// Color fijo por entidad para las donas (no por puesto): con un filtro los
+// que quedan no cambian de color. Zona y rango por orden alfabetico; el
+// vendedor por su RD$ del ano entero (los 7 primeros, el resto en "Otros").
+let colorDe = {};
+
+// ── Tooltip ──
+const tip = $('tip');
+document.addEventListener('mousemove', e => {
+  const el = e.target.closest('[data-tip]');
+  if (!el){ tip.style.display = 'none'; return; }
+  tip.innerHTML = el.dataset.tip;
+  tip.style.display = 'block';
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.min(e.clientX + 14, innerWidth - r.width - 8) + 'px';
+  tip.style.top = Math.min(e.clientY + 14, innerHeight - r.height - 8) + 'px';
+});
+const textoTip = (titulo, lineas) => `<strong>${esc(titulo)}</strong>${lineas.map(esc).join('<br>')}`;
+
+// ── Filtros ──
+function alternar(dim, valor){
+  const actual = new Set(filtros[dim] || []);
+  actual.has(valor) ? actual.delete(valor) : actual.add(valor);
+  filtros[dim] = [...actual];
+  pintar();
+}
+
+// Una barra que junta varios valores: si ya estan todos elegidos los quita,
+// si no, los agrega todos.
+function alternarVarios(dim, valores){
+  const actual = new Set(filtros[dim] || []);
+  const todos = valores.every(v => actual.has(v));
+  valores.forEach(v => todos ? actual.delete(v) : actual.add(v));
+  filtros[dim] = [...actual];
+  pintar();
+}
+
+function textoFiltro(dim){
+  const sel = filtros[dim] || [];
+  if (!sel.length) return 'Todos';
+  return sel.length === 1 ? sel[0] : `${sel.length} elegidos`;
+}
+
+function pintarFiltros(){
+  const meses = opciones.mes;
+  return `<div class="filtros">
+    <div class="meses"><span class="lbl">Mes</span>
+      ${MES_CORTO.map((m, i) => {
+        const n = i + 1, hay = meses.includes(n), on = (filtros.mes || []).includes(n);
+        return `<button class="chip" data-mes="${n}" aria-pressed="${on}" ${hay ? '' : 'disabled'}>${m}</button>`;
+      }).join('')}
+    </div>
+    <div class="fila-filtros"><span class="lbl">Filtrar</span>
+      ${FILTROS.map(f => `<div class="filtro">
+        <button class="desplegar ${(filtros[f.dim] || []).length ? 'activo' : ''}" data-abrir="${f.dim}"
+          aria-haspopup="listbox" aria-expanded="${abierto === f.dim}">
+          ${esc(f.nombre)}: <span class="val">${esc(textoFiltro(f.dim))}</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        ${abierto === f.dim ? listaFiltro(f) : ''}
+      </div>`).join('')}
+      ${Object.values(filtros).some(v => v && v.length) ? '<button class="limpiar" id="limpiar">Limpiar filtros</button>' : ''}
+    </div>
+  </div>`;
+}
+
+function listaFiltro(f){
+  const sel = new Set(filtros[f.dim] || []);
+  return `<div class="lista" role="listbox" aria-multiselectable="true">
+    ${f.buscar ? `<input type="search" placeholder="Buscar ${esc(f.nombre.toLowerCase())}..." data-buscar="${f.dim}" value="${esc(busqueda[f.dim] || '')}">` : ''}
+    <div class="opciones">${opciones[f.dim].map(v => `<label data-op="${esc(v.toLowerCase())}" ${busqueda[f.dim] && !v.toLowerCase().includes(busqueda[f.dim]) ? 'hidden' : ''}>
+      <input type="checkbox" data-dim="${f.dim}" value="${esc(v)}" ${sel.has(v) ? 'checked' : ''}> <span>${esc(v)}</span></label>`).join('')}</div>
+    <div class="pie"><button data-ninguno="${f.dim}">Quitar</button><button data-cerrar>Listo</button></div>
+  </div>`;
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('button, input[type=checkbox]');
+  if (!e.target.closest('.filtro') && abierto){ abierto = null; pintar(); return; }
+  if (!b) return;
+  if (b.dataset.mes){ const n = Number(b.dataset.mes), s = new Set(filtros.mes || []);
+    s.has(n) ? s.delete(n) : s.add(n); filtros.mes = [...s]; pintar(); return; }
+  if (b.dataset.abrir){ abierto = abierto === b.dataset.abrir ? null : b.dataset.abrir; pintar();
+    document.querySelector('.lista input[type=search]')?.focus(); return; }
+  if (b.dataset.dim){ alternar(b.dataset.dim, b.value); return; }
+  if (b.dataset.ninguno){ filtros[b.dataset.ninguno] = []; pintar(); return; }
+  if (b.hasAttribute('data-cerrar')){ abierto = null; pintar(); return; }
+  if (b.id === 'limpiar'){ filtros = {}; abierto = null; pintar(); return; }
+  if (b.dataset.valores){ alternarVarios(b.dataset.filtrar, JSON.parse(b.dataset.valores)); return; }
+  if (b.dataset.filtrar){ alternar(b.dataset.filtrar, b.dataset.valor); return; }
+  if (b.id === 'verClientes'){ verTodosClientes = !verTodosClientes; pintar(); return; }
+});
+document.addEventListener('input', e => {
+  if (!e.target.dataset.buscar) return;
+  const q = e.target.value.trim().toLowerCase();
+  busqueda[e.target.dataset.buscar] = q;
+  e.target.closest('.lista').querySelectorAll('label').forEach(l => { l.hidden = q && !l.dataset.op.includes(q); });
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && abierto){ abierto = null; pintar(); } });
+
+// ── Graficos ──
+function barrasHorizontales(lista, campo, fmt, dim, color, opcionesExtra = {}){
+  if (!lista.length) return '<div class="vacio">Sin datos con estos filtros.</div>';
+  const max = Math.max(...lista.map(g => g[campo]), 0) || 1;
+  const sel = new Set(filtros[dim] || []);
+  return `<div class="barrasH">${lista.map(g => {
+    const extra = opcionesExtra.lineas ? opcionesExtra.lineas(g) : [];
+    // Una barra que junta varios (Oficina) filtra por todos los que junta.
+    const valores = g.valores || [g.nombre];
+    const marcada = valores.every(v => sel.has(v));
+    return `<button class="bh ${marcada ? 'sel' : ''}" data-filtrar="${dim}" data-valor="${esc(g.nombre)}"
+      ${g.valores ? `data-valores="${esc(JSON.stringify(valores))}"` : ''}
+      data-tip="${esc(textoTip(g.nombre, [fmt(g[campo]), ...extra]))}" aria-label="${esc(g.nombre)}: ${esc(fmt(g[campo]))}">
+      <span class="n">${esc(g.nombre)}</span>
+      <span class="pista"><span class="barra" style="width:${(g[campo] / max * 100).toFixed(2)}%; background:${color}"></span></span>
+      <span class="x">${esc(fmt(g[campo]))}</span></button>`;
+  }).join('')}</div>`;
+}
+
+// La franja del precio de venta (RD$ / m3) de cada mes, arriba de las barras
+// y alineada con ellas: el mes i esta en (i + 0.5) / n del ancho. Escala
+// propia, del menor al mayor precio de los meses que se ven: no comparte eje
+// con los m3, por eso va aparte y no encima de las barras.
+function lineaDePrecio(porMes){
+  const conPrecio = porMes.map((m, i) => ({m, i})).filter(p => p.m.precioVenta !== null);
+  if (!conPrecio.length) return '';
+  const n = porMes.length, sel = new Set(filtros.mes || []);
+  const precios = conPrecio.map(p => p.m.precioVenta);
+  const min = Math.min(...precios), max = Math.max(...precios);
+  const x = i => (i + 0.5) / n * 100;
+  // De 30% (arriba, deja lugar al valor) a 88% (abajo) de la franja.
+  const y = v => max === min ? 59 : 88 - (v - min) / (max - min) * 58;
+  const puntos = conPrecio.map(p => `${x(p.i).toFixed(2)},${y(p.m.precioVenta).toFixed(2)}`).join(' ');
+  return `<div class="precio-titulo"><i></i>Precio de venta (RD$/m³)</div>
+  <div class="precio-mes" role="img" aria-label="Precio de venta por mes, RD$ por metro cúbico">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="${puntos}" fill="none" stroke="var(--rd)" stroke-width="2" vector-effect="non-scaling-stroke"
+        stroke-linejoin="round" stroke-linecap="round"/></svg>
+    ${conPrecio.map(({m, i}) => {
+      const pos = `left:${x(i).toFixed(2)}%; top:${y(m.precioVenta).toFixed(2)}%`;
+      const tipTxt = textoTip(m.nombre, [`Precio de venta ${fmtRD(m.precioVenta)} por m³`,
+        `${fmtRDCorto(m.rd)} ÷ ${fmtM3(m.m3)} m³`]);
+      return `<span class="pt ${sel.size && !sel.has(m.mes) ? 'tenue' : ''}" style="${pos}" data-tip="${esc(tipTxt)}"></span>
+        <span class="pv" style="${pos}">${esc(Math.round(m.precioVenta).toLocaleString('es-DO'))}</span>`;
+    }).join('')}
+  </div>`;
+}
+
+// En el celular las nueve columnas no tienen lugar para "23.5 mil": la
+// tarjeta dice "columnas en miles" y TODAS van en miles (#172, 2026-10-23).
+// Antes solo se quitaba la palabra "mil" de las de 10.000 o mas, y un mes
+// chico seguia en m3: con Zona = PUNTA CANA, "5,652.5" bajo "en miles" se leia
+// como 5,6 millones, y con Oficina, Sep "435" (m3) al lado de Ene "21" (mil).
+function enMiles(v){
+  if (v > 0 && v < 50) return '<0.1';
+  return (v / 1000).toLocaleString('es-DO', {maximumFractionDigits: 1});
+}
+function cifraDeColumna(v){
+  return `<span class="solo-escritorio">${esc(m3(v, true))}</span><span class="solo-movil">${esc(enMiles(v))}</span>`;
+}
+
+function barrasPorMes(porMes){
+  if (!porMes.length) return '<div class="vacio">Sin datos con estos filtros.</div>';
+  // Columnas en HTML y no en SVG: el SVG escala el texto con la tarjeta y en
+  // una tarjeta angosta los numeros quedaban ilegibles.
+  const max = Math.max(...porMes.map(m => m.m3)) || 1;
+  const sel = new Set(filtros.mes || []);
+  return lineaDePrecio(porMes) + `<div class="cols" role="img" aria-label="Metros cúbicos vendidos por mes">${porMes.map(m => {
+    const tipTxt = textoTip(m.nombre, [`${fmtM3(m.m3)} m³`,
+      `Precio de venta ${m.precioVenta === null ? '—' : fmtRD(m.precioVenta)} por m³`,
+      `Promedio de PRECIO ${fmtRD(m.precioPromedio)}`,
+      m.plan ? `Plan ${fmtM3(m.plan)} m³ (${Math.round(m.m3 / m.plan * 100)}%)` : 'Sin plan']);
+    return `<button class="col ${sel.size && !sel.has(m.mes) ? 'tenue' : ''}" data-mes="${m.mes}" data-tip="${esc(tipTxt)}"
+        aria-label="${esc(m.nombre)}: ${esc(fmtM3(m.m3))} m³">
+      <span class="cv">${cifraDeColumna(m.m3)}</span>
+      <span class="cb"><span style="height:${(m.m3 / max * 100).toFixed(2)}%"></span></span>
+      <span class="cm">${MES_CORTO[m.mes - 1]}</span></button>`;
+  }).join('')}</div>`;
+}
+
+function dona(lista, campo, fmt, dim, colores){
+  if (!lista.length || !lista.some(g => g[campo] > 0)) return '<div class="vacio">Sin datos con estos filtros.</div>';
+  const total = lista.reduce((s, g) => s + g[campo], 0);
+  const R = 64, r = 45, c = 70;
+  let ang = -Math.PI / 2;
+  const sel = new Set(filtros[dim] || []);
+  const arcos = lista.map((g, i) => {
+    const frac = g[campo] / total, a2 = ang + frac * Math.PI * 2;
+    const p = (rad, a) => `${(c + rad * Math.cos(a)).toFixed(2)},${(c + rad * Math.sin(a)).toFixed(2)}`;
+    const grande = frac > .5 ? 1 : 0;
+    const d = frac >= .9999
+      ? `M${c},${c - R} A${R},${R} 0 1 1 ${c - .01},${c - R} L${c - .01},${c - r} A${r},${r} 0 1 0 ${c},${c - r} Z`
+      : `M${p(R, ang)} A${R},${R} 0 ${grande} 1 ${p(R, a2)} L${p(r, a2)} A${r},${r} 0 ${grande} 0 ${p(r, ang)} Z`;
+    ang = a2;
+    const atenuado = sel.size && !sel.has(g.nombre);
+    return `<path d="${d}" fill="${colores(g, i)}" stroke="var(--card)" stroke-width="2" opacity="${atenuado ? .3 : 1}"
+      data-tip="${esc(textoTip(g.nombre, [fmt(g[campo]), `${g.pct}% del total`]))}"/>`;
+  }).join('');
+  // El total tiene que caber en el hueco (2026-10-22: "RD$ 2,567 M" se salia
+  // sobre el anillo). La moneda sube a la etiqueta y, si aun es largo, la
+  // letra se achica.
+  let valorTotal = fmt(total, true), etiquetaTotal = 'TOTAL';
+  if (valorTotal.startsWith('RD$ ')){ valorTotal = valorTotal.slice(4); etiquetaTotal = 'TOTAL RD$'; }
+  const tamTotal = Math.min(14, Math.floor(2 * (r - 6) / (valorTotal.length * 0.62)));
+  const leyenda = lista.map((g, i) => `<button class="ley ${sel.has(g.nombre) ? 'sel' : ''}" ${g.otros ? 'disabled' : `data-filtrar="${dim}" data-valor="${esc(g.nombre)}"`}
+      data-tip="${esc(textoTip(g.nombre, [fmt(g[campo]), `${g.pct}% del total`]))}">
+      <span class="sw" style="background:${colores(g, i)}"></span><span class="n">${esc(g.nombre)}</span>
+      <span class="x">${esc(fmt(g[campo]))}</span><span class="p">${g.pct}%</span></button>`).join('');
+  return `<div class="dona-wrap"><svg width="140" height="140" viewBox="0 0 140 140" role="img" aria-label="Reparto">
+      ${arcos}<text x="70" y="66" text-anchor="middle" font-size="10" fill="var(--muted)">${esc(etiquetaTotal)}</text>
+      <text x="70" y="83" text-anchor="middle" font-size="${tamTotal}" font-weight="700" fill="var(--ink)">${esc(valorTotal)}</text></svg>
+    <div class="leyenda">${leyenda}</div></div>`;
+}
+
+const colorEntidad = dim => g => g.otros ? 'var(--otros)' : (colorDe[dim][g.nombre] || 'var(--otros)');
+const m3 = (v, corto) => corto && v >= 10000 ? (v / 1000).toLocaleString('es-DO', {maximumFractionDigits: 1}) + ' mil' : fmtM3(v);
+const m3Txt = v => `${fmtM3(v)} m³`;
+
+function card(titulo, unidad, cuerpo, ancha){
+  return `<section class="card ${ancha ? 'ancha' : ''}"><div class="cab"><h3>${titulo}</h3><span class="unidad">${unidad}</span></div>${cuerpo}</section>`;
+}
+
+function pintar(){
+  const r = dashboard(datos, filtros);
+  const cump = r.cumplimiento;
+  // Sin filtro de mes es el acumulado de los meses con despachos: "Ene–Sep".
+  const corto = m => MESES_COMERCIAL[m - 1].slice(0, 3);
+  // Cada tarjeta dice SUS meses (#180): precio y ventas solo van en los que
+  // tienen precio de plan, y sin filtro son "Jul–Sep" al lado de "Ene–Sep".
+  const nombreMeses = meses => cump.acumulado && meses.length > 1
+    ? `${corto(meses[0])}–${corto(meses[meses.length - 1])}`
+    : meses.map(m => MESES_COMERCIAL[m - 1]).join(', ');
+  const nombresMesesCump = nombreMeses(cump.meses);
+  const nombresMesesPrecio = nombreMeses(r.precioVsPpto.meses);
+  // Color y flecha salen del % REDONDEADO, el mismo que se muestra (#176,
+  // 2026-10-23): con 99,999% se veia "▼ 100%" en amarillo, un numero que dice
+  // que se cumplio con una flecha que dice que no.
+  const colorCump = cump.pct === null ? 'var(--muted)' : Math.round(cump.pct) >= 100 ? 'var(--ok)' : Math.round(cump.pct) >= 80 ? 'var(--warn)' : 'var(--err)';
+  const iconoCump = cump.pct === null ? '' : Math.round(cump.pct) >= 100 ? '▲ ' : '▼ ';
+  // Precio: por debajo del presupuestado ya es perder plata en cada m3, asi
+  // que la banda amarilla es mas angosta que la del volumen.
+  const pvp = r.precioVsPpto;
+  const colorPrecio = pvp.pct === null ? 'var(--muted)' : Math.round(pvp.pct) >= 100 ? 'var(--ok)' : Math.round(pvp.pct) >= 95 ? 'var(--warn)' : 'var(--err)';
+  const iconoPrecio = pvp.pct === null ? '' : Math.round(pvp.pct) >= 100 ? '▲ ' : '▼ ';
+  // Ventas: las mismas bandas que el volumen.
+  const vvp = r.ventasVsPpto;
+  const colorVentas = vvp.pct === null ? 'var(--muted)' : Math.round(vvp.pct) >= 100 ? 'var(--ok)' : Math.round(vvp.pct) >= 80 ? 'var(--warn)' : 'var(--err)';
+  const iconoVentas = vvp.pct === null ? '' : Math.round(vvp.pct) >= 100 ? '▲ ' : '▼ ';
+  const vendedores = plegar(r.rdPorVendedor.filter(g => g.rd > 0).sort((a, b) =>
+    (rankVendedor[a.nombre] ?? 99) - (rankVendedor[b.nombre] ?? 99)), 'rd', 8);
+  const clientes = verTodosClientes ? r.porCliente : r.porCliente.slice(0, 15);
+
+  $('contenido').innerHTML = `
+    ${pintarFiltros()}
+    <div class="kpis">
+      <div class="kpi"><div class="l">m³ vendidos</div><div class="v">${fmtM3(r.m3)}</div><div class="d">${r.filas.toLocaleString('es-DO')} despachos</div></div>
+      <div class="kpi"><div class="l">RD$ vendidos</div><div class="v">${fmtRDCorto(r.rd)}</div><div class="d">${fmtRD(r.rd)}</div></div>
+      <div class="kpi"><div class="l">Total clientes</div><div class="v">${r.clientes.toLocaleString('es-DO')}</div><div class="d">con despachos en la selección</div></div>
+      <div class="kpi"><div class="l">Precio promedio</div><div class="v">${r.precioPromedio === null ? '—' : fmtRD(r.precioPromedio)}</div><div class="d">promedio de PRECIO por despacho</div></div>
+      <div class="kpi ppto"><div class="l">${esc(nombresMesesCump || 'Mes')} vs ppto</div>
+        <div class="v" style="color:${colorCump}">${cump.pct === null ? '—' : iconoCump + Math.round(cump.pct) + '%'}</div>
+        <div class="d">${cump.plan === null ? 'Sin plan cargado para ese mes' : `${fmtM3(cump.m3)} de ${fmtM3(cump.plan)} m³`}</div>
+        ${cump.pct === null ? '' : `<div class="barra-cump"><span style="width:${Math.min(100, cump.pct).toFixed(1)}%; background:${colorCump}"></span></div>`}</div>
+      <div class="kpi ppto"><div class="l">${esc(nombresMesesPrecio || nombresMesesCump || 'Mes')} precio vs ppto</div>
+        <div class="v" style="color:${colorPrecio}">${pvp.pct === null ? '—' : iconoPrecio + Math.round(pvp.pct) + '%'}</div>
+        <div class="d">${pvp.plan === null ? 'Sin precio de plan para ese mes' : pvp.real === null ? 'Sin ventas en ese mes'
+          : `${fmtRD(pvp.real)} de ${fmtRD(pvp.plan)} por m³`}</div>
+        ${pvp.pct === null ? '' : `<div class="barra-cump"><span style="width:${Math.min(100, pvp.pct).toFixed(1)}%; background:${colorPrecio}"></span></div>`}</div>
+      <div class="kpi ppto"><div class="l">${esc(nombresMesesPrecio || nombresMesesCump || 'Mes')} ventas RD$ vs ppto</div>
+        <div class="v" style="color:${colorVentas}">${vvp.pct === null ? '—' : iconoVentas + Math.round(vvp.pct) + '%'}</div>
+        <div class="d">${vvp.plan === null ? 'Sin precio de plan para ese mes' : `${fmtRDCorto(vvp.real)} de ${fmtRDCorto(vvp.plan)}`}</div>
+        ${vvp.pct === null ? '' : `<div class="barra-cump"><span style="width:${Math.min(100, vvp.pct).toFixed(1)}%; background:${colorVentas}"></span></div>`}</div>
+    </div>
+    <div class="grilla">
+      ${card('Volumen de venta por mes', 'm³<span class="solo-movil"> · columnas en miles</span>', barrasPorMes(r.porMes))}
+      ${card('m³ por zona', 'm³', dona(r.porZona, 'm3', m3, 'zona', colorEntidad('zona')))}
+      ${card('m³ por vendedor', 'm³', barrasHorizontales(r.porVendedor, 'm3', m3Txt, 'vendedor', 'var(--m3)',
+          {lineas: g => g.incluye ? ['Incluye:', ...g.incluye.map(i => i.nombre + ' ' + m3Txt(i.m3))] : []}))}
+      ${card('m³ por tipo de vendedor', 'm³', barrasHorizontales(r.porTipoVendedor, 'm3', m3Txt, 'vendedor', 'var(--m3)',
+          {lineas: g => [g.pct + '% del total', 'Incluye:', ...(g.incluye || []).map(i => i.nombre + ' ' + m3Txt(i.m3))]}))}
+      ${card('m³ por rango FC (kg/cm²)', 'm³', dona(r.porRango, 'm3', m3, 'rango_fc', colorEntidad('rango_fc')))}
+      ${card('m³ despachados por planta', 'm³', barrasHorizontales(r.porPlanta, 'm3', m3Txt, 'planta', 'var(--m3)'))}
+      ${card('RD$ vendidos por zona', 'RD$', barrasHorizontales(r.rdPorZona, 'rd', fmtRDCorto, 'zona', 'var(--rd)',
+          {lineas: g => [fmtRD(g.rd)]}))}
+      ${card('% RD$ vendido por vendedor', 'RD$', dona(vendedores, 'rd', fmtRDCorto, 'vendedor', colorEntidad('vendedor')))}
+      ${card(`m³ por cliente${r.porCliente.length > 15 && !verTodosClientes ? ` · los 15 primeros de ${r.porCliente.length}` : ''}`, 'm³',
+          barrasHorizontales(clientes, 'm3', m3Txt, 'cliente', 'var(--m3)', {lineas: g => [fmtRD(g.rd),
+            ...(g.incluye ? ['Incluye:', ...g.incluye.map(i => i.nombre + ' ' + m3Txt(i.m3))] : [])]})
+          + (r.porCliente.length > 15 ? `<button class="ver-mas" id="verClientes">${verTodosClientes ? 'Ver solo los 15 primeros' : `Ver los ${r.porCliente.length} clientes`}</button>` : ''), true)}
+    </div>`;
+}
+
+let rankVendedor = {};
+function prepararColores(){
+  colorDe = {};
+  ['zona', 'rango_fc'].forEach(dim => {
+    colorDe[dim] = {};
+    opciones[dim].forEach((v, i) => { colorDe[dim][v] = COLORES[i % COLORES.length]; });
+  });
+  const anual = dashboard(datos, {}).rdPorVendedor;
+  rankVendedor = {}; colorDe.vendedor = {};
+  anual.forEach((g, i) => { rankVendedor[g.nombre] = i; if (i < 7) colorDe.vendedor[g.nombre] = COLORES[i]; });
+}
+
+async function cargar(anio){
+  $('contenido').innerHTML = '<div class="estado-carga">Cargando los despachos...</div>';
+  try {
+    datos = await apiComercial('/api/comercial/datos' + (anio ? `?anio=${anio}` : ''));
+  } catch (err) {
+    $('contenido').innerHTML = `<div class="estado-carga error">${esc(err.message)}</div>`;
+    return;
+  }
+  const sel = $('anio');
+  sel.innerHTML = (datos.anios.length ? datos.anios : [datos.anio]).map(a => `<option ${a === datos.anio ? 'selected' : ''}>${a}</option>`).join('');
+  sel.hidden = datos.anios.length < 2;
+  if (!datos.filas.length){
+    $('subtitulo').textContent = 'Análisis de venta y volumen';
+    $('contenido').innerHTML = '<div class="estado-carga">Todavía no hay despachos cargados. Subilos en <strong>Subir información</strong>.</div>';
+    return;
+  }
+  opciones = opcionesDeFiltro(datos);
+  const meses = opciones.mes;
+  $('subtitulo').textContent = `Análisis de venta y volumen · ${MESES_COMERCIAL[meses[0] - 1]}${meses.length > 1 ? ' – ' + MESES_COMERCIAL[meses[meses.length - 1] - 1] : ''} ${datos.anio}`;
+  filtros = {}; abierto = null; verTodosClientes = false; busqueda = {};
+  prepararColores();
+  pintar();
+}
+
+$('anio').addEventListener('change', e => cargar(Number(e.target.value)));
+// La pagina de subir avisa por el portal cuando guarda algo.
+window.addEventListener('message', ev => {
+  if (ev.origin === location.origin && ev.data && ev.data.tipo === 'comercial:recargar') cargar(datos?.anio);
+});
+cargar();
+</script>
+</body>
+</html>

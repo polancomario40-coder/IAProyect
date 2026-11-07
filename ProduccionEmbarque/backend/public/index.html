@@ -1,0 +1,3714 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SWS Textiles - Sistema Integral de Producción y Embarque</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --surface: #151d30;
+      --surface-card: #1c2640;
+      --surface-hover: #243152;
+      --border: #283553;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #0284c7;
+      --primary-hover: #0369a1;
+      --accent: #38bdf8;
+      --pending: #f59e0b;
+      --cut: #8b5cf6;
+      --sew: #ec4899;
+      --inspect: #06b6d4;
+      --complete: #10b981;
+      --shipped: #64748b;
+      --danger: #ef4444;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Navigation */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.8rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
+    }
+
+    .brand-text h1 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-text p {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 0.4rem;
+      background: rgba(11, 15, 25, 0.6);
+      padding: 0.25rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
+    .nav-tab {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.45rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s;
+    }
+
+    .nav-tab:hover {
+      color: var(--text);
+    }
+
+    .nav-tab.active {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+    }
+
+    .db-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      color: #34d399;
+      padding: 0.35rem 0.8rem;
+      border-radius: 9999px;
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
+
+    .db-dot {
+      width: 8px;
+      height: 8px;
+      background: #34d399;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #34d399;
+    }
+
+    main {
+      flex: 1;
+      padding: 1.5rem 2rem;
+      max-width: 1600px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* KPI Summary Row */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.8rem;
+    }
+
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.1rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--card-color, var(--primary));
+    }
+
+    .kpi-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.3rem;
+    }
+
+    .kpi-value {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #f8fafc;
+    }
+
+    .kpi-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
+    }
+
+    /* Kanban Board */
+    .kanban-view {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 1rem;
+      align-items: flex-start;
+      overflow-x: auto;
+      padding-bottom: 1.5rem;
+    }
+
+    .kanban-col {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      min-width: 250px;
+      display: flex;
+      flex-direction: column;
+      max-height: calc(100vh - 270px);
+    }
+
+    .kanban-col-header {
+      padding: 0.9rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.4);
+      border-top-left-radius: 12px;
+      border-top-right-radius: 12px;
+    }
+
+    .kanban-col-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--col-color, var(--text));
+    }
+
+    .kanban-col-badge {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 0.2rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    .kanban-cards {
+      padding: 0.8rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+      flex: 1;
+      min-height: 150px;
+    }
+
+    .kanban-cards.drag-over {
+      background: rgba(2, 132, 199, 0.1);
+      border: 2px dashed var(--primary);
+      border-radius: 8px;
+    }
+
+    /* Ticket Card */
+    .ticket-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.9rem;
+      cursor: grab;
+      transition: all 0.2s;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+
+    .ticket-card:active {
+      cursor: grabbing;
+    }
+
+    .ticket-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px -2px rgba(2, 132, 199, 0.25);
+    }
+
+    .ticket-card.dragging {
+      opacity: 0.4;
+      transform: scale(0.95);
+    }
+
+    .ticket-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.4rem;
+    }
+
+    .ticket-number {
+      font-family: monospace;
+      font-weight: 700;
+      color: var(--accent);
+      font-size: 0.92rem;
+    }
+
+    .ticket-customer {
+      background: rgba(255, 255, 255, 0.08);
+      color: #e2e8f0;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .ticket-style {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 0.5rem;
+      line-height: 1.3;
+    }
+
+    .ticket-stats {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(11, 15, 25, 0.4);
+      padding: 0.35rem 0.55rem;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      margin-bottom: 0.7rem;
+    }
+
+    .ticket-units {
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    .ticket-actions {
+      display: flex;
+      gap: 0.3rem;
+      justify-content: space-between;
+    }
+
+    .btn-step {
+      background: var(--surface-hover);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 0.3rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.73rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.15s;
+      flex: 1;
+      text-align: center;
+    }
+
+    .btn-step:hover {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .btn-step.btn-view {
+      background: transparent;
+      border-color: rgba(56, 189, 248, 0.3);
+      color: var(--accent);
+      flex: 0 0 auto;
+    }
+
+    /* Table View */
+    .table-view {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .table-controls {
+      padding: 1.2rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      background: rgba(11, 15, 25, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.8rem;
+      width: 300px;
+    }
+
+    .search-box input {
+      background: transparent;
+      border: none;
+      color: white;
+      outline: none;
+      margin-left: 0.5rem;
+      width: 100%;
+      font-size: 0.88rem;
+    }
+
+    .filter-select {
+      background: rgba(11, 15, 25, 0.6);
+      border: 1px solid var(--border);
+      color: white;
+      padding: 0.5rem 0.8rem;
+      border-radius: 8px;
+      outline: none;
+      font-size: 0.88rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      background: rgba(11, 15, 25, 0.4);
+      padding: 0.85rem 1.2rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+
+    td {
+      padding: 0.85rem 1.2rem;
+      font-size: 0.85rem;
+      border-bottom: 1px solid var(--border);
+      color: #cbd5e1;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .select-status {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      color: white;
+      padding: 0.35rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* Labels & Packing Shared */
+    .card-full {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.6rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .labels-toolbar {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .form-group label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .form-input {
+      background: rgba(11, 15, 25, 0.6);
+      border: 1px solid var(--border);
+      color: white;
+      padding: 0.55rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      outline: none;
+      min-width: 200px;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-success {
+      background: var(--complete);
+      color: white;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+    }
+
+    .btn-success:hover {
+      background: #059669;
+    }
+
+    /* Drag & Drop Zone and Batch Ingest */
+    .dropzone-container {
+      border: 2px dashed rgba(56, 189, 248, 0.45);
+      background: rgba(15, 23, 42, 0.55);
+      border-radius: 16px;
+      padding: 3rem 2rem;
+      text-align: center;
+      transition: all 0.25s ease;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .dropzone-container:hover, .dropzone-container.dragover {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.08);
+      box-shadow: 0 0 30px rgba(56, 189, 248, 0.18);
+      transform: translateY(-2px);
+    }
+
+    .dropzone-icon {
+      font-size: 3.6rem;
+      margin-bottom: 0.8rem;
+      display: inline-block;
+      transition: transform 0.2s ease;
+    }
+
+    .dropzone-container:hover .dropzone-icon {
+      transform: scale(1.1);
+    }
+
+    .dropzone-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 0.5rem;
+    }
+
+    .dropzone-desc {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto 1.6rem auto;
+      line-height: 1.5;
+    }
+
+    .dropzone-buttons {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    /* Batch Processing Panel */
+    .batch-status-panel {
+      margin-top: 1.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: none;
+    }
+
+    .batch-header {
+      padding: 1.2rem 1.5rem;
+      background: rgba(15, 23, 42, 0.6);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .batch-header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 1rem;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #0284c7, #38bdf8);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .batch-file-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 1.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 0.88rem;
+      gap: 1rem;
+      transition: background 0.15s;
+    }
+
+    .batch-file-row:last-child {
+      border-bottom: none;
+    }
+
+    .batch-file-row:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .file-badge-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .status-pending { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .status-processing { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+    .status-success { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .status-error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    /* Labels Preview Grid */
+    .labels-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.2rem;
+      margin-top: 1.5rem;
+    }
+
+    .label-card {
+      background: #ffffff;
+      color: #000000;
+      border: 2px solid #000000;
+      border-radius: 6px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 200px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .label-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #000000;
+      padding-bottom: 0.3rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .label-company {
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+    }
+
+    .label-bundle-num {
+      font-size: 0.78rem;
+      font-weight: 700;
+      background: #000000;
+      color: #ffffff;
+      padding: 0.15rem 0.4rem;
+      border-radius: 3px;
+    }
+
+    .label-meta-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 0.4rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .label-field-title {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #333333;
+    }
+
+    .label-field-val {
+      font-size: 0.92rem;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .label-size-box {
+      border: 2px solid #000000;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #f8fafc;
+      padding: 0.2rem;
+    }
+
+    .label-size-title {
+      font-size: 0.6rem;
+      font-weight: 800;
+    }
+
+    .label-size-val {
+      font-size: 1.7rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .label-barcode-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin-top: 0.3rem;
+      border-top: 1px dashed #000000;
+      padding-top: 0.3rem;
+    }
+
+    .label-barcode-container svg {
+      width: 100%;
+      height: 44px;
+    }
+
+    /* ========================================================
+       FASE 4: ESTILOS DE ESCÁNER & EMBARQUE
+       ======================================================== */
+    .packing-view {
+      display: none;
+    }
+
+    .scanner-hero {
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      border: 2px solid var(--accent);
+      border-radius: 14px;
+      padding: 1.5rem 2rem;
+      margin-bottom: 1.5rem;
+      position: relative;
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.15);
+    }
+
+    .scanner-input-container {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin-top: 1rem;
+    }
+
+    .scanner-input {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.6);
+      border: 2px solid #38bdf8;
+      border-radius: 10px;
+      padding: 1rem 1.2rem;
+      font-size: 1.4rem;
+      color: #38bdf8;
+      font-family: monospace;
+      letter-spacing: 0.05em;
+      outline: none;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+      transition: all 0.2s;
+    }
+
+    .scanner-input:focus {
+      border-color: #60a5fa;
+      box-shadow: 0 0 25px rgba(96, 165, 250, 0.5);
+    }
+
+    .box-counter-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(2, 132, 199, 0.2);
+      border: 1px solid var(--primary);
+      padding: 0.8rem 1.2rem;
+      border-radius: 10px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    .scanner-feedback {
+      margin-top: 1rem;
+      padding: 0.8rem 1.2rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      display: none;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    .scanner-feedback.success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10b981;
+      color: #34d399;
+      display: flex;
+    }
+
+    .scanner-feedback.error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid #ef4444;
+      color: #f87171;
+      display: flex;
+    }
+
+    .packing-layout {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 1.5rem;
+    }
+
+    .summary-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.4rem;
+      height: fit-content;
+    }
+
+    .summary-metric {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+
+    .summary-metric:last-child {
+      border-bottom: none;
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(5px);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: 90%;
+      max-width: 850px;
+      max-height: 88vh;
+      overflow-y: auto;
+      padding: 2rem;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .close-modal {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.6rem;
+      cursor: pointer;
+    }
+
+    /* Timeline */
+    .timeline {
+      position: relative;
+      padding-left: 2rem;
+      margin: 1.5rem 0;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--border);
+    }
+
+    .timeline-item {
+      position: relative;
+      margin-bottom: 1.2rem;
+    }
+
+    .timeline-dot {
+      position: absolute;
+      left: -2rem;
+      top: 4px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--primary);
+      border: 3px solid var(--surface);
+    }
+
+    .timeline-content {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      padding: 0.7rem 1rem;
+      border-radius: 8px;
+    }
+
+    /* Packing List Modal & High-Contrast Typography */
+    #packingModalBackdrop .modal-box {
+      background: #ffffff !important;
+      color: #000000 !important;
+      border: 3px solid #0f172a;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);
+    }
+
+    #packingListPrintable,
+    #packingListPrintable * {
+      color: #000000 !important;
+    }
+
+    #packingListPrintable table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      border: 2px solid #000000 !important;
+    }
+
+    #packingListPrintable th {
+      background: #e2e8f0 !important;
+      color: #000000 !important;
+      font-size: 0.95rem !important;
+      font-weight: 800 !important;
+      padding: 0.75rem 0.8rem !important;
+      border: 1.5px solid #000000 !important;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    #packingListPrintable td {
+      color: #000000 !important;
+      font-size: 1.05rem !important;
+      font-weight: 700 !important;
+      padding: 0.75rem 0.8rem !important;
+      border: 1.5px solid #000000 !important;
+      background: #ffffff !important;
+    }
+
+    #packingListPrintable tbody tr:nth-child(even) td {
+      background: #f8fafc !important;
+    }
+
+    #packingListPrintable tfoot td {
+      background: #cbd5e1 !important;
+      color: #000000 !important;
+      font-size: 1.15rem !important;
+      font-weight: 900 !important;
+      padding: 0.85rem 1rem !important;
+      border: 2px solid #000000 !important;
+    }
+
+    /* Print Styles */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+
+      #printContainer, #printContainer *,
+      #packingListPrintable, #packingListPrintable * {
+        visibility: visible;
+      }
+
+      #packingListPrintable {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        background: white !important;
+        color: black !important;
+        padding: 20px;
+        display: block !important;
+      }
+
+      #printContainer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        display: block !important;
+      }
+
+      .label-card {
+        page-break-after: always;
+        break-after: page;
+        margin: 0 0 10mm 0;
+        border: 2px solid #000000 !important;
+        box-shadow: none !important;
+        width: 100mm;
+        height: 50mm;
+      }
+
+      header, .nav-tabs, .kpi-row, .labels-toolbar, .scanner-hero, .summary-box {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">✂️</div>
+      <div class="brand-text">
+        <h1>SWS Textiles - Producción & Embarque</h1>
+        <p>Zona Franca Textil • Flujo de Ingesta, WIP, Etiquetas y Packing List</p>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="switchView('kanban')">
+        📋 Tablero Kanban
+      </button>
+      <button class="nav-tab" onclick="switchView('table')">
+        📊 Vista Tabla
+      </button>
+      <button class="nav-tab" onclick="switchView('labels')">
+        🏷️ Etiquetas
+      </button>
+      <button class="nav-tab" onclick="switchView('packing')">
+        📦 Escáner & Embarque
+      </button>
+      <button class="nav-tab" onclick="switchView('trimmings')">
+        🧵 Rebaja de Trimmings
+      </button>
+      <button class="nav-tab" onclick="switchView('ingest')">
+        📥 Ingesta Excel
+      </button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0.8rem;">
+      <div class="db-status">
+        <div class="db-dot"></div>
+        SQL Server: sws
+      </div>
+      <div id="userProfileBadge" style="display: none; align-items: center; gap: 0.6rem; background: rgba(255,255,255,0.06); padding: 0.35rem 0.8rem; border-radius: 8px; border: 1px solid var(--border);">
+        <span style="font-size: 0.85rem;">👤 <strong id="headerUsername" style="color: #38bdf8;">-</strong></span>
+        <span id="headerCompanyName" style="font-size: 0.75rem; color: var(--text-muted); border-left: 1px solid var(--border); padding-left: 0.6rem;">-</span>
+        <button onclick="logoutSSO()" title="Cerrar sesión e ir al Login" style="background: transparent; border: none; color: #ef4444; font-size: 0.85rem; font-weight: 700; cursor: pointer; margin-left: 0.3rem;">🚪 Salir</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- KPI Summary Row -->
+    <div class="kpi-row" id="kpiContainer">
+      <div class="kpi-card" style="--card-color: var(--accent);">
+        <div class="kpi-title">Total en Proceso</div>
+        <div class="kpi-value" id="kpiTotalOrders">0</div>
+        <div class="kpi-subtitle" id="kpiTotalUnits">0 prendas totales</div>
+      </div>
+      <div class="kpi-card" style="--card-color: var(--pending);">
+        <div class="kpi-title">Pendiente de Corte</div>
+        <div class="kpi-value" id="kpiPending">0</div>
+        <div class="kpi-subtitle" id="kpiPendingUnits">0 u.</div>
+      </div>
+      <div class="kpi-card" style="--card-color: var(--cut);">
+        <div class="kpi-title">Cortado</div>
+        <div class="kpi-value" id="kpiCut">0</div>
+        <div class="kpi-subtitle" id="kpiCutUnits">0 u.</div>
+      </div>
+      <div class="kpi-card" style="--card-color: var(--sew);">
+        <div class="kpi-title">En Costura</div>
+        <div class="kpi-value" id="kpiSew">0</div>
+        <div class="kpi-subtitle" id="kpiSewUnits">0 u.</div>
+      </div>
+      <div class="kpi-card" style="--card-color: var(--inspect);">
+        <div class="kpi-title">Inspección / Empaque</div>
+        <div class="kpi-value" id="kpiInspect">0</div>
+        <div class="kpi-subtitle" id="kpiInspectUnits">0 u.</div>
+      </div>
+      <div class="kpi-card" style="--card-color: var(--complete);">
+        <div class="kpi-title">Completado</div>
+        <div class="kpi-value" id="kpiComplete">0</div>
+        <div class="kpi-subtitle" id="kpiCompleteUnits">0 u.</div>
+      </div>
+    </div>
+
+    <!-- 1. VISTA KANBAN -->
+    <div id="viewKanban" class="kanban-view">
+      <div class="kanban-col" style="--col-color: var(--pending);" data-status="PENDIENTE_CORTE">
+        <div class="kanban-col-header">
+          <div class="kanban-col-title">🟡 Pendiente Corte</div>
+          <span class="kanban-col-badge" id="badge-PENDIENTE_CORTE">0</span>
+        </div>
+        <div class="kanban-cards" id="col-PENDIENTE_CORTE"></div>
+      </div>
+
+      <div class="kanban-col" style="--col-color: var(--cut);" data-status="CORTADO">
+        <div class="kanban-col-header">
+          <div class="kanban-col-title">✂️ Cortado</div>
+          <span class="kanban-col-badge" id="badge-CORTADO">0</span>
+        </div>
+        <div class="kanban-cards" id="col-CORTADO"></div>
+      </div>
+
+      <div class="kanban-col" style="--col-color: var(--sew);" data-status="COSIENDO">
+        <div class="kanban-col-header">
+          <div class="kanban-col-title">🧵 En Costura</div>
+          <span class="kanban-col-badge" id="badge-COSIENDO">0</span>
+        </div>
+        <div class="kanban-cards" id="col-COSIENDO"></div>
+      </div>
+
+      <div class="kanban-col" style="--col-color: var(--inspect);" data-status="INSPECCION">
+        <div class="kanban-col-header">
+          <div class="kanban-col-title">🔍 Inspección</div>
+          <span class="kanban-col-badge" id="badge-INSPECCION">0</span>
+        </div>
+        <div class="kanban-cards" id="col-INSPECCION"></div>
+      </div>
+
+      <div class="kanban-col" style="--col-color: var(--complete);" data-status="COMPLETADO">
+        <div class="kanban-col-header">
+          <div class="kanban-col-title">✅ Completado</div>
+          <span class="kanban-col-badge" id="badge-COMPLETADO">0</span>
+        </div>
+        <div class="kanban-cards" id="col-COMPLETADO"></div>
+      </div>
+
+      <div class="kanban-col" style="--col-color: var(--shipped);" data-status="EMBARCADO">
+        <div class="kanban-col-header">
+          <div class="kanban-col-title">📦 Embarcado</div>
+          <span class="kanban-col-badge" id="badge-EMBARCADO">0</span>
+        </div>
+        <div class="kanban-cards" id="col-EMBARCADO"></div>
+      </div>
+    </div>
+
+    <!-- 2. VISTA TABLA -->
+    <div id="viewTable" class="table-view">
+      <div class="table-controls">
+        <div class="search-box">
+          🔍 <input type="text" id="searchInput" placeholder="Buscar por Cut #, Estilo o Cliente..." oninput="applyFilters()">
+        </div>
+        <div style="display: flex; gap: 0.8rem; align-items: center;">
+          <select class="filter-select" id="clientFilter" onchange="applyFilters()">
+            <option value="">Todos los Clientes</option>
+          </select>
+          <select class="filter-select" id="statusFilter" onchange="applyFilters()">
+            <option value="">Todos los Estados</option>
+            <option value="PENDIENTE_CORTE">Pendiente Corte</option>
+            <option value="CORTADO">Cortado</option>
+            <option value="COSIENDO">En Costura</option>
+            <option value="INSPECCION">Inspección</option>
+            <option value="COMPLETADO">Completado</option>
+            <option value="EMBARCADO">Embarcado</option>
+          </select>
+          <button class="btn-step" style="padding: 0.5rem 1rem;" onclick="loadWIPData()">🔄 Recargar</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Cut Number</th>
+            <th>Estilo</th>
+            <th>Cliente</th>
+            <th>Unidades</th>
+            <th>Estatus Actual</th>
+            <th>Cambiar Estatus</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <!-- 3. VISTA ETIQUETAS (FASE 3) -->
+    <div id="viewLabels" class="labels-view" style="display: none;">
+      <div class="card-full">
+        <h2 style="color: #38bdf8; margin-bottom: 0.4rem;">🏷️ Generación de Etiquetas para Empaque</h2>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+          Selecciona una orden de corte para calcular los paquetes (bundles), generar sus códigos de barras Code 128 e imprimirlos.
+        </p>
+
+        <div class="labels-toolbar">
+          <div class="form-group">
+            <label>Orden de Corte (Cut Ticket)</label>
+            <select class="form-input" id="labelCutSelect" onchange="onSelectCutTicketForLabels()">
+              <option value="">Selecciona un Cut Ticket...</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Prendas por Bulto / Paquete</label>
+            <select class="form-input" id="labelBundleSize">
+              <option value="0">Por Talla Completa (1 Bulto por Talla)</option>
+              <option value="6">6 piezas por bulto</option>
+              <option value="12">12 piezas por bulto</option>
+              <option value="24">24 piezas por bulto</option>
+            </select>
+          </div>
+
+          <button class="btn-primary" onclick="generateLabelsForTicket()">
+            ⚡ Generar Etiquetas
+          </button>
+
+          <button class="btn-success" id="btnPrintLabels" onclick="window.print()" style="display: none;">
+            🖨️ Imprimir Todas las Etiquetas
+          </button>
+        </div>
+      </div>
+
+      <div id="labelTicketMeta" style="display: none; margin-bottom: 1rem; background: var(--surface); padding: 1rem; border-radius: 10px; border: 1px solid var(--border);">
+        <span style="color: var(--accent); font-weight: 700;" id="lblTicketName"></span> • 
+        <span id="lblTicketStyle" style="color: #f1f5f9;"></span> • 
+        <span id="lblTicketCustomer" class="ticket-customer"></span> • 
+        <strong id="lblTicketUnits" style="color: #38bdf8;"></strong>
+      </div>
+
+      <div id="printContainer" class="labels-grid"></div>
+    </div>
+
+    <!-- 4. VISTA ESCÁNER & EMBARQUE (FASE 4) -->
+    <div id="viewPacking" class="packing-view">
+      <!-- Barra de Configuración de Contenedor -->
+      <div class="card-full" style="padding: 1.2rem 1.6rem; margin-bottom: 1.2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+            <div class="form-group">
+              <label>Contenedor Activo</label>
+              <select class="form-input" id="containerSelect" onchange="onSelectContainer()">
+                <option value="">Selecciona un contenedor...</option>
+              </select>
+            </div>
+
+            <button class="btn-step" style="padding: 0.55rem 0.9rem;" onclick="promptNewContainer()">
+              ➕ Nuevo Contenedor
+            </button>
+          </div>
+
+          <div style="display: flex; gap: 0.8rem;">
+            <button class="btn-primary" onclick="openPackingListModal()">
+              📄 Ver Packing List
+            </button>
+            <button class="btn-success" onclick="dispatchCurrentContainer()">
+              🚢 Despachar Contenedor
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Consola de Escaneo de Alta Velocidad -->
+      <div class="scanner-hero">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h2 style="color: #38bdf8; font-size: 1.3rem;">⚡ Lector Óptico de Código de Barras</h2>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.2rem;">
+              Optimizado para lecturas en ráfaga continua sin bloqueo ni pérdida de datos.
+            </p>
+          </div>
+          <div class="box-counter-badge" style="display: flex; align-items: center; gap: 0.5rem;">
+            📦 Caja:
+            <button class="btn-step" style="padding: 0.35rem 0.65rem; font-size: 0.95rem;" onclick="prevBox()" title="Caja anterior">◀</button>
+            <input type="number" id="currentBoxInput" min="1" value="1" style="width: 58px; text-align: center; font-size: 1.1rem; font-weight: 800; background: rgba(0,0,0,0.6); color: #38bdf8; border: 1px solid var(--accent); border-radius: 6px; padding: 0.25rem 0.1rem;" onchange="setBoxNum(this.value)">
+            <button class="btn-step" style="padding: 0.35rem 0.65rem; font-size: 0.95rem;" onclick="nextBox()" title="Siguiente caja">▶</button>
+            <button class="btn-step" style="background: rgba(255,255,255,0.12); color: white; padding: 0.35rem 0.7rem;" onclick="setBoxNum(1)" title="Regresar inmediatamente a Caja 1">
+              Volver a Caja 1
+            </button>
+          </div>
+        </div>
+
+        <div class="scanner-input-container">
+          <input 
+            type="text" 
+            id="barcodeScannerInput" 
+            class="scanner-input" 
+            placeholder="Escanea aquí con la pistola de código de barras (ej: PKG-1-001)..." 
+            autocomplete="off"
+            autofocus
+          >
+          <button class="btn-primary" style="padding: 1rem 1.8rem; font-size: 1rem;" onclick="handleManualScan()">
+            Aceptar
+          </button>
+        </div>
+
+        <!-- Feedback en vivo (Verde éxito / Rojo error) -->
+        <div id="scanFeedback" class="scanner-feedback">
+          <span id="feedbackIcon" style="font-size: 1.4rem;"></span>
+          <span id="feedbackMsg">Listo para escanear.</span>
+        </div>
+      </div>
+
+      <!-- Contenido en vivo del Contenedor -->
+      <div class="packing-layout">
+        <div class="table-container" style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;">
+          <div style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.8rem;">
+            <div>
+              <h3 style="font-size: 1.05rem; color: #f1f5f9; display: flex; align-items: center; gap: 0.5rem;">
+                📦 Bultos en Contenedor: <span id="tableContainerTitle" style="color: #38bdf8; font-family: monospace;">-</span>
+              </h3>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;">
+                Visualiza los bultos registrados en este contenedor. Puedes filtrar por caja individual o ver todas.
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.8rem; align-items: center;">
+              <label style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">Filtrar Caja:</label>
+              <select id="boxFilterSelect" onchange="renderFilteredScanTable()" class="filter-select" style="padding: 0.35rem 0.75rem; font-size: 0.85rem; font-weight: 700; color: #38bdf8; border: 1px solid var(--accent);">
+                <option value="ALL">📦 Todas las Cajas</option>
+              </select>
+              <span id="scannedCountBadge" style="background: #0284c7; color: white; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 700;">0 bultos</span>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Código Escaneado</th>
+                <th>Caja #</th>
+                <th>Corte (MTO)</th>
+                <th>Estilo</th>
+                <th>Talla</th>
+                <th>Prendas</th>
+                <th>Hora</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="packingScanTableBody">
+              <tr>
+                <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                  Aún no has escaneado ningún bulto para este contenedor.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Resumen Lateral del Contenedor -->
+        <div class="summary-box">
+          <h3 style="font-size: 1.05rem; color: #38bdf8; margin-bottom: 1rem;">📊 Resumen de Carga</h3>
+          <div class="summary-metric">
+            <span style="color: var(--text-muted);">Contenedor:</span>
+            <strong id="sbContainer">-</strong>
+          </div>
+          <div class="summary-metric">
+            <span style="color: var(--text-muted);">Cliente:</span>
+            <strong id="sbCustomer">-</strong>
+          </div>
+          <div class="summary-metric">
+            <span style="color: var(--text-muted);">Total Cajas:</span>
+            <strong id="sbBoxes" style="color: #38bdf8;">0</strong>
+          </div>
+          <div class="summary-metric">
+            <span style="color: var(--text-muted);">Total Bultos:</span>
+            <strong id="sbBundles">0</strong>
+          </div>
+          <div class="summary-metric">
+            <span style="color: var(--text-muted);">Total Prendas:</span>
+            <strong id="sbUnits" style="font-size: 1.15rem; color: #34d399;">0 pcs</strong>
+          </div>
+          <div class="summary-metric">
+            <span style="color: var(--text-muted);">Estado:</span>
+            <strong id="sbStatus" style="color: #fbbf24;">ABIERTO</strong>
+          </div>
+          <div class="summary-metric" id="sbTrimmingRow" style="border-top: 1px dashed var(--border); margin-top: 0.5rem; padding-top: 0.6rem;">
+            <span style="color: var(--text-muted);">Trimmings ERP:</span>
+            <span id="sbTrimmingBadge" style="font-size: 0.78rem; font-weight: 700; color: #38bdf8;">Verificando...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. VISTA INGESTA (DRAG & DROP Y SELECCIÓN LOCAL) -->
+    <div id="viewIngest" class="ingest-view" style="display: none;">
+      <div class="card-full">
+        <!-- Interactive Dropzone Area -->
+        <div class="dropzone-container" id="dropzoneBox" onclick="document.getElementById('filesInput').click()">
+          <div class="dropzone-icon">📥</div>
+          <div class="dropzone-title">Carga de Órdenes de Corte (Cut Tickets)</div>
+          <p class="dropzone-desc">
+            Arrastra y suelta aquí tus archivos Excel de corte (<code>MTO-*.xlsx</code>) o carpetas completas de tu equipo para ingresarlos automáticamente al sistema de producción.
+          </p>
+
+          <div class="dropzone-buttons" onclick="event.stopPropagation()">
+            <!-- Botón 1: Selección de Carpeta Local Completa -->
+            <button class="btn-primary" onclick="document.getElementById('folderInput').click()">
+              📁 Seleccionar Carpeta Local...
+            </button>
+            <input type="file" id="folderInput" webkitdirectory directory multiple style="display: none;" onchange="handleFileSelection(this.files)">
+
+            <!-- Botón 2: Selección de Archivos Múltiples -->
+            <button class="btn-step" style="padding: 0.6rem 1.2rem; background: var(--surface-card); color: white; border: 1px solid var(--border);" onclick="document.getElementById('filesInput').click()">
+              📑 Seleccionar Archivos Excel...
+            </button>
+            <input type="file" id="filesInput" accept=".xlsx" multiple style="display: none;" onchange="handleFileSelection(this.files)">
+          </div>
+        </div>
+
+        <!-- Panel de Estado y Progreso de la Cola -->
+        <div class="batch-status-panel" id="batchStatusPanel" style="display: none; margin-top: 1.5rem;">
+          <div class="batch-header">
+            <div class="batch-header-top">
+              <div>
+                <strong id="batchSummaryTitle" style="color: #38bdf8; font-size: 1.05rem;">Procesando archivos...</strong>
+                <div id="batchStatsText" style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.2rem;">0 de 0 procesados</div>
+              </div>
+              <div style="display: flex; gap: 0.6rem;">
+                <button id="btnGoKanban" class="btn-success" style="display: none; padding: 0.45rem 1rem; font-size: 0.85rem;" onclick="switchView('kanban')">
+                  📋 Ver en Tablero Kanban
+                </button>
+                <button class="btn-step" style="padding: 0.45rem 0.8rem; font-size: 0.85rem;" onclick="resetBatchUpload()">
+                  🔄 Nueva Carga
+                </button>
+              </div>
+            </div>
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" id="progressBarFill"></div>
+            </div>
+          </div>
+
+          <div id="batchFileList" style="max-height: 380px; overflow-y: auto;">
+            <!-- Filas dinámicas de archivos procesados -->
+          </div>
+        </div>
+
+        <!-- Historial en vivo de órdenes en Base de Datos (Siempre Visible) -->
+        <div class="card-full" style="margin-top: 1.8rem; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; flex-wrap: wrap; gap: 0.8rem;">
+            <div>
+              <h3 style="color: #38bdf8; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                📋 Órdenes de Corte en Base de Datos (<span id="ingestDbBadge" style="color: #34d399;">sws</span>)
+              </h3>
+              <p style="color: var(--text-muted); font-size: 0.82rem; margin-top: 0.2rem;">
+                Visualiza inmediatamente los Cut Tickets guardados en la empresa seleccionada.
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.6rem;">
+              <button class="btn-step" style="padding: 0.4rem 0.9rem; font-size: 0.82rem;" onclick="loadIngestTable()">🔄 Actualizar Lista</button>
+              <button class="btn-step" style="padding: 0.4rem 0.9rem; font-size: 0.82rem; background: rgba(56,189,248,0.15); color: #38bdf8; border-color: rgba(56,189,248,0.4);" onclick="switchView('kanban')">📋 Ir a Tablero Kanban</button>
+            </div>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cut #</th>
+                  <th>Order # (Cintas)</th>
+                  <th>Estilo</th>
+                  <th>Cliente</th>
+                  <th>Prendas</th>
+                  <th>Estatus</th>
+                  <th>Archivo Origen</th>
+                  <th>Fecha de Carga</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody id="ingestTableBody">
+                <tr>
+                  <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">
+                    Cargando órdenes de corte...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. VISTA REBAJA DE TRIMMINGS Y ACCESORIOS (BOM MULTINIVEL ERP SADE) -->
+    <div id="viewTrimmings" class="trimmings-view" style="display: none;">
+      <!-- KPI Row de Trimmings -->
+      <div class="kpi-row" style="margin-bottom: 1.5rem;">
+        <div class="kpi-card" style="--card-color: #38bdf8;">
+          <div class="kpi-title">Total Cortes en Control</div>
+          <div class="kpi-value" id="kpiTrimTotal">0</div>
+          <div class="kpi-subtitle">Órdenes analizadas</div>
+        </div>
+        <div class="kpi-card" style="--card-color: #f59e0b;">
+          <div class="kpi-title">Pendientes de Rebaja</div>
+          <div class="kpi-value" id="kpiTrimPending" style="color: #fbbf24;">0</div>
+          <div class="kpi-subtitle">Sin salida en ERP SADE</div>
+        </div>
+        <div class="kpi-card" style="--card-color: #10b981;">
+          <div class="kpi-title">Rebajados en ERP SADE</div>
+          <div class="kpi-value" id="kpiTrimCompleted" style="color: #34d399;">0</div>
+          <div class="kpi-subtitle">Con movimiento ProMov</div>
+        </div>
+        <div class="kpi-card" style="--card-color: #a78bfa;">
+          <div class="kpi-title">Prendas Totales</div>
+          <div class="kpi-value" id="kpiTrimUnits">0</div>
+          <div class="kpi-subtitle">Volumen consolidado</div>
+        </div>
+      </div>
+
+      <div class="card-full">
+        <!-- Barra de Controles y Filtros -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+          <div>
+            <h2 style="color: #38bdf8; font-size: 1.3rem; display: flex; align-items: center; gap: 0.6rem;">
+              🧵 Central de Rebaja de Trimmings / Accesorios
+            </h2>
+            <p style="color: var(--text-muted); font-size: 0.88rem; margin-top: 0.3rem;">
+              Explosión recursiva multinivel de materiales (BOM) y generación automática de salidas de almacén en ERP SADE (<code>ProMov</code> / <code>ProMovDet</code>).
+            </p>
+          </div>
+
+          <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+            <button class="btn-step" style="padding: 0.6rem 1.1rem; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); font-weight: 600;" onclick="openSimulateModal()">
+              🧪 Simular BOM por Estilo...
+            </button>
+            <button class="btn-step" style="padding: 0.6rem 1.1rem; font-weight: 600;" onclick="loadTrimmingsTable()">
+              🔄 Recargar Lista
+            </button>
+          </div>
+        </div>
+
+        <!-- Filtros de búsqueda avanzados -->
+        <div class="table-controls" style="background: rgba(11, 15, 25, 0.5); padding: 1rem; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 1.5rem;">
+          <div class="search-box" style="flex: 1; min-width: 260px;">
+            🔍 <input type="text" id="trimSearchInput" placeholder="Buscar por Cut #, Order #, Estilo o Cliente..." oninput="filterTrimmingsTable()">
+          </div>
+          <div style="display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap;">
+            <div class="form-group" style="margin: 0;">
+              <select class="filter-select" id="trimStatusFilter" onchange="filterTrimmingsTable()">
+                <option value="">Todos los Estados de Trimmings</option>
+                <option value="PENDIENTE" selected>⚠️ Pendientes de Rebaja</option>
+                <option value="REBAJADO">✅ Rebajados en ERP SADE</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <select class="filter-select" id="trimCutWipFilter" onchange="filterTrimmingsTable()">
+                <option value="">Todos los Estatus WIP</option>
+                <option value="PENDIENTE_CORTE">Pendiente Corte</option>
+                <option value="CORTADO">Cortado</option>
+                <option value="COSIENDO">En Costura</option>
+                <option value="INSPECCION">Inspección</option>
+                <option value="COMPLETADO">Completado</option>
+                <option value="EMBARCADO">Embarcado</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla Principal de Cortes & Trimmings -->
+        <div style="overflow-x: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Corte (Cut #)</th>
+                <th>Order #</th>
+                <th>Estilo</th>
+                <th>Cliente</th>
+                <th>Prendas</th>
+                <th>Estatus Corte</th>
+                <th>Estatus Trimmings ERP</th>
+                <th>Movimiento SADE</th>
+                <th style="text-align: right;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="trimTableBody">
+              <tr>
+                <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">
+                  Cargando órdenes y estado de inventario...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal Explosión y Rebaja de Trimmings -->
+  <div class="modal-backdrop" id="trimExplosionModalBackdrop">
+    <div class="modal-box" style="max-width: 1050px;">
+      <div class="modal-header">
+        <div>
+          <h2 id="trimExpModalTitle" style="color: #38bdf8; font-size: 1.35rem; display: flex; align-items: center; gap: 0.5rem;">
+            ⚡ Desglose de Materiales (BOM Multinivel)
+          </h2>
+          <p id="trimExpModalSubtitle" style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.2rem;"></p>
+        </div>
+        <button class="close-modal" onclick="closeTrimExplosionModal()">&times;</button>
+      </div>
+
+      <div id="trimExpModalContent">
+        <div style="text-align: center; padding: 2rem; color: var(--text-muted);">Calculando explosión recursiva...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Ver Movimiento ProMov ERP SADE -->
+  <div class="modal-backdrop" id="trimMovementModalBackdrop">
+    <div class="modal-box" style="max-width: 900px;">
+      <div class="modal-header">
+        <div>
+          <h2 id="trimMovTitle" style="color: #34d399; font-size: 1.3rem;">Salida de Almacén SADE</h2>
+          <p id="trimMovSubtitle" style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.2rem;"></p>
+        </div>
+        <button class="close-modal" onclick="closeTrimMovementModal()">&times;</button>
+      </div>
+
+      <div id="trimMovContent">
+        <div style="text-align: center; padding: 2rem; color: var(--text-muted);">Consultando movimiento ERP...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Simulador / Calculadora Libre de BOM -->
+  <div class="modal-backdrop" id="trimSimModalBackdrop">
+    <div class="modal-box" style="max-width: 950px;">
+      <div class="modal-header">
+        <div>
+          <h2 style="color: #38bdf8; font-size: 1.3rem;">🧪 Simulador / Consulta Rápida de BOM</h2>
+          <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.2rem;">
+            Calcula el consumo de trimmings para cualquier estilo del catálogo de SWS Textil.
+          </p>
+        </div>
+        <button class="close-modal" onclick="closeTrimSimModal()">&times;</button>
+      </div>
+
+      <div>
+        <div style="display: flex; gap: 1rem; align-items: flex-end; margin-bottom: 1.5rem; flex-wrap: wrap;">
+          <div class="form-group" style="flex: 2; min-width: 250px;">
+            <label>Buscar Estilo / Producto en ERP:</label>
+            <input type="text" id="simProductInput" class="form-input" placeholder="Ej: 08251700RG, 82517, 199PF, 001-GRIPST..." oninput="onSearchSimProducts(this.value)">
+            <div id="simSearchResults" style="display: none; background: var(--surface-card); border: 1px solid var(--border); border-radius: 8px; max-height: 180px; overflow-y: auto; margin-top: 0.3rem; position: absolute; z-index: 50; width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);"></div>
+          </div>
+
+          <div class="form-group" style="width: 140px;">
+            <label>Prendas / Cantidad:</label>
+            <input type="number" id="simUnitsInput" class="form-input" value="100" min="1">
+          </div>
+
+          <button class="btn-primary" onclick="executeSimulateBOM()">
+            ⚡ Calcular Consumo
+          </button>
+        </div>
+
+        <div id="simResultsContainer" style="display: none;">
+          <!-- Resultados calculados -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Detalle e Historial (Timeline) -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <h2 id="mTitle" style="color: #38bdf8;">MTO-XXXX</h2>
+          <p id="mSubtitle" style="color: var(--text-muted); font-size: 0.88rem;"></p>
+        </div>
+        <button class="close-modal" onclick="closeModal()">&times;</button>
+      </div>
+      <div id="mContent">Cargando...</div>
+    </div>
+  </div>
+
+  <!-- Modal / Reporte de Packing List Comercial -->
+  <div class="modal-backdrop" id="packingModalBackdrop">
+    <div class="modal-box" style="max-width: 960px; background: #ffffff !important; color: #000000 !important; border: 3px solid #000000; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75);">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #000000; padding-bottom: 1rem; margin-bottom: 1.2rem;">
+        <div>
+          <h2 style="font-size: 1.5rem; font-weight: 900; letter-spacing: 0.04em; color: #000000 !important;">SWS CAMISAS, INC. • PACKING LIST OFICIAL</h2>
+          <p id="plHeaderSubtitle" style="font-size: 0.95rem; font-weight: 700; color: #1e293b !important; margin-top: 0.25rem;"></p>
+        </div>
+        <div>
+          <button class="btn-primary" onclick="window.print()" style="padding: 0.6rem 1.3rem; font-weight: 700; font-size: 0.95rem; margin-right: 0.5rem;">🖨️ Imprimir</button>
+          <button class="close-modal" onclick="closePackingModal()" style="color: #000000; font-size: 2rem; font-weight: 900;">&times;</button>
+        </div>
+      </div>
+
+      <div id="packingListPrintable">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 1rem; font-size: 1.1rem; font-weight: 800; color: #000000 !important; border-bottom: 1.5px dashed #475569; padding-bottom: 0.6rem;">
+          <div>CONTENEDOR: <span id="plContainerNum" style="color: #0284c7; font-weight: 900;"></span></div>
+          <div>FECHA DE DESPACHO: <span id="plShipDate" style="color: #000000; font-weight: 800;"></span></div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 1rem; border: 2px solid #000000;">
+          <thead>
+            <tr style="background: #e2e8f0; border-bottom: 2.5px solid #000000;">
+              <th style="border: 1.5px solid #000000; color: #000000 !important; padding: 0.75rem 0.8rem; font-weight: 900; font-size: 0.95rem;">CAJA #</th>
+              <th style="border: 1.5px solid #000000; color: #000000 !important; padding: 0.75rem 0.8rem; font-weight: 900; font-size: 0.95rem;">CORTE (CUT #)</th>
+              <th style="border: 1.5px solid #000000; color: #000000 !important; padding: 0.75rem 0.8rem; font-weight: 900; font-size: 0.95rem;">ESTILO</th>
+              <th style="border: 1.5px solid #000000; color: #000000 !important; padding: 0.75rem 0.8rem; font-weight: 900; font-size: 0.95rem; text-align: center;">TALLA</th>
+              <th style="border: 1.5px solid #000000; color: #000000 !important; padding: 0.75rem 0.8rem; font-weight: 900; font-size: 0.95rem; text-align: right;">BULTOS</th>
+              <th style="border: 1.5px solid #000000; color: #000000 !important; padding: 0.75rem 0.8rem; font-weight: 900; font-size: 0.95rem; text-align: right;">TOTAL PRENDAS</th>
+            </tr>
+          </thead>
+          <tbody id="plTableBody"></tbody>
+          <tfoot>
+            <tr style="font-weight: 900; background: #cbd5e1; border-top: 2.5px solid #000000;">
+              <td colspan="4" style="padding: 0.85rem 1rem; border: 1.5px solid #000000; color: #000000 !important; font-size: 1.1rem; font-weight: 900;">TOTAL GENERAL DEL CONTENEDOR</td>
+              <td id="plTotalBoxes" style="padding: 0.85rem 1rem; text-align: right; border: 1.5px solid #000000; color: #000000 !important; font-size: 1.15rem; font-weight: 900;"></td>
+              <td id="plTotalUnits" style="padding: 0.85rem 1rem; text-align: right; border: 1.5px solid #000000; color: #000000 !important; font-size: 1.15rem; font-weight: 900;"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ========================================================
+    // CONFIGURACIÓN SSO & AUTENTICACIÓN CENTRAL (IIS / SADE)
+    // ========================================================
+    const AUTH_CENTER_URL = window.AUTH_CENTER_URL || 'https://auth.sade.com.do';
+    const CLIENT_ID = 'produccion-embarque';
+    const TOKEN_KEY = 'jwt_token';
+    const EMPRESA_KEY = 'empresa';
+
+    // 1. Interceptar credenciales del callback SSO si vienen en la URL
+    (function handleSSOCallback() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token');
+      const empresaId = urlParams.get('empresaId');
+      const empresaNombre = urlParams.get('empresaNombre');
+      const empresaRNC = urlParams.get('empresaRNC');
+
+      if (token) {
+        localStorage.setItem(TOKEN_KEY, token);
+        if (empresaId) {
+          localStorage.setItem(EMPRESA_KEY, JSON.stringify({
+            idEmpresa: empresaId,
+            empresa: empresaNombre || 'Empresa',
+            rnc: empresaRNC || ''
+          }));
+        }
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    })();
+
+    // 2. Validar sesión activa o redirigir a la App de Login
+    async function checkAuthOrRedirect() {
+      let token = localStorage.getItem(TOKEN_KEY);
+
+      // Si no hay token pero estamos en entorno local, obtener token de desarrollo automáticamente
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (!token && isLocalhost) {
+        try {
+          const devRes = await fetch('/api/auth/dev-token');
+          if (devRes.ok) {
+            const devData = await devRes.json();
+            token = devData.token;
+            localStorage.setItem(TOKEN_KEY, token);
+            if (devData.empresa) {
+              localStorage.setItem(EMPRESA_KEY, JSON.stringify(devData.empresa));
+            }
+            console.log('[AUTH] Sesión local iniciada automáticamente.');
+          }
+        } catch (e) {
+          console.warn('[AUTH] Error obteniendo token local:', e);
+        }
+      }
+
+      if (!token) {
+        if (!isLocalhost) {
+          const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
+          window.location.href = `${AUTH_CENTER_URL}/?client_id=${CLIENT_ID}&redirect_uri=${redirectUri}`;
+        }
+        return false;
+      }
+
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const username = payload.sub || payload.nameid || 'Usuario';
+        const empresa = JSON.parse(localStorage.getItem(EMPRESA_KEY) || '{}');
+
+        const badge = document.getElementById('userProfileBadge');
+        if (badge) badge.style.display = 'flex';
+        const uEl = document.getElementById('headerUsername');
+        if (uEl) uEl.textContent = username;
+        const cEl = document.getElementById('headerCompanyName');
+        if (cEl) cEl.textContent = empresa.empresa || 'SWS Textiles';
+      } catch (e) {
+        console.warn('Error leyendo payload del token:', e);
+      }
+      return true;
+    }
+
+    function logoutSSO() {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(EMPRESA_KEY);
+      sessionStorage.clear();
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocalhost) {
+        window.location.reload();
+        return;
+      }
+      const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
+      window.location.href = `${AUTH_CENTER_URL}/?client_id=${CLIENT_ID}&redirect_uri=${redirectUri}&logout=true`;
+    }
+
+    // 3. Interceptor global para fetch con JWT
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+      let [resource, config] = args;
+      config = config || {};
+      config.headers = config.headers || {};
+
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (token) {
+        if (config.headers instanceof Headers) {
+          config.headers.set('Authorization', `Bearer ${token}`);
+        } else if (Array.isArray(config.headers)) {
+          config.headers.push(['Authorization', `Bearer ${token}`]);
+        } else {
+          config.headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
+
+      const empresaStr = localStorage.getItem(EMPRESA_KEY);
+      if (empresaStr) {
+        try {
+          const empObj = JSON.parse(empresaStr);
+          const idEmpresa = empObj.idEmpresa || empObj.empresa || '';
+          if (idEmpresa) {
+            if (config.headers instanceof Headers) {
+              config.headers.set('X-Selected-Company', idEmpresa);
+            } else if (Array.isArray(config.headers)) {
+              config.headers.push(['X-Selected-Company', idEmpresa]);
+            } else {
+              config.headers['X-Selected-Company'] = idEmpresa;
+            }
+          }
+        } catch (e) {}
+      }
+
+      const response = await originalFetch(resource, config);
+      if (response.status === 401) {
+        console.warn('[AUTH] Sesión expirada o token inválido (401). Redirigiendo a Login...');
+        logoutSSO();
+      }
+      return response;
+    };
+
+    const STAGES = ['PENDIENTE_CORTE', 'CORTADO', 'COSIENDO', 'INSPECCION', 'COMPLETADO', 'EMBARCADO'];
+    let allTickets = [];
+    let activeContainers = [];
+    let currentContainerId = null;
+    let currentBox = 1;
+
+    // Web Audio API para Beeps de escáner en tiempo real (cero latencia)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playBeep(isSuccess = true) {
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (isSuccess) {
+        // Tono agudo y limpio (880 Hz) - Éxito
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.08);
+      } else {
+        // Tono grave de alerta (220 Hz) - Error/Duplicado
+        osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + 0.25);
+      }
+    }
+
+    function switchView(viewName) {
+      document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+      document.getElementById('viewKanban').style.display = 'none';
+      document.getElementById('viewTable').style.display = 'none';
+      document.getElementById('viewLabels').style.display = 'none';
+      document.getElementById('viewPacking').style.display = 'none';
+      document.getElementById('viewIngest').style.display = 'none';
+      document.getElementById('viewTrimmings').style.display = 'none';
+
+      // Los KPIs generales WIP solo se muestran en Kanban y Tabla
+      const kpis = document.getElementById('kpiContainer');
+      if (kpis) {
+        kpis.style.display = (viewName === 'kanban' || viewName === 'table') ? 'grid' : 'none';
+      }
+
+      if (viewName === 'kanban') {
+        document.getElementById('viewKanban').style.display = 'grid';
+      } else if (viewName === 'table') {
+        document.getElementById('viewTable').style.display = 'block';
+      } else if (viewName === 'labels') {
+        document.getElementById('viewLabels').style.display = 'block';
+        populateLabelsCutSelect();
+      } else if (viewName === 'packing') {
+        document.getElementById('viewPacking').style.display = 'block';
+        loadPackingContainers();
+        setTimeout(() => document.getElementById('barcodeScannerInput').focus(), 150);
+      } else if (viewName === 'trimmings') {
+        document.getElementById('viewTrimmings').style.display = 'block';
+        loadTrimmingsTable();
+      } else if (viewName === 'ingest') {
+        document.getElementById('viewIngest').style.display = 'block';
+        loadIngestTable();
+      }
+
+      // Activar visualmente la pestaña correcta
+      const activeBtn = event?.target?.closest ? event.target.closest('.nav-tab') : null;
+      if (activeBtn) {
+        activeBtn.classList.add('active');
+      } else {
+        const matchingBtn = document.querySelector(`.nav-tab[onclick*="'${viewName}'"]`);
+        if (matchingBtn) matchingBtn.classList.add('active');
+      }
+    }
+
+    async function loadWIPData() {
+      try {
+        const [ticketsRes, summaryRes] = await Promise.all([
+          fetch('/api/cut-tickets'),
+          fetch('/api/cut-tickets/wip/summary')
+        ]);
+
+        allTickets = await ticketsRes.json();
+        const summary = await summaryRes.json();
+
+        updateKPIs(summary);
+        populateClientFilter();
+        populateLabelsCutSelect();
+        renderKanban();
+        renderTable();
+        loadIngestTable();
+      } catch (err) {
+        console.error('Error cargando WIP:', err);
+      }
+    }
+
+    function updateKPIs(summary) {
+      document.getElementById('kpiTotalOrders').textContent = summary.overall?.TotalOrders || 0;
+      document.getElementById('kpiTotalUnits').textContent = `${(summary.overall?.TotalUnits || 0).toLocaleString()} prendas totales`;
+
+      const statusMap = {};
+      (summary.byStatus || []).forEach(s => {
+        statusMap[s.Status] = s;
+      });
+
+      const bindStatus = (st, elCount, elUnits) => {
+        const item = statusMap[st] || { TotalOrders: 0, TotalUnits: 0 };
+        document.getElementById(elCount).textContent = item.TotalOrders;
+        document.getElementById(elUnits).textContent = `${item.TotalUnits.toLocaleString()} u.`;
+      };
+
+      bindStatus('PENDIENTE_CORTE', 'kpiPending', 'kpiPendingUnits');
+      bindStatus('CORTADO', 'kpiCut', 'kpiCutUnits');
+      bindStatus('COSIENDO', 'kpiSew', 'kpiSewUnits');
+      bindStatus('INSPECCION', 'kpiInspect', 'kpiInspectUnits');
+      bindStatus('COMPLETADO', 'kpiComplete', 'kpiCompleteUnits');
+    }
+
+    function populateClientFilter() {
+      const select = document.getElementById('clientFilter');
+      const clients = Array.from(new Set(allTickets.map(t => t.Customer).filter(Boolean)));
+      const current = select.value;
+
+      select.innerHTML = '<option value="">Todos los Clientes</option>' +
+        clients.map(c => `<option value="${c}" ${c === current ? 'selected' : ''}>${c}</option>`).join('');
+    }
+
+    function populateLabelsCutSelect() {
+      const select = document.getElementById('labelCutSelect');
+      const current = select.value;
+
+      select.innerHTML = '<option value="">Selecciona un Cut Ticket...</option>' +
+        allTickets.map(t => `<option value="${t.IdCutTicket}" ${t.IdCutTicket == current ? 'selected' : ''}>${t.CutNumber} — ${t.Customer || 'S/C'} (${t.TotalUnits} u.)</option>`).join('');
+    }
+
+    function renderKanban() {
+      STAGES.forEach(stage => {
+        const col = document.getElementById(`col-${stage}`);
+        const badge = document.getElementById(`badge-${stage}`);
+        const filtered = allTickets.filter(t => t.Status === stage);
+
+        badge.textContent = filtered.length;
+        col.innerHTML = filtered.map(t => createTicketCard(t)).join('');
+      });
+
+      setupDragAndDrop();
+    }
+
+    function createTicketCard(t) {
+      const curIdx = STAGES.indexOf(t.Status);
+      const prevStage = curIdx > 0 ? STAGES[curIdx - 1] : null;
+      const nextStage = curIdx < STAGES.length - 1 ? STAGES[curIdx + 1] : null;
+
+      return `
+        <div class="ticket-card" draggable="true" data-id="${t.IdCutTicket}">
+          <div class="ticket-card-header">
+            <span class="ticket-number">${t.CutNumber}</span>
+            <span class="ticket-customer">${t.Customer || 'N/A'}</span>
+          </div>
+          <div class="ticket-style">${t.Style}</div>
+          <div class="ticket-stats">
+            <span>Cantidad:</span>
+            <span class="ticket-units">${t.TotalUnits} u.</span>
+          </div>
+          <div class="ticket-actions">
+            ${prevStage ? `<button class="btn-step" onclick="changeStatus(${t.IdCutTicket}, '${prevStage}')">◀</button>` : ''}
+            <button class="btn-step btn-view" onclick="openDetailModal(${t.IdCutTicket})">👁️ Detalle</button>
+            <button class="btn-step" style="background: rgba(2, 132, 199, 0.2); color: #38bdf8;" onclick="goToLabels(${t.IdCutTicket})">🏷️</button>
+            ${nextStage ? `<button class="btn-step" onclick="changeStatus(${t.IdCutTicket}, '${nextStage}')">Avanzar ▶</button>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function goToLabels(id) {
+      switchView('labels');
+      document.getElementById('labelCutSelect').value = id;
+      onSelectCutTicketForLabels();
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('tableBody');
+      const search = (document.getElementById('searchInput').value || '').toLowerCase();
+      const client = document.getElementById('clientFilter').value;
+      const status = document.getElementById('statusFilter').value;
+
+      const filtered = allTickets.filter(t => {
+        const matchSearch = !search ||
+          t.CutNumber.toLowerCase().includes(search) ||
+          t.Style.toLowerCase().includes(search) ||
+          (t.Customer && t.Customer.toLowerCase().includes(search));
+        const matchClient = !client || t.Customer === client;
+        const matchStatus = !status || t.Status === status;
+        return matchSearch && matchClient && matchStatus;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted);">No se encontraron órdenes con los filtros seleccionados.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(t => `
+        <tr>
+          <td>#${t.IdCutTicket}</td>
+          <td><strong style="color: #38bdf8; font-family: monospace;">${t.CutNumber}</strong></td>
+          <td>${t.Style}</td>
+          <td><span class="ticket-customer">${t.Customer || 'N/A'}</span></td>
+          <td><strong>${t.TotalUnits}</strong> pcs</td>
+          <td><strong style="color: #fbbf24;">${t.Status}</strong></td>
+          <td>
+            <select class="select-status" onchange="changeStatus(${t.IdCutTicket}, this.value)">
+              ${STAGES.map(s => `<option value="${s}" ${s === t.Status ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.3rem;">
+              <button class="btn-step btn-view" onclick="openDetailModal(${t.IdCutTicket})">👁️ Detalle</button>
+              <button class="btn-step" onclick="goToLabels(${t.IdCutTicket})">🏷️ Etiquetas</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function applyFilters() {
+      renderTable();
+    }
+
+    async function changeStatus(id, newStatus) {
+      try {
+        const res = await fetch(`/api/cut-tickets/${id}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: newStatus,
+            changedBy: 'SUPERVISOR_PLANTA',
+            notes: `Movido en panel WIP a ${newStatus}`
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          alert('Error al actualizar estatus: ' + err.error);
+          return;
+        }
+
+        await loadWIPData();
+      } catch (e) {
+        alert('Error en la comunicación: ' + e.message);
+      }
+    }
+
+    function setupDragAndDrop() {
+      const cards = document.querySelectorAll('.ticket-card');
+      const cols = document.querySelectorAll('.kanban-cards');
+
+      cards.forEach(card => {
+        card.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', card.dataset.id);
+          card.classList.add('dragging');
+        });
+
+        card.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+        });
+      });
+
+      cols.forEach(col => {
+        col.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          col.classList.add('drag-over');
+        });
+
+        col.addEventListener('dragleave', () => {
+          col.classList.remove('drag-over');
+        });
+
+        col.addEventListener('drop', async (e) => {
+          e.preventDefault();
+          col.classList.remove('drag-over');
+          const id = e.dataTransfer.getData('text/plain');
+          const targetStatus = col.parentElement.dataset.status;
+
+          if (id && targetStatus) {
+            await changeStatus(id, targetStatus);
+          }
+        });
+      });
+    }
+
+    /* ========================================================
+       FASE 3: ETIQUETAS
+       ======================================================== */
+    async function onSelectCutTicketForLabels() {
+      const id = document.getElementById('labelCutSelect').value;
+      const metaBox = document.getElementById('labelTicketMeta');
+      const container = document.getElementById('printContainer');
+      const btnPrint = document.getElementById('btnPrintLabels');
+
+      if (!id) {
+        metaBox.style.display = 'none';
+        container.innerHTML = '';
+        btnPrint.style.display = 'none';
+        return;
+      }
+
+      const t = allTickets.find(x => x.IdCutTicket == id);
+      if (t) {
+        metaBox.style.display = 'block';
+        document.getElementById('lblTicketName').textContent = t.CutNumber;
+        document.getElementById('lblTicketStyle').textContent = t.Style;
+        document.getElementById('lblTicketCustomer').textContent = t.Customer || 'N/A';
+        document.getElementById('lblTicketUnits').textContent = `${t.TotalUnits} prendas totales`;
+      }
+
+      try {
+        const res = await fetch(`/api/bundles/ticket/${id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.bundles && data.bundles.length > 0) {
+            renderLabelCards(data.bundles);
+            btnPrint.style.display = 'inline-flex';
+          } else {
+            container.innerHTML = '<p style="color: var(--text-muted); grid-column: 1/-1;">No hay etiquetas generadas aún para esta orden. Haz clic en "⚡ Generar Etiquetas".</p>';
+            btnPrint.style.display = 'none';
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function generateLabelsForTicket() {
+      const id = document.getElementById('labelCutSelect').value;
+      const bundleSize = document.getElementById('labelBundleSize').value;
+
+      if (!id) {
+        alert('Por favor selecciona una orden de corte.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/bundles/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ idCutTicket: id, bundleSize: bundleSize })
+        });
+
+        const json = await res.json();
+        if (!res.ok) {
+          alert('Error: ' + json.error);
+          return;
+        }
+
+        alert(json.message);
+        renderLabelCards(json.data.bundles);
+        document.getElementById('btnPrintLabels').style.display = 'inline-flex';
+      } catch (e) {
+        alert('Error generando etiquetas: ' + e.message);
+      }
+    }
+
+    function renderLabelCards(bundles) {
+      const container = document.getElementById('printContainer');
+      const total = bundles.length;
+
+      container.innerHTML = bundles.map((b, idx) => `
+        <div class="label-card">
+          <div class="label-header">
+            <span class="label-company">SWS CAMISAS • TEXTILES</span>
+            <span class="label-bundle-num">BULTO ${b.bundleNumber || b.BundleNumber} / ${total}</span>
+          </div>
+
+          <div class="label-meta-grid">
+            <div>
+              <div class="label-field-title">CORTE (CUT #)</div>
+              <div class="label-field-val" style="color: #0369a1; font-family: monospace;">${b.cutNumber}</div>
+
+              <div class="label-field-title" style="margin-top: 0.3rem;">ESTILO</div>
+              <div class="label-field-val" style="font-size: 0.82rem;">${b.style}</div>
+
+              <div class="label-field-title" style="margin-top: 0.3rem;">CLIENTE</div>
+              <div class="label-field-val" style="font-size: 0.82rem;">${b.customer || 'N/A'}</div>
+            </div>
+
+            <div class="label-size-box">
+              <span class="label-size-title">TALLA</span>
+              <span class="label-size-val">${b.size || b.Size}</span>
+              <span style="font-size: 0.72rem; font-weight: 800; margin-top: 0.2rem;">${b.quantity || b.Quantity} PCS</span>
+            </div>
+          </div>
+
+          <div class="label-barcode-container">
+            <svg id="barcode-${idx}"></svg>
+          </div>
+        </div>
+      `).join('');
+
+      bundles.forEach((b, idx) => {
+        const code = b.barcode || b.Barcode;
+        try {
+          JsBarcode(`#barcode-${idx}`, code, {
+            format: 'CODE128',
+            width: 1.8,
+            height: 40,
+            displayValue: true,
+            fontSize: 13,
+            textMargin: 3,
+            font: 'monospace',
+            fontOptions: 'bold',
+            lineColor: '#000000'
+          });
+        } catch (err) {
+          console.error(err);
+        }
+      });
+    }
+
+    /* ========================================================
+       FASE 4: LECTURA POR ESCÁNER & EMBARQUE
+       ======================================================== */
+    let currentScannedBundles = [];
+
+    async function loadPackingContainers() {
+      try {
+        const res = await fetch('/api/packing/lists');
+        activeContainers = await res.json();
+        const select = document.getElementById('containerSelect');
+
+        select.innerHTML = '<option value="">Selecciona un contenedor...</option>' +
+          activeContainers.map(c => `
+            <option value="${c.IdPackingList}" ${c.IdPackingList == currentContainerId ? 'selected' : ''}>
+              ${c.ContainerNumber} [${c.Status}] — ${c.TotalScannedBundles || 0} bultos (${c.TotalUnits || 0} pcs)
+            </option>
+          `).join('');
+
+        if (activeContainers.length > 0 && !currentContainerId) {
+          select.value = activeContainers[0].IdPackingList;
+          onSelectContainer();
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function promptNewContainer() {
+      const containerNum = prompt('Ingresa el número de contenedor (ej: BMOU-578710-1):');
+      if (!containerNum) return;
+
+      const customer = prompt('Cliente o Destino (ej: CINTAS, ARAMARK):', 'CINTAS');
+
+      try {
+        const res = await fetch('/api/packing/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ containerNumber: containerNum, customer })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          alert('Error: ' + data.error);
+          return;
+        }
+
+        currentContainerId = data.data.IdPackingList;
+        await loadPackingContainers();
+        onSelectContainer();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    async function onSelectContainer() {
+      const id = document.getElementById('containerSelect').value;
+      currentContainerId = id ? parseInt(id, 10) : null;
+
+      if (!currentContainerId) {
+        document.getElementById('sbContainer').textContent = '-';
+        document.getElementById('sbCustomer').textContent = '-';
+        document.getElementById('sbBoxes').textContent = '0';
+        document.getElementById('sbBundles').textContent = '0';
+        document.getElementById('sbUnits').textContent = '0 pcs';
+        document.getElementById('tableContainerTitle').textContent = '-';
+        document.getElementById('packingScanTableBody').innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Selecciona un contenedor para comenzar a escanear.</td></tr>';
+        return;
+      }
+
+      await refreshContainerReport();
+    }
+
+    async function refreshContainerReport() {
+      if (!currentContainerId) return;
+
+      try {
+        const res = await fetch(`/api/packing/${currentContainerId}/report`);
+        if (!res.ok) return;
+
+        const data = await res.json();
+        const p = data.packingList;
+
+        document.getElementById('sbContainer').textContent = p.ContainerNumber;
+        document.getElementById('sbCustomer').textContent = p.Customer || 'N/A';
+        document.getElementById('sbBoxes').textContent = data.totalBoxes;
+        document.getElementById('sbBundles').textContent = data.scannedBundles.length;
+        document.getElementById('sbUnits').textContent = `${data.totalUnits.toLocaleString()} pcs`;
+        document.getElementById('sbStatus').textContent = p.Status;
+        document.getElementById('tableContainerTitle').textContent = `${p.ContainerNumber} (${p.Status})`;
+
+        currentScannedBundles = data.scannedBundles || [];
+
+        // Auditoría visual de trimmings para los cortes del contenedor
+        const trimBadge = document.getElementById('sbTrimmingBadge');
+        if (trimBadge) {
+          if (currentScannedBundles.length === 0) {
+            trimBadge.textContent = 'Sin prendas escaneadas';
+            trimBadge.style.color = 'var(--text-muted)';
+          } else {
+            // Extraer cortes únicos escaneados
+            const uniqueCuts = [...new Set(currentScannedBundles.map(b => b.CutNumber).filter(Boolean))];
+            if (uniqueCuts.length === 0) {
+              trimBadge.textContent = 'En verificación';
+              trimBadge.style.color = '#38bdf8';
+            } else {
+              // Comparar con la lista de trimmings en memoria
+              const pendingCuts = uniqueCuts.filter(cutNum => {
+                const found = allTrimmingCuts.find(tc => tc.CutNumber === cutNum);
+                return found && found.TrimmingStatus === 'PENDIENTE';
+              });
+
+              if (pendingCuts.length > 0) {
+                trimBadge.innerHTML = `<span style="color: #fbbf24;">⚠️ ${pendingCuts.length} corte(s) pendiente(s) de rebajar</span>`;
+              } else {
+                trimBadge.innerHTML = `<span style="color: #34d399;">✅ Rebajados en ERP SADE</span>`;
+              }
+            }
+          }
+        }
+
+        // Actualizar opciones del selector de filtro por caja
+        updateBoxFilterOptions();
+
+        // Renderizar tabla con filtro activo
+        renderFilteredScanTable();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function updateBoxFilterOptions() {
+      const select = document.getElementById('boxFilterSelect');
+      if (!select) return;
+      const currentSelected = select.value;
+
+      const uniqueBoxes = Array.from(new Set(currentScannedBundles.map(b => b.BoxNumber))).sort((a, b) => a - b);
+
+      let optionsHtml = `<option value="ALL">📦 Todas las Cajas (${currentScannedBundles.length} bultos)</option>`;
+      uniqueBoxes.forEach(boxNum => {
+        const countInBox = currentScannedBundles.filter(b => b.BoxNumber === boxNum).length;
+        optionsHtml += `<option value="${boxNum}" ${String(boxNum) === String(currentSelected) ? 'selected' : ''}>Caja #${boxNum} (${countInBox} bultos)</option>`;
+      });
+
+      select.innerHTML = optionsHtml;
+    }
+
+    function renderFilteredScanTable() {
+      const tbody = document.getElementById('packingScanTableBody');
+      const select = document.getElementById('boxFilterSelect');
+      const filterBox = select ? select.value : 'ALL';
+
+      let filtered = currentScannedBundles;
+      if (filterBox !== 'ALL') {
+        filtered = currentScannedBundles.filter(b => String(b.BoxNumber) === String(filterBox));
+      }
+
+      document.getElementById('scannedCountBadge').textContent = `${filtered.length} de ${currentScannedBundles.length} bultos`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+          ${currentScannedBundles.length === 0 
+            ? 'Aún no has escaneado ningún bulto para este contenedor.' 
+            : 'No hay bultos registrados en la caja seleccionada.'}
+        </td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(b => `
+        <tr>
+          <td><strong style="color: #38bdf8; font-family: monospace; font-size: 0.95rem;">${b.Barcode}</strong></td>
+          <td><span style="background: rgba(2, 132, 199, 0.25); color: #38bdf8; padding: 0.2rem 0.6rem; border-radius: 6px; font-weight: 800; font-size: 0.9rem;">Caja #${b.BoxNumber}</span></td>
+          <td><strong style="color: #f1f5f9;">${b.CutNumber}</strong></td>
+          <td>${b.Style}</td>
+          <td><span class="ticket-customer" style="font-weight: 700;">Talla ${b.Size}</span></td>
+          <td><strong style="color: #34d399; font-size: 0.95rem;">${b.Quantity}</strong> pcs</td>
+          <td style="color: var(--text-muted); font-size: 0.8rem;">${new Date(b.ScannedAt).toLocaleTimeString()}</td>
+          <td>
+            <button 
+              class="btn-step" 
+              style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); padding: 0.3rem 0.65rem; font-size: 0.78rem; font-weight: 700;" 
+              onclick="unscanBundle(${b.IdBundle}, '${b.Barcode}')"
+              title="Quitar este bulto para poder escanearlo de nuevo"
+            >
+              ↩️ Quitar / Releer
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function prevBox() {
+      if (currentBox > 1) {
+        setBoxNum(currentBox - 1);
+      }
+    }
+
+    function nextBox() {
+      setBoxNum(currentBox + 1);
+    }
+
+    function setBoxNum(val) {
+      currentBox = Math.max(1, parseInt(val, 10) || 1);
+      const boxInput = document.getElementById('currentBoxInput');
+      if (boxInput) boxInput.value = currentBox;
+      showScannerFeedback(true, `📦 Caja activa: Caja #${currentBox}`);
+      document.getElementById('barcodeScannerInput').focus();
+    }
+
+    async function unscanBundle(idBundle, barcode) {
+      if (!confirm(`¿Estás seguro de que deseas quitar el bulto [${barcode}] de este contenedor?\n\nAl quitarlo, quedará libre para poder ser escaneado nuevamente en cualquier caja o pedido.`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/packing/bundle/${idBundle}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (!res.ok) {
+          playBeep(false);
+          showScannerFeedback(false, json.error);
+          return;
+        }
+
+        playBeep(true);
+        showScannerFeedback(true, `↩️ ${json.message}`);
+        await refreshContainerReport();
+        await loadWIPData();
+      } catch (err) {
+        playBeep(false);
+        showScannerFeedback(false, 'Error al des-escanear: ' + err.message);
+      } finally {
+        setTimeout(() => document.getElementById('barcodeScannerInput').focus(), 100);
+      }
+    }
+
+    // Receptor del Escáner (Manejo de pulsaciones de alta velocidad)
+    const scannerInput = document.getElementById('barcodeScannerInput');
+
+    scannerInput.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const barcode = scannerInput.value.trim();
+        scannerInput.value = '';
+        if (barcode) {
+          await processScanBarcode(barcode);
+        }
+      }
+    });
+
+    async function handleManualScan() {
+      const barcode = scannerInput.value.trim();
+      scannerInput.value = '';
+      if (barcode) {
+        await processScanBarcode(barcode);
+      }
+    }
+
+    async function processScanBarcode(barcode) {
+      if (!currentContainerId) {
+        playBeep(false);
+        showScannerFeedback(false, 'Debes seleccionar o crear un contenedor antes de escanear.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/packing/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            barcode: barcode,
+            idPackingList: currentContainerId,
+            boxNumber: currentBox
+          })
+        });
+
+        const json = await res.json();
+
+        if (!res.ok) {
+          playBeep(false);
+          showScannerFeedback(false, json.error);
+        } else {
+          playBeep(true);
+          const d = json.data;
+          showScannerFeedback(true, `✅ Aceptado: [${d.barcode}] • ${d.cutNumber} • Talla ${d.size} (${d.quantity} pcs) en Caja #${d.boxNumber}`);
+          await refreshContainerReport();
+          await loadWIPData(); // Actualiza los estados en el Kanban si se completó
+        }
+      } catch (err) {
+        playBeep(false);
+        showScannerFeedback(false, 'Error de conexión: ' + err.message);
+      } finally {
+        // Mantener foco permanente para la siguiente lectura del escáner
+        setTimeout(() => scannerInput.focus(), 50);
+      }
+    }
+
+    function showScannerFeedback(isSuccess, message) {
+      const fb = document.getElementById('scanFeedback');
+      const icon = document.getElementById('feedbackIcon');
+      const msg = document.getElementById('feedbackMsg');
+
+      fb.className = `scanner-feedback ${isSuccess ? 'success' : 'error'}`;
+      icon.textContent = isSuccess ? '🟢' : '🔴';
+      msg.textContent = message;
+      fb.style.display = 'flex';
+    }
+
+    async function openPackingListModal() {
+      if (!currentContainerId) {
+        alert('Por favor selecciona un contenedor.');
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/packing/${currentContainerId}/report`);
+        const data = await res.json();
+        const p = data.packingList;
+
+        document.getElementById('plContainerNum').textContent = p.ContainerNumber;
+        document.getElementById('plShipDate').textContent = new Date(p.ShipDate).toLocaleDateString();
+        document.getElementById('plHeaderSubtitle').textContent = `CLIENTE: ${p.Customer || 'N/A'} • ESTADO: ${p.Status}`;
+
+        const tbody = document.getElementById('plTableBody');
+        if (!data.summaryItems || data.summaryItems.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="6" style="text-align: center; color: #475569 !important; padding: 2rem; font-size: 1.1rem; font-weight: 700;">
+                No hay bultos registrados aún en este contenedor.
+              </td>
+            </tr>
+          `;
+        } else {
+          tbody.innerHTML = data.summaryItems.map(item => `
+            <tr>
+              <td style="border: 1.5px solid #000000; padding: 0.75rem 0.8rem; text-align: center; font-weight: 800; font-size: 1.05rem; color: #000000 !important; background: #ffffff;">CAJA #${item.BoxNumber}</td>
+              <td style="border: 1.5px solid #000000; padding: 0.75rem 0.8rem; font-family: monospace; font-weight: 800; font-size: 1.05rem; color: #000000 !important; background: #ffffff;">${item.CutNumber}</td>
+              <td style="border: 1.5px solid #000000; padding: 0.75rem 0.8rem; font-weight: 700; font-size: 1.05rem; color: #000000 !important; background: #ffffff;">${item.Style}</td>
+              <td style="border: 1.5px solid #000000; padding: 0.75rem 0.8rem; text-align: center; font-weight: 900; font-size: 1.15rem; color: #000000 !important; background: #ffffff;">${item.Size}</td>
+              <td style="border: 1.5px solid #000000; padding: 0.75rem 0.8rem; text-align: right; font-weight: 800; font-size: 1.05rem; color: #000000 !important; background: #ffffff;">${item.BundleCount}</td>
+              <td style="border: 1.5px solid #000000; padding: 0.75rem 0.8rem; text-align: right; font-weight: 900; font-size: 1.15rem; color: #000000 !important; background: #ffffff;">${item.TotalUnits}</td>
+            </tr>
+          `).join('');
+        }
+
+        document.getElementById('plTotalBoxes').textContent = `${data.totalBoxes} Cajas`;
+        document.getElementById('plTotalUnits').textContent = `${data.totalUnits.toLocaleString()} Prendas`;
+
+        document.getElementById('packingModalBackdrop').style.display = 'flex';
+      } catch (e) {
+        alert('Error cargando Packing List: ' + e.message);
+      }
+    }
+
+    function closePackingModal() {
+      document.getElementById('packingModalBackdrop').style.display = 'none';
+    }
+
+    async function dispatchCurrentContainer() {
+      if (!currentContainerId) {
+        alert('Por favor selecciona un contenedor.');
+        return;
+      }
+
+      if (!confirm('¿Confirmas el despacho oficial de este contenedor? Esta acción cambiará el estado a DESPACHADO y los tickets a EMBARCADO.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/packing/${currentContainerId}/dispatch`, { method: 'POST' });
+        const json = await res.json();
+        if (!res.ok) {
+          alert('Error: ' + json.error);
+          return;
+        }
+
+        alert(json.message);
+        await loadPackingContainers();
+        await onSelectContainer();
+        await loadWIPData();
+      } catch (e) {
+        alert('Error al despachar: ' + e.message);
+      }
+    }
+
+    /* Modal Detalle */
+    async function openDetailModal(id) {
+      const backdrop = document.getElementById('modalBackdrop');
+      const title = document.getElementById('mTitle');
+      const subtitle = document.getElementById('mSubtitle');
+      const content = document.getElementById('mContent');
+
+      backdrop.style.display = 'flex';
+      content.innerHTML = 'Cargando información completa e historial...';
+
+      try {
+        const res = await fetch(`/api/cut-tickets/${id}`);
+        const data = await res.json();
+
+        title.textContent = `${data.CutNumber} — ${data.Style}`;
+        subtitle.textContent = `Cliente: ${data.Customer || 'N/A'} • Total: ${data.TotalUnits} prendas • Estado Actual: ${data.Status}`;
+
+        content.innerHTML = `
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="background: rgba(11, 15, 25, 0.4); padding: 0.8rem; border-radius: 8px;">
+              <span style="font-size: 0.72rem; color: var(--text-muted); display: block;">MODELO GERBER</span>
+              <strong>${data.GerberModel || 'N/A'}</strong>
+            </div>
+            <div style="background: rgba(11, 15, 25, 0.4); padding: 0.8rem; border-radius: 8px;">
+              <span style="font-size: 0.72rem; color: var(--text-muted); display: block;">TELA</span>
+              <strong>${data.Fabric || 'N/A'}</strong>
+            </div>
+            <div style="background: rgba(11, 15, 25, 0.4); padding: 0.8rem; border-radius: 8px;">
+              <span style="font-size: 0.72rem; color: var(--text-muted); display: block;">ANCHO DE TELA</span>
+              <strong>${data.CuttableWidth || 'N/A'}</strong>
+            </div>
+          </div>
+
+          <h3 style="color: #38bdf8; font-size: 0.95rem; margin-bottom: 0.8rem;">📊 Desglose de Tallas</h3>
+          <div style="margin-bottom: 1.5rem;">
+            ${(data.sizes || []).map(s => `
+              <span style="background: #0284c7; color: white; padding: 0.3rem 0.7rem; border-radius: 9999px; margin-right: 0.5rem; font-size: 0.85rem; font-weight: 600;">
+                Talla ${s.Size}: ${s.Units} u.
+              </span>
+            `).join('')}
+          </div>
+
+          <h3 style="color: #38bdf8; font-size: 0.95rem; margin-bottom: 0.8rem;">⏱️ Historial de Cambios WIP (Trazabilidad)</h3>
+          <div class="timeline">
+            ${(data.history || []).map(h => `
+              <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div class="timeline-content">
+                  <div class="timeline-time">${new Date(h.ChangedAt).toLocaleString()} • Por: <strong>${h.ChangedBy || 'SYSTEM'}</strong></div>
+                  <div class="timeline-status">${h.PreviousStatus ? `${h.PreviousStatus} ➔ ` : ''}${h.NewStatus}</div>
+                  ${h.Notes ? `<div class="timeline-notes">${h.Notes}</div>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } catch (err) {
+        content.innerHTML = '<p style="color: #ef4444;">Error al cargar detalle del ticket.</p>';
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('modalBackdrop').style.display = 'none';
+    }
+
+    window.onclick = function(e) {
+      const backdrop = document.getElementById('modalBackdrop');
+      const pBackdrop = document.getElementById('packingModalBackdrop');
+      if (e.target === backdrop) closeModal();
+      if (e.target === pBackdrop) closePackingModal();
+    };
+
+    // ==========================================
+    // SISTEMA DE INGESTA EXCEL: DRAG & DROP Y COLA LOCAL
+    // ==========================================
+    let isProcessingBatch = false;
+
+    // Inicializar listeners de Drag & Drop
+    function initDropzone() {
+      const dropzone = document.getElementById('dropzoneBox');
+      if (!dropzone) return;
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.add('dragover');
+        }, false);
+      });
+
+      ['dragleave', 'dragend'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.remove('dragover');
+        }, false);
+      });
+
+      dropzone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.remove('dragover');
+
+        if (isProcessingBatch) {
+          alert('Actualmente hay una carga en progreso. Espera a que finalice.');
+          return;
+        }
+
+        try {
+          const items = e.dataTransfer.items;
+          if (items && items.length > 0) {
+            const files = [];
+            const entries = [];
+            for (let i = 0; i < items.length; i++) {
+              const entry = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
+              if (entry) {
+                entries.push(entry);
+              } else if (items[i].kind === 'file') {
+                const file = items[i].getAsFile();
+                if (file) files.push(file);
+              }
+            }
+
+            if (entries.length > 0) {
+              for (const entry of entries) {
+                await readEntryRecursively(entry, files);
+              }
+            }
+
+            handleFileSelection(files);
+          } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleFileSelection(e.dataTransfer.files);
+          }
+        } catch (dropErr) {
+          console.error('[Drop Error]', dropErr);
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleFileSelection(e.dataTransfer.files);
+          }
+        }
+      }, false);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initDropzone);
+    } else {
+      initDropzone();
+    }
+
+    // Lector recursivo para carpetas arrastradas
+    async function readEntryRecursively(entry, fileList) {
+      if (entry.isFile) {
+        return new Promise((resolve) => {
+          entry.file((file) => {
+            fileList.push(file);
+            resolve();
+          }, () => resolve());
+        });
+      } else if (entry.isDirectory) {
+        return new Promise((resolve) => {
+          const dirReader = entry.createReader();
+          const readAllEntries = () => {
+            dirReader.readEntries(async (entries) => {
+              if (entries.length === 0) {
+                resolve();
+              } else {
+                for (const subEntry of entries) {
+                  await readEntryRecursively(subEntry, fileList);
+                }
+                readAllEntries();
+              }
+            }, () => resolve());
+          };
+          readAllEntries();
+        });
+      }
+    }
+
+    // Filtrar y enviar a procesar
+    function handleFileSelection(files) {
+      if (!files || files.length === 0) return;
+      const fileArray = Array.from(files);
+
+      // Filtrar solo Excel válidos y descartar archivos temporales de Office (~$)
+      const excelFiles = fileArray.filter(f => {
+        const name = f.name.toLowerCase();
+        return (name.endsWith('.xlsx') || name.endsWith('.xls')) && !name.startsWith('~$');
+      });
+
+      if (excelFiles.length === 0) {
+        alert('No se encontraron archivos Excel (.xlsx) válidos en la selección.');
+        return;
+      }
+
+      processBatchQueue(excelFiles);
+    }
+
+    // Ejecución de la cola de ingesta con actualización visual en tiempo real
+    async function processBatchQueue(fileList) {
+      if (isProcessingBatch) return;
+      isProcessingBatch = true;
+
+      try {
+        const panel = document.getElementById('batchStatusPanel');
+        const listEl = document.getElementById('batchFileList');
+        const fillEl = document.getElementById('progressBarFill');
+        const titleEl = document.getElementById('batchSummaryTitle');
+        const statsEl = document.getElementById('batchStatsText');
+        const btnGoKanban = document.getElementById('btnGoKanban');
+
+        if (panel) panel.style.display = 'block';
+        if (btnGoKanban) btnGoKanban.style.display = 'none';
+        if (listEl) listEl.innerHTML = '';
+        if (fillEl) fillEl.style.width = '0%';
+
+      const total = fileList.length;
+      let successCount = 0;
+      let errorCount = 0;
+      let totalUnitsAdded = 0;
+
+      titleEl.textContent = `Procesando ${total} archivo(s)...`;
+      titleEl.style.color = '#38bdf8';
+      statsEl.textContent = `0 de ${total} procesados`;
+
+      // Renderizar filas iniciales
+      fileList.forEach((file, idx) => {
+        const row = document.createElement('div');
+        row.className = 'batch-file-row';
+        row.id = `batchRow-${idx}`;
+        row.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <span style="font-size: 1.2rem;">📊</span>
+            <div>
+              <strong style="color: #f1f5f9; font-size: 0.9rem;">${file.name}</strong>
+              <div id="fileDetail-${idx}" style="font-size: 0.76rem; color: var(--text-muted);">${(file.size / 1024).toFixed(1)} KB</div>
+            </div>
+          </div>
+          <span class="file-badge-status status-pending" id="fileStatus-${idx}">⏳ En cola</span>
+        `;
+        listEl.appendChild(row);
+      });
+
+      // Procesar archivo por archivo para retroalimentación en vivo
+      for (let i = 0; i < total; i++) {
+        const file = fileList[i];
+        const statusBadge = document.getElementById(`fileStatus-${i}`);
+        const detailEl = document.getElementById(`fileDetail-${i}`);
+        const row = document.getElementById(`batchRow-${i}`);
+
+        if (statusBadge) {
+          statusBadge.className = 'file-badge-status status-processing';
+          statusBadge.innerHTML = '⚙️ Procesando...';
+        }
+        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        const fd = new FormData();
+        fd.append('file', file);
+
+        try {
+          const res = await fetch('/api/cut-tickets/upload', {
+            method: 'POST',
+            body: fd
+          });
+          const result = await res.json();
+
+          if (res.ok && result.data) {
+            successCount++;
+            const d = result.data;
+            totalUnitsAdded += (d.totalUnits || 0);
+
+            if (statusBadge) {
+              statusBadge.className = 'file-badge-status status-success';
+              statusBadge.innerHTML = `✅ ${d.cutNumber}`;
+            }
+            if (detailEl) {
+              detailEl.innerHTML = `<span style="color: #38bdf8; font-weight: 600;">${d.style || 'Sin Estilo'}</span> • Cliente: ${d.customer || 'N/A'} • <strong style="color: #34d399;">${(d.totalUnits || 0).toLocaleString()} pcs</strong>`;
+            }
+          } else {
+            errorCount++;
+            if (statusBadge) {
+              statusBadge.className = 'file-badge-status status-error';
+              statusBadge.innerHTML = '❌ Error';
+            }
+            if (detailEl) {
+              detailEl.innerHTML = `<span style="color: #f87171;">${result.error || 'Fallo desconocido'}</span>`;
+            }
+          }
+        } catch (err) {
+          errorCount++;
+          if (statusBadge) {
+            statusBadge.className = 'file-badge-status status-error';
+            statusBadge.innerHTML = '❌ Error Red';
+          }
+          if (detailEl) {
+            detailEl.innerHTML = `<span style="color: #f87171;">${err.message}</span>`;
+          }
+        }
+
+        // Actualizar barra de progreso
+        const percent = Math.round(((i + 1) / total) * 100);
+        fillEl.style.width = `${percent}%`;
+        statsEl.textContent = `${i + 1} de ${total} procesados (${successCount} con éxito, ${errorCount} errores)`;
+      }
+
+      // Resumen final
+      isProcessingBatch = false;
+      playBeep(errorCount === 0);
+
+      if (errorCount === 0) {
+        titleEl.textContent = `¡Completado! ${successCount} orden(es) ingresadas al sistema`;
+        titleEl.style.color = '#34d399';
+      } else {
+        titleEl.textContent = `Finalizado con advertencias: ${successCount} exitosos, ${errorCount} fallidos`;
+        titleEl.style.color = '#fbbf24';
+      }
+
+      statsEl.innerHTML = `<strong>Total unidades agregadas: ${totalUnitsAdded.toLocaleString()} prendas</strong> • Listos para corte y confección`;
+      btnGoKanban.style.display = 'inline-flex';
+
+      // Actualizar los datos del Kanban en segundo plano
+      loadWIPData();
+
+      // Limpiar inputs de archivo para permitir seleccionar los mismos de nuevo si se desea
+      const fIn = document.getElementById('folderInput');
+      const filesIn = document.getElementById('filesInput');
+      if (fIn) fIn.value = '';
+      if (filesIn) filesIn.value = '';
+      loadIngestTable();
+    } finally {
+      isProcessingBatch = false;
+    }
+  }
+
+    function resetBatchUpload() {
+      const panel = document.getElementById('batchStatusPanel');
+      if (panel) panel.style.display = 'none';
+      const fIn = document.getElementById('folderInput');
+      const filesIn = document.getElementById('filesInput');
+      if (fIn) fIn.value = '';
+      if (filesIn) filesIn.value = '';
+      loadIngestTable();
+    }
+
+    async function loadIngestTable() {
+      const tbody = document.getElementById('ingestTableBody');
+      const badge = document.getElementById('ingestDbBadge');
+      if (!tbody) return;
+
+      const empresa = JSON.parse(localStorage.getItem(EMPRESA_KEY) || '{}');
+      if (badge) badge.textContent = empresa.empresa || 'sws';
+
+      try {
+        const res = await fetch('/api/cut-tickets');
+        const tickets = await res.json();
+
+        if (!Array.isArray(tickets) || tickets.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                No hay órdenes de corte registradas aún en esta base de datos.
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        tbody.innerHTML = tickets.map(t => `
+          <tr>
+            <td><strong style="color: #38bdf8;">${t.CutNumber}</strong></td>
+            <td><span style="font-family: monospace; color: #a78bfa; font-weight: 600;">${t.OrderNumber || '-'}</span></td>
+            <td style="font-weight: 600;">${t.Style || 'Sin estilo'}</td>
+            <td><span class="ticket-customer">${t.Customer || 'N/A'}</span></td>
+            <td><strong style="color: #34d399;">${(t.TotalUnits || 0).toLocaleString()} u.</strong></td>
+            <td><span class="status-badge" style="background: rgba(255,255,255,0.08); padding: 0.25rem 0.65rem; border-radius: 6px; font-weight: 700; font-size: 0.75rem;">${t.Status}</span></td>
+            <td style="font-size: 0.78rem; color: var(--text-muted);">${t.SourceFileName || '-'}</td>
+            <td style="font-size: 0.78rem; color: var(--text-muted);">${t.CreatedAt ? new Date(t.CreatedAt).toLocaleString() : '-'}</td>
+            <td>
+              <div style="display: flex; gap: 0.3rem;">
+                <button class="btn-step" style="padding: 0.25rem 0.55rem; font-size: 0.75rem;" onclick="openDetailModal(${t.IdCutTicket})">👁️ Detalle</button>
+                <button class="btn-step" style="padding: 0.25rem 0.55rem; font-size: 0.75rem; color: #38bdf8; border-color: rgba(56,189,248,0.3);" onclick="switchView('kanban')">📋 Kanban</button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" style="text-align: center; color: #ef4444; padding: 1.5rem;">
+              Error al consultar órdenes: ${err.message}
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    // ==========================================================
+    // MÓDULO DE REBAJA DE TRIMMINGS Y EXPLOSIÓN BOM (ERP SADE)
+    // ==========================================================
+    let allTrimmingCuts = [];
+    let currentExplosion = null;
+
+    async function loadTrimmingsTable() {
+      const tbody = document.getElementById('trimTableBody');
+      if (!tbody) return;
+
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">
+            ⏳ Consultando estado de órdenes e inventario SADE...
+          </td>
+        </tr>
+      `;
+
+      try {
+        const res = await fetch('/api/trimmings/cuts');
+        allTrimmingCuts = await res.json();
+
+        // Actualizar KPIs de Trimmings
+        const total = allTrimmingCuts.length;
+        const pending = allTrimmingCuts.filter(c => c.TrimmingStatus === 'PENDIENTE').length;
+        const completed = allTrimmingCuts.filter(c => c.TrimmingStatus === 'REBAJADO').length;
+        const totalUnits = allTrimmingCuts.reduce((acc, c) => acc + (c.TotalUnits || 0), 0);
+
+        document.getElementById('kpiTrimTotal').textContent = total;
+        document.getElementById('kpiTrimPending').textContent = pending;
+        document.getElementById('kpiTrimCompleted').textContent = completed;
+        document.getElementById('kpiTrimUnits').textContent = totalUnits.toLocaleString() + ' u.';
+
+        filterTrimmingsTable();
+      } catch (err) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" style="text-align: center; color: #ef4444; padding: 2rem;">
+              Error al consultar datos de trimmings: ${err.message}
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    function filterTrimmingsTable() {
+      const search = (document.getElementById('trimSearchInput')?.value || '').toLowerCase().trim();
+      const statusFilter = document.getElementById('trimStatusFilter')?.value || '';
+      const wipFilter = document.getElementById('trimCutWipFilter')?.value || '';
+
+      const filtered = allTrimmingCuts.filter(c => {
+        const matchesSearch = !search ||
+          (c.CutNumber && c.CutNumber.toLowerCase().includes(search)) ||
+          (c.Style && c.Style.toLowerCase().includes(search)) ||
+          (c.Customer && c.Customer.toLowerCase().includes(search)) ||
+          (c.OrderNumber && c.OrderNumber.toLowerCase().includes(search));
+
+        const matchesStatus = !statusFilter || c.TrimmingStatus === statusFilter;
+        const matchesWip = !wipFilter || c.CutStatus === wipFilter;
+
+        return matchesSearch && matchesStatus && matchesWip;
+      });
+
+      renderTrimmingsRows(filtered);
+    }
+
+    function renderTrimmingsRows(cuts) {
+      const tbody = document.getElementById('trimTableBody');
+      if (!tbody) return;
+
+      if (cuts.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2.5rem;">
+              No se encontraron órdenes con los filtros seleccionados.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = cuts.map(c => {
+        const isRebajado = c.TrimmingStatus === 'REBAJADO';
+        const badgeColor = isRebajado ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)';
+        const textColor = isRebajado ? '#34d399' : '#fbbf24';
+        const borderColor = isRebajado ? 'rgba(16, 185, 129, 0.4)' : 'rgba(245, 158, 11, 0.4)';
+        const icon = isRebajado ? '✅' : '⚠️';
+        const statusLabel = isRebajado ? 'Salida Generada' : 'Pendiente Rebaja';
+
+        const promovBadge = c.ProMovNumber
+          ? `<span style="font-family: monospace; font-weight: 700; color: #38bdf8; background: rgba(56, 189, 248, 0.12); padding: 0.25rem 0.6rem; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.3);">#${c.ProMovNumber}</span>`
+          : `<span style="color: var(--text-muted); font-size: 0.8rem;">Sin salida</span>`;
+
+        return `
+          <tr>
+            <td><strong style="color: #38bdf8; font-size: 0.95rem;">${c.CutNumber}</strong></td>
+            <td><span style="font-family: monospace; color: #a78bfa; font-weight: 600;">${c.OrderNumber || '-'}</span></td>
+            <td>
+              <div style="font-weight: 600; color: #f8fafc;">${c.Style || 'Sin estilo'}</div>
+            </td>
+            <td><span class="ticket-customer">${c.Customer || 'N/A'}</span></td>
+            <td><strong style="color: #34d399;">${(c.TotalUnits || 0).toLocaleString()} u.</strong></td>
+            <td>
+              <span class="status-badge" style="background: rgba(255,255,255,0.06); padding: 0.25rem 0.65rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700;">
+                ${c.CutStatus}
+              </span>
+            </td>
+            <td>
+              <span style="background: ${badgeColor}; color: ${textColor}; border: 1px solid ${borderColor}; padding: 0.3rem 0.7rem; border-radius: 8px; font-size: 0.78rem; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem;">
+                ${icon} ${statusLabel}
+              </span>
+            </td>
+            <td>${promovBadge}</td>
+            <td style="text-align: right;">
+              <div style="display: inline-flex; gap: 0.4rem; justify-content: flex-end;">
+                <button class="btn-primary" style="padding: 0.35rem 0.8rem; font-size: 0.8rem; background: ${isRebajado ? 'rgba(56,189,248,0.2)' : 'var(--primary)'}; border: 1px solid ${isRebajado ? '#38bdf8' : 'transparent'};" onclick="openTrimExplosionModal(${c.IdCutTicket})">
+                  ${isRebajado ? '👁️ Ver BOM' : '⚡ Rebajar Trimmings'}
+                </button>
+                ${isRebajado && c.ProMovNumber ? `
+                  <button class="btn-step" style="padding: 0.35rem 0.7rem; font-size: 0.8rem; background: rgba(16,185,129,0.15); color: #34d399; border-color: rgba(16,185,129,0.4);" onclick="openTrimMovementModal('${c.ProMovNumber}')" title="Ver comprobante de salida ERP">
+                    📄 ProMov #${c.ProMovNumber}
+                  </button>
+                ` : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function openTrimExplosionModal(idCutTicket) {
+      const modal = document.getElementById('trimExplosionModalBackdrop');
+      const content = document.getElementById('trimExpModalContent');
+      const title = document.getElementById('trimExpModalTitle');
+      const subtitle = document.getElementById('trimExpModalSubtitle');
+
+      modal.style.display = 'flex';
+      content.innerHTML = `
+        <div style="text-align: center; padding: 3rem; color: var(--text-muted);">
+          <div style="font-size: 2rem; margin-bottom: 0.8rem;">⏳</div>
+          Explosionando materiales recursivamente desde la base de datos SWS...
+        </div>
+      `;
+
+      try {
+        const res = await fetch(`/api/trimmings/cuts/${idCutTicket}/explosion`);
+        const data = await res.json();
+        currentExplosion = data;
+
+        const ticket = data.ticket || {};
+        const isRebajado = !!data.existingProMov;
+
+        title.innerHTML = `⚡ Explosión de Materiales: <span style="color: #ffffff; margin-left: 0.3rem;">${ticket.CutNumber || 'Corte'}</span>`;
+        subtitle.innerHTML = `
+          Estilo: <strong style="color: #38bdf8;">${ticket.Style || '-'}</strong> • 
+          Prendas del Corte: <strong style="color: #34d399;">${(ticket.TotalUnits || 0).toLocaleString()} pcs</strong> • 
+          Cliente: <strong>${ticket.Customer || '-'}</strong>
+        `;
+
+        if (!data.hasBOM) {
+          content.innerHTML = `
+            <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); padding: 1.5rem; border-radius: 10px; color: #f87171; margin-bottom: 1.5rem;">
+              <h3 style="margin-bottom: 0.5rem;">⚠️ No se encontró Lista de Materiales (BOM)</h3>
+              <p style="font-size: 0.9rem; margin-bottom: 1rem;">${data.message}</p>
+              <div style="display: flex; gap: 0.8rem; align-items: center;">
+                <input type="text" id="manualProductAssign" class="form-input" style="flex: 1;" placeholder="Ingresa el código idProducto exacto en ERP (ej. 08251700RG)...">
+                <button class="btn-primary" onclick="reExplodeWithCustomProduct(${idCutTicket})">Vincular y Calcular</button>
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        // Renderizar vista completa de explosión y formulario de salida
+        const existingAlert = isRebajado ? `
+          <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; padding: 0.9rem 1.2rem; border-radius: 10px; color: #34d399; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <strong>✅ Salida de Almacén ya generada en ERP SADE:</strong> Movimiento <strong>#${data.existingProMov.ProMov}</strong> 
+              (Fecha: ${new Date(data.existingProMov.Fecha).toLocaleDateString()}, Almacén: ${data.existingProMov.idAlmacen})
+            </div>
+            <button class="btn-step" style="padding: 0.35rem 0.8rem; font-size: 0.82rem; background: rgba(255,255,255,0.1); color: white;" onclick="openTrimMovementModal('${data.existingProMov.ProMov}')">
+              Ver Comprobante
+            </button>
+          </div>
+        ` : '';
+
+        const erpBadge = data.erpProduct ? `
+          <div style="display: flex; gap: 0.8rem; align-items: center; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); padding: 0.8rem 1rem; border-radius: 8px; margin-bottom: 1.2rem; font-size: 0.88rem;">
+            <span>🔗 Producto ERP Emparejado:</span>
+            <strong style="color: #38bdf8; font-family: monospace;">${data.erpProduct.idProducto}</strong>
+            <span style="color: var(--text-muted);">(${data.erpProduct.Producto})</span>
+            <span style="margin-left: auto; color: #34d399; font-size: 0.8rem; font-weight: 600;">● Compuesto Multinivel Activo</span>
+          </div>
+        ` : '';
+
+        // Filas consolidadas
+        const consolidatedRows = data.consolidated.map((item, idx) => `
+          <tr data-index="${idx}">
+            <td style="font-family: monospace; font-weight: 700; color: #38bdf8;">${item.idProducto}</td>
+            <td style="font-weight: 500;">${item.producto}</td>
+            <td style="text-align: right; color: var(--text-muted); font-size: 0.85rem;">${item.cantidadUnitaria}</td>
+            <td style="text-align: right;">
+              <input type="number" step="any" class="form-input trim-qty-input" data-prod="${item.idProducto}" value="${item.cantidadTotal}" style="width: 110px; text-align: right; padding: 0.35rem 0.6rem; font-weight: 700; color: #34d399;" ${isRebajado ? 'disabled' : ''}>
+            </td>
+            <td style="color: var(--text-muted); font-size: 0.85rem;">${item.idUnidad || 'Unidad'}</td>
+            <td style="text-align: right; color: var(--text-muted); font-size: 0.85rem;">$${parseFloat(item.costo || 0).toFixed(4)}</td>
+          </tr>
+        `).join('');
+
+        content.innerHTML = `
+          ${existingAlert}
+          ${erpBadge}
+
+          <!-- Tabs internas del modal -->
+          <div style="display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border); margin-bottom: 1.2rem; padding-bottom: 0.5rem;">
+            <button class="nav-tab active" id="btnTabConsolidated" onclick="switchTrimModalTab('consolidated')">
+              📦 Consolidado de Accesorios a Rebajar (${data.consolidated.length})
+            </button>
+            <button class="nav-tab" id="btnTabTree" onclick="switchTrimModalTab('tree')">
+              🌳 Árbol Jerárquico BOM
+            </button>
+          </div>
+
+          <!-- Tab 1: Consolidado -->
+          <div id="tabContentConsolidated">
+            <div style="max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Código SADE</th>
+                    <th>Accesorio / Descripción</th>
+                    <th style="text-align: right;">Consumo Unit.</th>
+                    <th style="text-align: right;">Consumo Total Corte</th>
+                    <th>Unidad</th>
+                    <th style="text-align: right;">Costo Est.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${consolidatedRows}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Panel de Generación en SADE -->
+            <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border); border-radius: 12px; padding: 1.4rem;">
+              <h4 style="color: #38bdf8; margin-bottom: 1rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                ⚙️ Parámetros para Salida en ERP SADE (ProMov)
+              </h4>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.2rem;">
+                <div class="form-group">
+                  <label>Almacén Origen:</label>
+                  <select id="trimAlmacenSelect" class="form-input" ${isRebajado ? 'disabled' : ''}>
+                    <option value="Stock" selected>Stock (Almacén de Trimmings)</option>
+                    <option value="General">General (Almacén Central)</option>
+                    <option value="Cutting">Cutting</option>
+                    <option value="Production">Production</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label>Usuario Operador:</label>
+                  <input type="text" id="trimUserParam" class="form-input" value="${localStorage.getItem('sws_user') || 'SWS_OPERADOR'}" ${isRebajado ? 'disabled' : ''}>
+                </div>
+
+                <div class="form-group" style="display: flex; flex-direction: column; justify-content: center;">
+                  <label style="cursor: pointer; display: flex; align-items: center; gap: 0.5rem; margin-top: 1.2rem;">
+                    <input type="checkbox" id="trimPostNowCheck" checked ${isRebajado ? 'disabled' : ''}>
+                    <span style="font-size: 0.85rem; color: #f8fafc; font-weight: 600;">Postear movimiento directamente</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 1.2rem;">
+                <label>Concepto en ERP:</label>
+                <input type="text" class="form-input" value="SALPRODUCCION - ${ticket.CutNumber}- ${ticket.Style}- ${ticket.TotalUnits} pcs" readonly style="color: var(--text-muted); background: rgba(0,0,0,0.3);">
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; gap: 0.8rem; margin-top: 1rem;">
+                <button class="btn-step" style="padding: 0.6rem 1.2rem;" onclick="closeTrimExplosionModal()">Cerrar</button>
+                ${!isRebajado ? `
+                  <button class="btn-success" id="btnConfirmGenerateProMov" style="padding: 0.6rem 1.5rem; font-size: 0.95rem;" onclick="confirmGenerateTrimmingProMov(${idCutTicket})">
+                    🚀 Confirmar y Generar Salida en ERP SADE
+                  </button>
+                ` : `
+                  <button class="btn-step" style="padding: 0.6rem 1.5rem; opacity: 0.6; cursor: not-allowed;" disabled>
+                    ✅ Salida ya generada (#${data.existingProMov.ProMov})
+                  </button>
+                `}
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 2: Árbol Jerárquico -->
+          <div id="tabContentTree" style="display: none;">
+            <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; max-height: 450px; overflow-y: auto;">
+              <div style="font-weight: 700; color: #38bdf8; margin-bottom: 1rem; font-size: 1rem;">
+                👔 Estilo Padre: ${ticket.Style} (${(ticket.TotalUnits || 0).toLocaleString()} prendas)
+              </div>
+              ${renderTreeHtml(data.tree)}
+            </div>
+          </div>
+        `;
+      } catch (err) {
+        content.innerHTML = `
+          <div style="text-align: center; color: #ef4444; padding: 2rem;">
+            Error al explosionar materiales: ${err.message}
+          </div>
+        `;
+      }
+    }
+
+    function switchTrimModalTab(tab) {
+      document.getElementById('btnTabConsolidated').classList.toggle('active', tab === 'consolidated');
+      document.getElementById('btnTabTree').classList.toggle('active', tab === 'tree');
+      document.getElementById('tabContentConsolidated').style.display = tab === 'consolidated' ? 'block' : 'none';
+      document.getElementById('tabContentTree').style.display = tab === 'tree' ? 'block' : 'none';
+    }
+
+    function renderTreeHtml(nodes, depth = 0) {
+      if (!nodes || nodes.length === 0) return '<div style="color: var(--text-muted); font-size: 0.85rem; padding-left: 1.5rem;">(Sin desglose multinivel)</div>';
+
+      return nodes.map(n => {
+        const indent = depth * 24;
+        const icon = n.esCompuesto ? '📦' : '🧵';
+        const badge = n.esCompuesto
+          ? `<span style="font-size: 0.72rem; background: rgba(56,189,248,0.15); color: #38bdf8; padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 700;">Sub-Ensamble Compuesto</span>`
+          : `<span style="font-size: 0.72rem; background: rgba(16,185,129,0.15); color: #34d399; padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 700;">Accesorio Físico</span>`;
+
+        return `
+          <div style="margin-left: ${indent}px; margin-bottom: 0.5rem; border-left: 2px solid var(--border); padding-left: 0.8rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem;">
+              <span>${icon}</span>
+              <strong style="color: #f8fafc; font-family: monospace;">${n.idProducto}</strong>
+              <span style="color: var(--text-muted);">${n.producto}</span>
+              ${badge}
+              <span style="margin-left: auto; color: #34d399; font-weight: 700; font-size: 0.85rem;">
+                ${n.cantidadUnitaria} /pza &rarr; Total: ${(n.cantidadAcumulada || 0).toLocaleString()} ${n.idUnidad}
+              </span>
+            </div>
+            ${n.subComponentes && n.subComponentes.length > 0 ? renderTreeHtml(n.subComponentes, depth + 1) : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function reExplodeWithCustomProduct(idCutTicket) {
+      const customInput = document.getElementById('manualProductAssign');
+      const customId = customInput ? customInput.value.trim() : '';
+      if (!customId) {
+        alert('Por favor introduce un código de producto SADE.');
+        return;
+      }
+
+      const modal = document.getElementById('trimExplosionModalBackdrop');
+      const content = document.getElementById('trimExpModalContent');
+      content.innerHTML = `<div style="text-align: center; padding: 2rem;">Recalculando con ${customId}...</div>`;
+
+      try {
+        const res = await fetch(`/api/trimmings/cuts/${idCutTicket}/explosion?customProductId=${encodeURIComponent(customId)}`);
+        const data = await res.json();
+        if (data.hasBOM) {
+          openTrimExplosionModal(idCutTicket);
+        } else {
+          alert('El producto no tiene fórmula BOM definida en ProductoDet.');
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    async function confirmGenerateTrimmingProMov(idCutTicket) {
+      if (!currentExplosion || !currentExplosion.consolidated) {
+        alert('No hay datos de explosión cargados.');
+        return;
+      }
+
+      const btn = document.getElementById('btnConfirmGenerateProMov');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Generando salida en SADE...';
+      }
+
+      try {
+        // Capturar cantidades editadas por el operador
+        const itemsToPost = currentExplosion.consolidated.map(item => {
+          const inputEl = document.querySelector(`.trim-qty-input[data-prod="${item.idProducto}"]`);
+          const qty = inputEl ? parseFloat(inputEl.value) : item.cantidadTotal;
+          return {
+            idProducto: item.idProducto,
+            producto: item.producto,
+            cantidadTotal: isNaN(qty) ? item.cantidadTotal : qty,
+            idUnidad: item.idUnidad,
+            costo: item.costo
+          };
+        });
+
+        const idAlmacen = document.getElementById('trimAlmacenSelect')?.value || 'Stock';
+        const usuario = document.getElementById('trimUserParam')?.value || 'SWS_OPERADOR';
+        const postNow = document.getElementById('trimPostNowCheck')?.checked || false;
+
+        const res = await fetch(`/api/trimmings/cuts/${idCutTicket}/generate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: itemsToPost,
+            idAlmacen,
+            usuario,
+            postNow
+          })
+        });
+
+        const result = await res.json();
+
+        if (!res.ok) {
+          throw new Error(result.error || 'Error al generar salida en ERP SADE');
+        }
+
+        playBeep(true);
+        alert(`¡Salida de Trimmings creada exitosamente en ERP SADE!\n\nNúmero de Movimiento ProMov: #${result.proMovNumber}\nArtículos rebajados: ${result.itemsCount}\nAlmacén: ${result.idAlmacen}`);
+
+        closeTrimExplosionModal();
+        loadTrimmingsTable();
+        loadWIPData(); // actualiza historial en kanban
+
+        // Abrir automáticamente el comprobante generado
+        openTrimMovementModal(result.proMovNumber);
+      } catch (err) {
+        playBeep(false);
+        alert(`Error al generar salida: ${err.message}`);
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '🚀 Confirmar y Generar Salida en ERP SADE';
+        }
+      }
+    }
+
+    function closeTrimExplosionModal() {
+      document.getElementById('trimExplosionModalBackdrop').style.display = 'none';
+      currentExplosion = null;
+    }
+
+    async function openTrimMovementModal(idOrNumber) {
+      const modal = document.getElementById('trimMovementModalBackdrop');
+      const content = document.getElementById('trimMovContent');
+      const title = document.getElementById('trimMovTitle');
+      const subtitle = document.getElementById('trimMovSubtitle');
+
+      modal.style.display = 'flex';
+      content.innerHTML = `<div style="text-align: center; padding: 2.5rem; color: var(--text-muted);">Consultando comprobante en ERP SADE...</div>`;
+
+      try {
+        const res = await fetch(`/api/trimmings/promov/${encodeURIComponent(idOrNumber)}`);
+        const data = await res.json();
+
+        if (!res.ok || !data.movement) {
+          throw new Error(data.error || 'No se encontró el movimiento.');
+        }
+
+        const mov = data.movement;
+        title.innerHTML = `Comprobante de Salida: <span style="font-family: monospace; color: #38bdf8;">ProMov #${mov.ProMov}</span>`;
+        subtitle.innerHTML = `Fecha: <strong>${new Date(mov.Fecha).toLocaleString()}</strong> • Tipo: <strong>SAL PRODUCCION (11)</strong> • Almacén: <strong>${mov.idAlmacen}</strong>`;
+
+        const detailsRows = data.details.map((d, i) => `
+          <tr>
+            <td style="color: var(--text-muted);">${d.Linea || (i + 1)}</td>
+            <td style="font-family: monospace; font-weight: 700; color: #38bdf8;">${d.idProducto}</td>
+            <td style="font-weight: 500;">${d.Producto}</td>
+            <td style="text-align: right; font-weight: 700; color: #34d399;">${parseFloat(d.Cantidad).toLocaleString()}</td>
+            <td style="color: var(--text-muted); font-size: 0.85rem;">${d.idUnidad || 'Unidad'}</td>
+            <td style="text-align: right; color: var(--text-muted); font-size: 0.85rem;">$${parseFloat(d.Costo || 0).toFixed(4)}</td>
+          </tr>
+        `).join('');
+
+        content.innerHTML = `
+          <div style="background: var(--surface-card); border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem; margin-bottom: 1.5rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; font-size: 0.88rem;">
+            <div><span style="color: var(--text-muted);">Referencia:</span> <strong style="color: #38bdf8;">${mov.Referencia || '-'}</strong></div>
+            <div><span style="color: var(--text-muted);">Concepto:</span> <strong>${mov.Concepto || '-'}</strong></div>
+            <div><span style="color: var(--text-muted);">Usuario:</span> <strong>${mov.Usuario || '-'}</strong></div>
+            <div><span style="color: var(--text-muted);">Estado:</span> <strong style="color: ${mov.Posteado ? '#34d399' : '#fbbf24'};">${mov.Posteado ? 'POSTEADO' : 'BORRADOR'}</strong></div>
+          </div>
+
+          <div style="max-height: 380px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem;">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Código SADE</th>
+                  <th>Accesorio Rebajado</th>
+                  <th style="text-align: right;">Cantidad Neta</th>
+                  <th>Unidad</th>
+                  <th style="text-align: right;">Costo</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${detailsRows}
+              </tbody>
+            </table>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 0.8rem;">
+            <button class="btn-step" onclick="window.print()">🖨️ Imprimir Comprobante</button>
+            <button class="btn-primary" onclick="closeTrimMovementModal()">Aceptar</button>
+          </div>
+        `;
+      } catch (err) {
+        content.innerHTML = `
+          <div style="text-align: center; color: #ef4444; padding: 2rem;">
+            Error al consultar movimiento: ${err.message}
+          </div>
+        `;
+      }
+    }
+
+    function closeTrimMovementModal() {
+      document.getElementById('trimMovementModalBackdrop').style.display = 'none';
+    }
+
+    // Modal de Simulación Manual / Calculadora BOM
+    function openSimulateModal() {
+      document.getElementById('trimSimModalBackdrop').style.display = 'flex';
+      document.getElementById('simResultsContainer').style.display = 'none';
+      setTimeout(() => document.getElementById('simProductInput').focus(), 100);
+    }
+
+    function closeTrimSimModal() {
+      document.getElementById('trimSimModalBackdrop').style.display = 'none';
+    }
+
+    let searchSimTimeout = null;
+    function onSearchSimProducts(val) {
+      clearTimeout(searchSimTimeout);
+      const resultsBox = document.getElementById('simSearchResults');
+      if (!val || val.trim().length < 2) {
+        resultsBox.style.display = 'none';
+        return;
+      }
+
+      searchSimTimeout = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/trimmings/styles/search?q=${encodeURIComponent(val.trim())}`);
+          const prods = await res.json();
+
+          if (!prods || prods.length === 0) {
+            resultsBox.innerHTML = `<div style="padding: 0.8rem; color: var(--text-muted); font-size: 0.85rem;">No se encontraron productos coincidentes.</div>`;
+            resultsBox.style.display = 'block';
+            return;
+          }
+
+          resultsBox.innerHTML = prods.map(p => `
+            <div style="padding: 0.6rem 0.8rem; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 0.85rem;" onmouseover="this.style.background='var(--surface-hover)'" onmouseout="this.style.background='transparent'" onclick="selectSimProduct('${p.idProducto}', '${p.Producto.replace(/'/g, "\\'")}')">
+              <strong style="color: #38bdf8; font-family: monospace;">${p.idProducto}</strong> - <span>${p.Producto}</span>
+              ${p.Compuesto ? '<span style="color: #34d399; font-size: 0.72rem; margin-left: 0.4rem;">[BOM]</span>' : ''}
+            </div>
+          `).join('');
+          resultsBox.style.display = 'block';
+        } catch (e) {}
+      }, 250);
+    }
+
+    function selectSimProduct(id, desc) {
+      document.getElementById('simProductInput').value = id;
+      document.getElementById('simSearchResults').style.display = 'none';
+    }
+
+    async function executeSimulateBOM() {
+      const prodCode = document.getElementById('simProductInput').value.trim();
+      const units = parseInt(document.getElementById('simUnitsInput').value, 10) || 100;
+      const resContainer = document.getElementById('simResultsContainer');
+
+      if (!prodCode) {
+        alert('Ingresa un estilo o código de producto.');
+        return;
+      }
+
+      resContainer.style.display = 'block';
+      resContainer.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted);">Calculando simulación...</div>`;
+
+      try {
+        const res = await fetch(`/api/trimmings/explosion?style=${encodeURIComponent(prodCode)}&totalUnits=${units}`);
+        const data = await res.json();
+
+        if (!data.hasBOM) {
+          resContainer.innerHTML = `<div style="color: #ef4444; padding: 1.5rem; text-align: center;">No se encontró fórmula BOM para este producto en ProductoDet.</div>`;
+          return;
+        }
+
+        const rows = data.consolidated.map(item => `
+          <tr>
+            <td style="font-family: monospace; font-weight: 700; color: #38bdf8;">${item.idProducto}</td>
+            <td>${item.producto}</td>
+            <td style="text-align: right; color: var(--text-muted);">${item.cantidadUnitaria}</td>
+            <td style="text-align: right; font-weight: 700; color: #34d399;">${item.cantidadTotal.toLocaleString()}</td>
+            <td>${item.idUnidad || 'Unidad'}</td>
+          </tr>
+        `).join('');
+
+        resContainer.innerHTML = `
+          <div style="border-top: 1px solid var(--border); padding-top: 1.2rem;">
+            <div style="margin-bottom: 1rem; color: #38bdf8; font-weight: 700;">
+              Consumo proyectado para ${units.toLocaleString()} prendas de [${data.erpProduct.idProducto}]:
+            </div>
+            <div style="max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Código Accesorio</th>
+                    <th>Descripción</th>
+                    <th style="text-align: right;">Unitario</th>
+                    <th style="text-align: right;">Consumo Total</th>
+                    <th>Unidad</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        resContainer.innerHTML = `<div style="color: #ef4444; padding: 1rem;">Error: ${e.message}</div>`;
+      }
+    }
+
+    // Inicializar con validación de sesión
+    if (checkAuthOrRedirect()) {
+      loadWIPData();
+    }
+  </script>
+</body>
+</html>

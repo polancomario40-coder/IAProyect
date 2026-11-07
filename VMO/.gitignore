@@ -1,0 +1,62 @@
+# Entorno
+.env
+
+# Bases de datos
+*.db
+db/
+estimaciones/db/
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code local — todo menos los comandos del proyecto.
+# .claude/commands/ SI se versiona: son el protocolo de apertura y cierre
+# ejecutable, y un clone limpio sin ellos tiene un CLAUDE.md que manda a
+# correr /apertura y /cierre y no existen. settings.local.json, skills/ y
+# worktrees/ son de esta maquina y siguen fuera.
+.claude/*
+!.claude/commands/
+.gstack/
+
+# Datos sensibles de empresa
+conduces/data/
+archivos/
+estimaciones/data/*
+estimaciones/facturas/procesadas/
+
+# Excepcion: las 9 plantillas de estimacion son assets de la aplicacion
+# (estructura + formulas de Excel), necesarias para que el generador de
+# Estimaciones funcione en cualquier checkout — sin ellas, un clone limpio
+# no puede generar ninguna estimacion (issue #5 de Fase 2, confirmado con
+# 89 tests rojos en un bootstrap real). Llevan el nombre real del cliente/
+# contratista horneado en celdas fijas (A2/B7) pero no precios ni datos de
+# facturas — decision explicita del usuario, repo privado.
+!estimaciones/data/plantilla_estimacion_*.xlsx
+!estimaciones/data/plantilla_estimacion.xlsx
+
+# Excepcion: los croquis de las hojas RCO (y los logos DOMICEM) tambien son
+# assets de la aplicacion, mismo trato que las plantillas (issue #27,
+# decision 7). Sin ellos, cualquier checkout que no sea la maquina de
+# desarrollo genera RCO con el marco vacio y el documento PARECE completo
+# sin estarlo. Son 22 imagenes (~3 MB ya comprimidas por
+# scripts/sembrar_croquis.py) + 2 logos + el manifiesto, estables entre
+# estimaciones — casi nunca van a cambiar.
+!estimaciones/data/croquis/
+!estimaciones/data/croquis/**
+
+# Archivos generados
+reportes/
+facturas/
+backups/
+dropoff/
+misc/
+conduces/fallos/
+
+# Carpetas temporales de corridas de pytest hechas en sandbox (Codex). Quedan
+# con ACL inaccesible en Windows y ni siquiera `git status` puede leerlas —
+# ignorarlas evita el warning en cada comando de git y que se cuelen a un
+# commit si en algun momento vuelven a ser legibles.
+.test_tmp_*/
+.tmp_pytest_*/

@@ -1,0 +1,66 @@
+Manifiesto de croquis y logos — generado por scripts/sembrar_croquis.py
+fecha: 2026-09-01
+regenerar con: python scripts/sembrar_croquis.py  (fuentes en
+estimaciones/data/plantillas_por_fase/ o $EST_FUENTES_DIR)
+
+regla de extraccion: el croquis es la imagen cuya ancla abarca
+10+ filas (vive dentro del marco A18:J43); los logos y las
+firmas escaneadas abarcan 1-3. Ver docstring del script.
+compresion: reescalado a 1200x900 px max, PNG, y JPEG si el PNG
+pasa el tope de 300 KB (openpyxl no deduplica imagenes: cada
+hoja RCO carga su copia completa dentro del .xlsx).
+
+DOMICEM/CAVERNAS :: DOMICEM/EST_DOMICEM_CIUDAD_PALACE_CAVERNAS_EXTERIORES_4800029676_N42_22072026_V01.xlsx
+  CD-COAF-RCO-22: clave 22 fuera del catalogo (capacidad 13) — se omite
+  CD-COAF-RCO-23: clave 23 fuera del catalogo (capacidad 13) — se omite
+  CD-COAF-RCO-02 (claves 2,5, dominante de la fase) sha256=93e703c2f881 812x772 613KB -> 812x772 164KB jpg q85 -> DOMICEM_CAVERNAS.jpg
+
+DOMICEM/VIVIENDAS :: DOMICEM/EST_DOMICEM_CIUDAD_PALACE_VIVIENDAS_PPACT_N04_22072026_V01.xlsx
+  CD-COAF-RCO-022: clave 22 fuera del catalogo (capacidad 9) — se omite
+  CD-COAF-RCO-07 (claves 7, dominante de la fase) sha256=93e703c2f881 812x772 613KB -> 812x772 164KB jpg q85 -> DOMICEM_VIVIENDAS.jpg
+
+DOMICEM/MACAO 2 :: DOMICEM/EST_DOMICEM_MACAO_II_4800029677_N33_22072026_V01.xlsx
+  CD-COAF-RCO-02 (claves 2, pisa al de fase) sha256=30914392f33c 1248x790 1124KB -> 1200x760 160KB jpg q85 -> DOMICEM_MACAO_2_02.jpg
+  CD-COAF-RCO-03 (claves 3, pisa al de fase) sha256=355ab9957353 927x717 744KB -> 927x717 129KB jpg q85 -> DOMICEM_MACAO_2_03.jpg
+  CD-COAF-RCO-04 (claves 4, pisa al de fase) sha256=355ab9957353 927x717 744KB -> 927x717 129KB jpg q85 -> DOMICEM_MACAO_2_04.jpg
+  CD-COAF-RCO-06. (claves 6,7,8, dominante de la fase) sha256=574fd5a505ec 998x632 855KB -> 998x632 133KB jpg q85 -> DOMICEM_MACAO_2.jpg
+
+DOMICEM/PATIO DE MANIOBRAS-TRB :: DOMICEM/EST_DOMICEM_PATIO DE MANIOBRAS_TRB_4800032854_N17_22072026_V01.xlsx
+  CD-COAF-RCO-05: clave 5 fuera del catalogo (capacidad 4) — se omite
+  CD-COAF-RCO-01 (claves 1,3,4, dominante de la fase) sha256=355ab9957353 927x717 744KB -> 927x717 129KB jpg q85 -> DOMICEM_PATIO_DE_MANIOBRAS_TRB.jpg
+  CD-COAF-RCO-02 (claves 2, pisa al de fase) sha256=a650e7df36eb 799x430 796KB -> 799x430 114KB jpg q85 -> DOMICEM_PATIO_DE_MANIOBRAS_TRB_02.jpg
+
+VMO/CANCHAS :: VMO/EST_VMO_CANCHAS_4800037426_N04_22072026_V1 Rv.xlsx
+  CD-COAF-RCO-04: clave 4 fuera del catalogo (capacidad 3) — se omite
+  CD-COAF-RCO-01 (claves 1,2,3, dominante de la fase) sha256=ab4cc100e68c 893x592 1280KB -> 893x592 194KB jpg q85 -> VMO_CANCHAS.jpg
+
+VMO/CEDIS :: VMO/EST_VMO_CEDIS_4800036588_N09_22072026_V01.xlsx
+  CD-COAF-RCO-01 (claves 1,2,3,4, dominante de la fase) sha256=355ab9957353 927x717 744KB -> 927x717 129KB jpg q85 -> VMO_CEDIS.jpg
+
+VMO/PATIO DE MANIOBRAS-TRA :: VMO/EST_VMO_PATIO DE MANIOBRAS_TRA_4800025583_N09_22072026.xlsx
+  CD-COAF-RCO-05: clave 5 fuera del catalogo (capacidad 4) — se omite
+  CD-COAF-RCO-01 (claves 1, dominante de la fase) sha256=26c9d92aa266 512x373 503KB -> 512x373 55KB jpg q85 -> VMO_PATIO_DE_MANIOBRAS_TRA.jpg
+  CD-COAF-RCO-02 (claves 2, pisa al de fase) sha256=19239006595d 860x759 1119KB -> 860x759 147KB jpg q85 -> VMO_PATIO_DE_MANIOBRAS_TRA_02.jpg
+  CD-COAF-RCO-04 (claves 4, pisa al de fase) sha256=de42f8f29838 688x607 585KB -> 688x607 117KB jpg q85 -> VMO_PATIO_DE_MANIOBRAS_TRA_04.jpg
+
+VMO/PODIUM-1-2-3 :: VMO/EST_VMO_PODIUM 1,2,3_PPACT_N04_22072026_V1.xlsx
+  CD-COAF-RCO-04: clave 4 fuera del catalogo (capacidad 3) — se omite
+  CD-COAF-RCO-01 (claves 1,3, dominante de la fase) sha256=355ab9957353 927x717 744KB -> 927x717 129KB jpg q85 -> VMO_PODIUM_1_2_3.jpg
+  CD-COAF-RCO-02 (claves 2, pisa al de fase) sha256=1d503a3af57d 1009x593 1355KB -> 1009x593 186KB jpg q85 -> VMO_PODIUM_1_2_3_02.jpg
+
+VMO/EXTERIORES :: VMO/EST_VMO_PPACT_AREA_EXTERIORES_N17_22072026_V01.xlsx
+  CD-COAF-RCO-01 (claves 1,2,8,9,12, dominante de la fase) sha256=55f0c087fa7d 915x802 1090KB -> 915x802 243KB jpg q85 -> VMO_EXTERIORES.jpg
+  CD-COAF-RCO-03 (claves 3, pisa al de fase) sha256=c85ddea2cf61 636x396 706KB -> 636x396 88KB jpg q85 -> VMO_EXTERIORES_03.jpg
+  CD-COAF-RCO-05 (claves 5, pisa al de fase) sha256=21a9cdfafdf5 738x1600 1637KB -> 415x900 98KB jpg q85 -> VMO_EXTERIORES_05.jpg
+  CD-COAF-RCO-06 (claves 6, pisa al de fase) sha256=21a9cdfafdf5 738x1600 1637KB -> 415x900 98KB jpg q85 -> VMO_EXTERIORES_06.jpg
+  CD-COAF-RCO-10 (claves 10, pisa al de fase) sha256=2153aedc6a71 1008x797 637KB -> 1008x797 98KB jpg q85 -> VMO_EXTERIORES_10.jpg
+  CD-COAF-RCO-11 (claves 11, pisa al de fase) sha256=b5bd12eb27fa 805x524 795KB -> 805x524 110KB jpg q85 -> VMO_EXTERIORES_11.jpg
+  CD-COAF-RCO-13 (claves 13, pisa al de fase) sha256=517e8dba86f5 786x657 243KB -> 786x657 224KB png -> VMO_EXTERIORES_13.png
+
+logos DOMICEM :: DOMICEM/EST_DOMICEM_MACAO_II_4800029677_N33_22072026_V01.xlsx :: CD-COAF-RCO-02
+  743x39 sha256=0ed38f0a7dfa 9KB -> logos/DOMICEM_cabecera.png
+  200x200 sha256=55016f13eb9f 20KB -> logos/DOMICEM_sello.png
+
+notas:
+  - VMO/EXTERIORES::CD-COAF-RCO-11 (2): clave 11 repetida con croquis distinto — se conservo el primero
+  - VMO/EXTERIORES::CD-COAF-RCO-11 (3): clave 11 repetida con croquis distinto — se conservo el primero

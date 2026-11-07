@@ -1,0 +1,101 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-base:#0D1829; --bg-surface:#152535; --bg-elevated:#1C3045; --bg-hover:#243850;
+  --brand:#D32F2F; --brand-light:#EF5350;
+  --text-primary:#EEF2F7; --text-secondary:rgba(238,242,247,0.62); --text-muted:rgba(238,242,247,0.32);
+  --border:rgba(255,255,255,0.07); --border-subtle:rgba(255,255,255,0.03);
+  --green:#10B981; --green-bg:rgba(16,185,129,0.11); --green-text:#34D399;
+  --red-status:#F87171; --red-status-bg:rgba(248,113,113,0.11);
+  --amber:#F59E0B; --amber-bg:rgba(245,158,11,0.11);
+  --r-md:12px; --font:'Inter',system-ui,sans-serif; --mono:'Fira Code',Consolas,monospace;
+  --shadow-md:0 4px 18px rgba(0,0,0,0.55);
+}
+* { box-sizing:border-box; }
+body { font-family:var(--font); font-size:14px; background:var(--bg-base); color:var(--text-primary);
+  margin:0; padding:28px; -webkit-font-smoothing:antialiased; }
+.resumen-box { background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--r-md);
+  padding:20px 22px; display:flex; flex-direction:column; gap:13px; max-width:900px; }
+.resumen-titulo { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); }
+.consulta-table { background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--r-md);
+  overflow:hidden; box-shadow:var(--shadow-md); font-size:13px; }
+.consulta-table table { width:100%; border-collapse:collapse; }
+.consulta-table th { background:rgba(0,0,0,.3); color:var(--text-muted); padding:9px 14px; text-align:left;
+  font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; border-bottom:1px solid var(--border); }
+.consulta-table td { padding:9px 14px; border-bottom:1px solid var(--border-subtle); color:var(--text-secondary); }
+.consulta-table td:first-child { font-family:var(--mono); font-size:12.5px; color:var(--text-primary); }
+.consulta-table tr:last-child td { border-bottom:none; }
+.est-cant-input { width:88px; background:var(--bg-elevated); border:1px solid var(--border); color:var(--text-primary);
+  border-radius:6px; padding:6px 8px; font-size:12.5px; font-family:var(--font); }
+.badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:20px; font-size:10.5px;
+  font-weight:700; text-transform:uppercase; letter-spacing:.3px; }
+.badge.ok { background:var(--green-bg); color:var(--green-text); }
+.badge.none { background:rgba(255,255,255,.05); color:var(--text-muted); }
+.badge.excl { background:var(--amber-bg); color:var(--amber); }
+.chk { width:16px; height:16px; accent-color:var(--brand); cursor:pointer; }
+/* La fila NO se atenua ni se tacha: en el documento sale completa, con su
+   Cant. Proyecto y su Acum. Anterior. Lo unico excluido es "Este periodo",
+   asi que la marca visual va solo en esa columna y en el borde de la fila. */
+tr.excluida td { background:rgba(245,158,11,0.045); }
+tr.excluida td:first-of-type { box-shadow:inset 3px 0 0 var(--amber); }
+.col-chk { text-align:center !important; width:64px; }
+.nota { font-size:11.5px; color:var(--text-muted); line-height:1.55; }
+.nota b { color:var(--text-secondary); font-weight:600; }
+h1 { font-size:15px; margin:0 0 4px; font-weight:700; letter-spacing:.2px; }
+.sub { font-size:12px; color:var(--text-muted); margin-bottom:22px; }
+</style></head><body>
+
+<h1>Generar Estimación — pantalla de revisión</h1>
+<div class="sub">DOMICEM · MACAO 2 · 2026-07-17 a 2026-08-14 &nbsp;·&nbsp; mockup de la columna nueva</div>
+
+<div class="resumen-box">
+  <div class="resumen-titulo">Serie Principal</div>
+  <div class="resumen-titulo">Catálogo de productos (4/9 con entregas en el período)</div>
+
+  <div class="consulta-table"><table>
+    <thead><tr>
+      <th class="col-chk">Incluir</th><th>Clave</th><th>Descripción</th>
+      <th>Cant. Proyecto</th><th>Acum. Anterior</th><th>Este período</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="col-chk"><input type="checkbox" class="chk" checked></td>
+        <td>1</td><td>Hormigón Fc350 … PLANTILLA</td>
+        <td><input class="est-cant-input" value="1372"></td>
+        <td><input class="est-cant-input" value="1369.5"></td>
+        <td><span class="badge none">sin entregas</span></td></tr>
+
+      <tr><td class="col-chk"><input type="checkbox" class="chk" checked></td>
+        <td>6</td><td>Hormigón Fc350 … COLUMNAS - MUROS</td>
+        <td><input class="est-cant-input" value="27848"></td>
+        <td><input class="est-cant-input" value="19681.25"></td>
+        <td><span class="badge ok">312 facturas</span></td></tr>
+
+      <tr class="excluida"><td class="col-chk"><input type="checkbox" class="chk"></td>
+        <td>8</td><td>Hormigón Fc350 … LOSAS Y VIGAS</td>
+        <td><input class="est-cant-input" value="81499"></td>
+        <td><input class="est-cant-input" value="49569.5"></td>
+        <td><span class="badge excl">excluido — 836 facturas</span></td></tr>
+
+      <tr><td class="col-chk"><input type="checkbox" class="chk" checked></td>
+        <td>9</td><td>Hormigón Fc350 Agg 3/8" imp</td>
+        <td><input class="est-cant-input" value="9112"></td>
+        <td><input class="est-cant-input" value="6785.5"></td>
+        <td><span class="badge ok">9 facturas</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="nota">
+    Al destildar un producto, la fila se marca en ámbar y el badge pasa a <b>“excluido”</b>.
+    Ni la Cant. Proyecto ni el Acum. Anterior se tachan ni se atenúan, <b>porque los dos sí salen
+    en el documento</b>.<br>
+    En REO-01 ese renglón sale completo: clave, concepto, U.M., Cant. Proyecto, P.U. y
+    <b>Acumulado Anterior</b>. Lo único que queda vacío es la columna <b>“Esta Estimación”</b>,
+    y no se le crea su hoja de generadores (RGO).<br>
+    Los productos sin entregas en el período tienen el tilde puesto pero no cambian nada al destildarlos:
+    no generan renglón de estimación de todos modos.
+  </div>
+</div>
+
+</body></html>

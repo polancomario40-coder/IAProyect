@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Historial de días — VMO Concretos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="/logistica.logic.js?v=2026-10-28"></script>
+<script src="/logistica.api.js?v=2026-10-08b"></script>
+<style>
+  :root{
+    color-scheme: dark;
+    --vmo-red:#D32F2F; --vmo-red-dark:#F87171;
+    --ink:#EEF2F7; --muted:rgba(238,242,247,0.55); --line:rgba(255,255,255,0.07);
+    --bg:#0D1829; --card:#152535; --elevated:#1C3045;
+    --ok:#34D399; --ok-bg:rgba(16,185,129,0.11);
+    --warn:#F59E0B; --warn-bg:rgba(245,158,11,0.11);
+    --err:#F87171; --err-bg:rgba(248,113,113,0.11);
+    --brand-glow:rgba(211,47,47,0.22);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Inter','Segoe UI',system-ui,sans-serif;
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(rgba(211,47,47,0.03) 1px, transparent 1px),
+      radial-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size:40px 40px, 20px 20px; background-position:0 0, 10px 10px;
+    color:var(--ink); -webkit-font-smoothing:antialiased;
+  }
+  header{
+    background:var(--card); color:var(--ink); padding:16px 28px;
+    display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--line); flex-wrap:wrap; gap:10px; position:relative;
+  }
+  header::after{content:''; position:absolute; bottom:-1px; left:0; width:180px; height:2px;
+    background:linear-gradient(90deg, var(--vmo-red) 0%, transparent 100%);}
+  header .brand{display:flex; flex-direction:column; gap:2px;}
+  header .brand .tag{text-transform:uppercase; letter-spacing:1px; font-size:10.5px; color:var(--muted);}
+  header h1{margin:0; font-size:17px; font-weight:700; letter-spacing:-.2px;}
+  .volver{
+    padding:8px 16px; background:var(--elevated); color:var(--ink); text-decoration:none;
+    border:1px solid var(--line); border-radius:8px; font-size:13px; font-weight:600;
+  }
+  .volver:hover{background:rgba(255,255,255,.06);}
+
+  .wrap{max-width:1300px; margin:0 auto; padding:20px 24px 60px;}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:12px;
+    margin-bottom:20px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
+  .panel-head{padding:14px 18px; border-bottom:1px solid var(--line); display:flex;
+    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+  .panel-head h2{margin:0; font-size:14px; font-weight:700;}
+  .panel-head .sub{font-size:12px; color:var(--muted);}
+  .panel-body{padding:16px 18px;}
+
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;}
+  .kpi{background:var(--card); border:1px solid var(--line); border-top:3px solid var(--vmo-red);
+    border-radius:12px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
+  .kpi .label{font-size:10.5px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.5px; font-weight:700;}
+  .kpi .value{font-size:28px; font-weight:700; margin-top:4px;}
+  .kpi .sub{font-size:11px; color:var(--muted); margin-top:2px;}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{text-align:left; padding:9px 10px; background:rgba(0,0,0,.3);
+    border-bottom:1px solid var(--line); color:var(--muted); font-weight:700;
+    text-transform:uppercase; font-size:10.5px; letter-spacing:.7px; white-space:nowrap;}
+  tbody td{padding:9px 10px; border-bottom:1px solid rgba(255,255,255,0.03); vertical-align:middle;}
+  tbody tr:hover{background:rgba(255,255,255,.02);}
+  td.num, th.num{text-align:right; font-variant-numeric:tabular-nums;}
+  .barra{height:7px; border-radius:4px; background:rgba(255,255,255,.07); overflow:hidden; min-width:70px;}
+  .barra span{display:block; height:100%; border-radius:4px;}
+  .empty-state{padding:40px 20px; text-align:center; color:var(--muted); font-size:13px;}
+  .nota{font-size:12px; color:var(--muted); line-height:1.5; margin-top:12px;}
+  .zona-tag{font-size:10.5px; color:var(--muted);}
+  .sin-dato{color:var(--muted);}
+  footer{text-align:center; padding:26px; color:var(--muted); font-size:11.5px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="tag">VMO Concretos · Logística</span>
+    <h1>Historial de días</h1>
+  </div>
+  <a class="volver" id="enlaceDia" href="/logistica.html">← Dashboard del día</a>
+</header>
+
+<div class="wrap">
+  <div id="contenido"></div>
+</div>
+
+<footer>VMO Concretos · Historial de días guardados</footer>
+
+<script>
+// Los dias guardados. Abrir uno lo carga en el dashboard del dia: adentro del
+// portal avisandole al portal, suelta navegando (ver pedirAbrirDia en
+// logistica.api.js).
+
+// Adentro del portal el sidebar ya es la navegacion; el enlace propio sobra.
+if (estaEmbebido()) document.getElementById('enlaceDia').style.display = 'none';
+
+const cont = () => document.getElementById('contenido');
+const vacio = m => `<div class="panel"><div class="panel-body"><div class="empty-state">${esc(m)}</div></div></div>`;
+
+const CONTEOS = ['pedidos', 'cargues', 'm3', 'clientes', 'camiones'];
+
+// Los numeros del indice cuentan lo guardado tal cual; despues de mostrarlos se
+// recalculan con conteosDelDia() sobre cada dia restaurado, que es como los ven
+// las demas pantallas (#171). De a 6 dias, como Estadisticas. Un dia que no
+// carga se queda con el numero del indice.
+async function afinarConteos(dias){
+  for (let i = 0; i < dias.length; i += 6){
+    await Promise.all(dias.slice(i, i + 6).map(d =>
+      apiLogistica('/api/logistica/dias/' + encodeURIComponent(d.fecha))
+        .then(dia => {
+          const c = conteosDelDia(restaurarDia(dia).state);
+          const fila = cont().querySelector(`tr[data-fecha="${CSS.escape(d.fecha)}"]`);
+          if (fila) CONTEOS.forEach(k => { fila.querySelector(`[data-conteo="${k}"]`).textContent = fmtInt(c[k]); });
+        })
+        .catch(() => null)));
+  }
+}
+
+async function render(){
+  cont().innerHTML = vacio('Cargando el historial...');
+  let dias;
+  try { dias = (await apiLogistica('/api/logistica/dias')).dias; }
+  catch (err) {
+    cont().innerHTML = vacio(err.sinToken ? err.message : 'No se pudo leer el historial: ' + err.message);
+    return;
+  }
+  if (!dias.length){ sinDias(); return; }
+
+  cont().innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Días guardados</h2>
+        <span class="sub">${dias.length} día(s) · del más nuevo al más viejo</span>
+      </div>
+      <div class="panel-body" style="padding:0;">
+        <table>
+          <thead><tr>
+            <th>Fecha</th><th class="num">Pedidos</th><th class="num">Cargues</th>
+            <th class="num">m³</th><th class="num">Clientes</th><th class="num">Camiones</th>
+            <th>Guardado</th><th></th>
+          </tr></thead>
+          <tbody>${dias.map(d => `
+            <tr data-fecha="${d.fecha}">
+              <td><strong>${d.fecha}</strong></td>
+              ${CONTEOS.map(k => `<td class="num" data-conteo="${k}">${fmtInt(d[k])}</td>`).join('')}
+              <td style="font-size:12px; color:var(--muted);">${(d.guardado_en||'').replace('T',' ')}</td>
+              <td style="white-space:nowrap;"><button class="btnAbrir" data-fecha="${d.fecha}" style="padding:5px 12px; background:var(--elevated); color:var(--ink); border:1px solid var(--line); border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit;">Abrir</button>
+                <button class="btnBorrar" data-fecha="${d.fecha}" aria-label="Borrar el día ${d.fecha}" style="margin-left:6px; padding:5px 12px; background:transparent; color:var(--err); border:1px solid rgba(248,113,113,.35); border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit;">Borrar</button></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="nota">El porcentaje de cumplimiento no está en esta lista a propósito: no se guarda, se recalcula al abrir el día con los supuestos de ese día. Así un día viejo muestra lo que mostró, y si mañana se corrige un trayecto equivocado, se puede corregir hacia atrás.</div>`;
+
+  cont().querySelectorAll('.btnAbrir').forEach(b =>
+    b.addEventListener('click', () => pedirAbrirDia(b.dataset.fecha)));
+  afinarConteos(dias);
+  cont().querySelectorAll('.btnBorrar').forEach(b =>
+    b.addEventListener('click', () => borrarDia(b.dataset.fecha)));
+}
+
+// Borrar un dia (2026-10-12). Se confirma escribiendo la fecha: un clic de
+// mas en la fila equivocada se llevaria responsables, motivos y observaciones
+// que se cargaron a mano y no estan en ningun Excel. El servidor igual deja
+// una copia del dia antes de borrarlo.
+async function borrarDia(fecha){
+  const escrito = window.prompt(
+    `Vas a borrar el día ${fecha} del historial, con sus responsables, motivos y observaciones.
+
+` +
+    `Para confirmar, escribí la fecha tal cual: ${fecha}`);
+  if (escrito === null) return;
+  if (escrito.trim() !== fecha){ window.alert('La fecha no coincide. No se borró nada.'); return; }
+  try {
+    await apiLogistica('/api/logistica/dias/' + encodeURIComponent(fecha), {method: 'DELETE'});
+  } catch (err) {
+    window.alert('No se pudo borrar: ' + err.message);
+    return;
+  }
+  // Las otras pestanas (Estadisticas, Comparacion, Reporte) tienen la lista
+  // vieja: el mismo aviso que al guardar hace que el portal las recargue.
+  avisarDiaGuardado(fecha);
+  render();
+}
+
+function sinDias(){
+  cont().innerHTML = `
+    <div class="panel">
+      <div class="panel-body" style="padding:34px 30px;">
+        <h2 style="margin:0 0 6px; font-size:17px;">Todavía no hay días guardados</h2>
+        <p style="margin:0 0 20px; color:var(--muted); font-size:13px; line-height:1.55;">
+          Acá se acumula el trabajo de cada día para poder volver a abrirlo después. Son dos pasos.
+        </p>
+        <ol style="margin:0 0 22px; padding-left:20px; font-size:13.5px; line-height:1.9;">
+          <li>En <strong>Cumplimiento del día</strong>, subí los dos Excel: la
+              <strong>Programación</strong> y el <strong>Tiempo de Cargue</strong>.</li>
+          <li>Revisá los trayectos y los cruces marcados, poné la fecha, y apretá
+              <strong>&ldquo;Guardar día&rdquo;</strong>.</li>
+        </ol>
+        ${estaEmbebido() ? '' : '<a class="volver" href="/logistica.html" style="display:inline-block;">Ir al dashboard del día →</a>'}
+      </div>
+    </div>`;
+}
+
+render();
+</script>
+
+</body>
+</html>

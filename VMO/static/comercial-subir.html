@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Subir información — Comercial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="/comercial.api.js?v=2026-10-19"></script>
+<style>
+  :root{
+    color-scheme: dark;
+    --vmo-red:#D32F2F; --vmo-red-dark:#F87171;
+    --ink:#EEF2F7; --muted:rgba(238,242,247,0.55); --line:rgba(255,255,255,0.07);
+    --bg:#0D1829; --card:#152535; --elevated:#1C3045;
+    --ok:#34D399; --warn:#F59E0B; --err:#F87171;
+    --brand-glow:rgba(211,47,47,0.22);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Inter','Segoe UI',system-ui,sans-serif;
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(rgba(211,47,47,0.03) 1px, transparent 1px),
+      radial-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size:40px 40px, 20px 20px; background-position:0 0, 10px 10px;
+    color:var(--ink); -webkit-font-smoothing:antialiased;
+  }
+  header{
+    background:var(--card); padding:16px 28px; border-bottom:1px solid var(--line); position:relative;
+  }
+  header::after{content:''; position:absolute; bottom:-1px; left:0; width:180px; height:2px;
+    background:linear-gradient(90deg, var(--vmo-red) 0%, transparent 100%);}
+  header .tag{text-transform:uppercase; letter-spacing:1px; font-size:10.5px; color:var(--muted);}
+  header h1{margin:2px 0 0; font-size:17px; font-weight:700; letter-spacing:-.2px;}
+
+  .wrap{max-width:860px; margin:0 auto; padding:24px 24px 60px;}
+  .panel{background:var(--card); border:1px solid var(--line); border-top:3px solid var(--vmo-red);
+    border-radius:12px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
+  .panel-body{padding:22px 24px;}
+  .panel h2{margin:0 0 4px; font-size:16px;}
+  .panel .intro{margin:0 0 18px; font-size:13px; color:var(--muted); line-height:1.55;}
+
+  .zona-archivo{display:flex; align-items:center; gap:14px; padding:16px; border:1.5px dashed rgba(255,255,255,.14);
+    border-radius:10px; background:var(--elevated); cursor:pointer; transition:border-color .15s, background .15s;}
+  .zona-archivo:hover, .zona-archivo.encima{border-color:var(--vmo-red-dark); background:#20374f;}
+  .zona-archivo:focus-within{outline:2px solid var(--vmo-red); outline-offset:2px;}
+  .zona-archivo input{position:absolute; width:1px; height:1px; opacity:0;}
+  .zona-archivo .ic{flex:none; width:38px; height:38px; border-radius:10px; display:flex; align-items:center;
+    justify-content:center; background:rgba(211,47,47,.14); color:var(--vmo-red-dark);}
+  .zona-archivo .t{display:block; font-size:13.5px; font-weight:600;}
+  .zona-archivo .s{display:block; font-size:12px; color:var(--muted); margin-top:2px;}
+
+  .estado{margin-top:14px; font-size:13px; line-height:1.55; min-height:0;}
+  .estado.error{color:var(--err);}
+  .estado.ok{color:var(--ok);}
+
+  /* Las tablas se desplazan solas en un telefono; la pagina no. */
+  .historial, #previaDespachos, #previaPlan{overflow-x:auto;}
+  table{width:100%; border-collapse:collapse; font-size:13px; margin-top:14px;}
+  th{text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted);
+    font-weight:700; padding:8px 10px; border-bottom:1px solid var(--line);}
+  td{padding:9px 10px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums;}
+  td.n, th.n{text-align:right;}
+  .reemplaza{color:var(--warn); font-weight:600;}
+  .borra{color:var(--err); font-weight:700;}
+  .peligro{display:flex; gap:8px; align-items:flex-start; margin-top:12px; padding:10px 12px; border-radius:8px;
+    border:1px solid var(--err); color:var(--err); font-size:13px; line-height:1.5; cursor:pointer;}
+  .peligro input{margin-top:3px;}
+  .nuevo{color:var(--ok); font-weight:600;}
+  .avisos{margin-top:12px; font-size:12.5px; color:var(--warn); line-height:1.6;}
+
+  .acciones{display:flex; gap:10px; margin-top:16px;}
+  .btn{padding:11px 18px; background:var(--vmo-red); color:#fff; border:none; border-radius:8px;
+    font-weight:700; font-size:13.5px; cursor:pointer; font-family:inherit; box-shadow:0 4px 14px var(--brand-glow);}
+  .btn.sec{background:transparent; color:var(--ink); border:1px solid var(--line); box-shadow:none;}
+  .btn:disabled{opacity:.45; cursor:not-allowed;}
+  .btn:focus-visible{outline:2px solid var(--vmo-red-dark); outline-offset:2px;}
+
+  .historial td .tipo{display:inline-block; padding:2px 8px; border-radius:99px; font-size:11px; font-weight:700;
+    background:rgba(57,135,229,.16); color:#7fb2f0;}
+  .historial td .tipo.plan{background:rgba(217,89,38,.16); color:#ee9a76;}
+  .vacio{font-size:13px; color:var(--muted); margin-top:10px;}
+  footer{text-align:center; padding:26px; color:var(--muted); font-size:11.5px;}
+
+  @media (max-width:600px){
+    .wrap{padding:16px;}
+    .panel-body{padding:18px 16px;}
+    table{font-size:12px;}
+    td, th{padding:7px 6px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="tag">VMO Concretos · Comercial</div>
+  <h1>Subir información</h1>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="panel-body">
+      <h2>Despachos del mes</h2>
+      <p class="intro">El Excel de despachos tal como sale cada mes (por ejemplo <em>DESPACHOS SEPTIEMBRE 2026.xls</em>),
+        con vendedor, zona y rango FC llenos. También sirve la hoja ACUMULADO del dashboard. Cada mes que trae el
+        archivo <strong>reemplaza</strong> a ese mes en el dashboard.</p>
+      <label class="zona-archivo" id="zonaDespachos">
+        <span class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></span>
+        <span><span class="t">Elegir el Excel de despachos</span><span class="s">o arrastrarlo acá · .xls o .xlsx</span></span>
+        <input type="file" id="archivoDespachos" accept=".xls,.xlsx">
+      </label>
+      <div id="estadoDespachos" class="estado" role="status"></div>
+      <div id="previaDespachos"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-body">
+      <h2>Plan comercial</h2>
+      <p class="intro">El <em>PLAN COMERCIAL - ROLLING FORECAST.xlsx</em>. Se usa la fila <strong>DESPACHOS HORMIGON</strong>
+        (m³ planificados por mes) para el cumplimiento, igual que el Excel. Subir uno nuevo reemplaza los meses que trae.</p>
+      <label class="zona-archivo" id="zonaPlan">
+        <span class="ic" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg></span>
+        <span><span class="t">Elegir el plan comercial</span><span class="s">o arrastrarlo acá · .xlsx</span></span>
+        <input type="file" id="archivoPlan" accept=".xlsx,.xls">
+      </label>
+      <div id="estadoPlan" class="estado" role="status"></div>
+      <div id="previaPlan"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-body">
+      <h2>Historial de cargas</h2>
+      <div id="historial" class="historial"><div class="vacio">Cargando...</div></div>
+    </div>
+  </div>
+</div>
+
+<footer>VMO Concretos · Comercial</footer>
+
+<script>
+// Subir los dos Excel del modulo Comercial (2026-10-19). Cada archivo pasa
+// dos veces por el servidor: primero solo se lee y se muestra que va a
+// reemplazar; al confirmar se manda de nuevo y se guarda.
+const $ = id => document.getElementById(id);
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const nombreMes = ym => `${MESES[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
+
+function estado(id, texto, clase){
+  $(id).className = 'estado' + (clase ? ' ' + clase : '');
+  $(id).innerHTML = texto;
+}
+
+function prepararZona(zonaId, inputId, alElegir){
+  const zona = $(zonaId), input = $(inputId);
+  input.addEventListener('change', () => { if (input.files[0]) alElegir(input.files[0]); input.value = ''; });
+  zona.addEventListener('dragover', e => { e.preventDefault(); zona.classList.add('encima'); });
+  zona.addEventListener('dragleave', () => zona.classList.remove('encima'));
+  zona.addEventListener('drop', e => {
+    e.preventDefault(); zona.classList.remove('encima');
+    if (e.dataTransfer.files[0]) alElegir(e.dataTransfer.files[0]);
+  });
+}
+
+// ── Despachos ──
+async function previaDespachos(archivo){
+  $('previaDespachos').innerHTML = '';
+  estado('estadoDespachos', `Leyendo <strong>${esc(archivo.name)}</strong>... (un archivo de todo el año tarda unos segundos)`);
+  try {
+    const r = await subirArchivoComercial('/api/comercial/despachos', archivo, false);
+    estado('estadoDespachos', `<strong>${esc(r.archivo)}</strong>: ${r.filas.toLocaleString('es-DO')} filas, ${fmtM3(r.m3)} m³, ${fmtRD(r.rd)}.`);
+    // Un mes guardado que el archivo trae con menos de la mitad de sus filas
+    // casi seguro no es ese mes: son unas filas sueltas de un borde (#173,
+    // 2026-10-23). Guardar igual lo borraria entero, asi que se marca en rojo
+    // y el boton no se habilita hasta que se confirme ese mes a proposito.
+    const achica = m => m.filas_actuales > 0 && m.filas < m.filas_actuales / 2;
+    const peligrosos = r.meses.filter(achica);
+    const filas = r.meses.map(m => `<tr><td>${esc(nombreMes(m.mes))}</td>
+        <td class="n">${m.filas.toLocaleString('es-DO')}</td><td class="n">${fmtM3(m.m3)}</td><td class="n">${fmtRD(m.rd)}</td>
+        <td>${achica(m)
+          ? `<span class="borra">Borra ${m.filas_actuales.toLocaleString('es-DO')} filas guardadas (${fmtM3(m.m3_actuales)} m³) y deja ${m.filas.toLocaleString('es-DO')}</span>`
+          : m.filas_actuales ? `<span class="reemplaza">Reemplaza ${m.filas_actuales.toLocaleString('es-DO')} filas (${fmtM3(m.m3_actuales)} m³)</span>` : '<span class="nuevo">Mes nuevo</span>'}</td></tr>`).join('');
+    const avisos = [
+      r.sin_vendedor && `${r.sin_vendedor} filas sin vendedor`,
+      r.sin_zona && `${r.sin_zona} filas sin zona`,
+      r.sin_rango && `${r.sin_rango} filas sin rango FC`,
+    ].filter(Boolean);
+    $('previaDespachos').innerHTML = `
+      <table><thead><tr><th>Mes</th><th class="n">Filas</th><th class="n">m³</th><th class="n">RD$</th><th>Qué pasa</th></tr></thead>
+        <tbody>${filas}</tbody></table>
+      ${avisos.length ? `<div class="avisos">Ojo: ${esc(avisos.join(', '))}. En el dashboard salen como "(vacío)".</div>` : ''}
+      ${peligrosos.length ? `<label class="peligro"><input type="checkbox" id="aceptoAchicar">
+        El archivo trae muy pocas filas de ${esc(peligrosos.map(m => nombreMes(m.mes)).join(', '))}: guardar borra lo que ya está de ${peligrosos.length === 1 ? 'ese mes' : 'esos meses'}.
+        Marca esto solo si de verdad quieres reemplazarlo.</label>` : ''}
+      <div class="acciones">
+        <button class="btn" id="confirmarDespachos"${peligrosos.length ? ' disabled' : ''}>Guardar ${r.meses.length === 1 ? 'el mes' : `los ${r.meses.length} meses`}</button>
+        <button class="btn sec" id="cancelarDespachos">Cancelar</button>
+      </div>`;
+    $('cancelarDespachos').onclick = () => { $('previaDespachos').innerHTML = ''; estado('estadoDespachos', ''); };
+    $('confirmarDespachos').onclick = () => guardarDespachos(archivo);
+    if (peligrosos.length) $('aceptoAchicar').onchange = e => { $('confirmarDespachos').disabled = !e.target.checked; };
+  } catch (err) {
+    estado('estadoDespachos', esc(err.message), 'error');
+  }
+}
+
+async function guardarDespachos(archivo){
+  $('confirmarDespachos').disabled = true; $('cancelarDespachos').disabled = true;
+  estado('estadoDespachos', 'Guardando...');
+  try {
+    const r = await subirArchivoComercial('/api/comercial/despachos', archivo, true);
+    $('previaDespachos').innerHTML = '';
+    estado('estadoDespachos', `✓ Guardado: ${esc(r.meses.map(m => nombreMes(m.mes)).join(', '))} (${r.filas.toLocaleString('es-DO')} filas, ${fmtM3(r.m3)} m³).`, 'ok');
+    avisarDatosComerciales();
+    cargarHistorial();
+  } catch (err) {
+    estado('estadoDespachos', 'No se guardó: ' + esc(err.message), 'error');
+    $('confirmarDespachos').disabled = false; $('cancelarDespachos').disabled = false;
+  }
+}
+
+// ── Plan ──
+async function previaPlan(archivo){
+  $('previaPlan').innerHTML = '';
+  estado('estadoPlan', `Leyendo <strong>${esc(archivo.name)}</strong>...`);
+  try {
+    const r = await subirArchivoComercial('/api/comercial/plan', archivo, false);
+    estado('estadoPlan', `<strong>${esc(r.archivo)}</strong>: plan de ${r.meses.length} meses.`);
+    const vacio = v => v === null || v === undefined;
+    const filas = r.meses.map(m => `<tr><td>${esc(nombreMes(m.mes))}</td><td class="n">${fmtM3(m.m3)}</td>
+        <td class="n">${vacio(m.m3_actual) ? '<span class="nuevo">—</span>' : fmtM3(m.m3_actual)}</td>
+        <td class="n">${!vacio(m.precio) ? fmtRD(m.precio)
+          : !vacio(m.precio_actual) ? `${fmtRD(m.precio_actual)} <span class="nuevo">(se conserva)</span>`
+          : '<span class="nuevo">—</span>'}</td></tr>`).join('');
+    $('previaPlan').innerHTML = `
+      <table><thead><tr><th>Mes</th><th class="n">Plan nuevo (m³)</th><th class="n">Plan actual (m³)</th><th class="n">Precio plan (RD$/m³)</th></tr></thead>
+        <tbody>${filas}</tbody></table>
+      <div class="acciones">
+        <button class="btn" id="confirmarPlan">Guardar el plan</button>
+        <button class="btn sec" id="cancelarPlan">Cancelar</button>
+      </div>`;
+    $('cancelarPlan').onclick = () => { $('previaPlan').innerHTML = ''; estado('estadoPlan', ''); };
+    $('confirmarPlan').onclick = () => guardarPlan(archivo);
+  } catch (err) {
+    estado('estadoPlan', esc(err.message), 'error');
+  }
+}
+
+async function guardarPlan(archivo){
+  $('confirmarPlan').disabled = true; $('cancelarPlan').disabled = true;
+  estado('estadoPlan', 'Guardando...');
+  try {
+    const r = await subirArchivoComercial('/api/comercial/plan', archivo, true);
+    $('previaPlan').innerHTML = '';
+    estado('estadoPlan', `✓ Plan guardado (${r.meses.length} meses).`, 'ok');
+    avisarDatosComerciales();
+    cargarHistorial();
+  } catch (err) {
+    estado('estadoPlan', 'No se guardó: ' + esc(err.message), 'error');
+    $('confirmarPlan').disabled = false; $('cancelarPlan').disabled = false;
+  }
+}
+
+// ── Historial ──
+async function cargarHistorial(){
+  try {
+    const {cargas} = await apiComercial('/api/comercial/cargas');
+    if (!cargas.length){ $('historial').innerHTML = '<div class="vacio">Todavía no se subió nada.</div>'; return; }
+    const meses = c => c.meses.length > 2 ? `${nombreMes(c.meses[0])} a ${nombreMes(c.meses[c.meses.length - 1])}`
+      : c.meses.map(nombreMes).join(', ');
+    $('historial').innerHTML = `<table><thead><tr><th>Cuándo</th><th>Qué</th><th>Archivo</th><th>Meses</th><th class="n">m³</th></tr></thead><tbody>
+      ${cargas.map(c => `<tr><td>${esc(c.cargado_en.replace('T', ' ').slice(0, 16))}</td>
+        <td><span class="tipo ${c.tipo === 'plan' ? 'plan' : ''}">${c.tipo === 'plan' ? 'Plan' : 'Despachos'}</span></td>
+        <td>${esc(c.archivo)}</td><td>${esc(meses(c))}</td><td class="n">${fmtM3(c.m3)}</td></tr>`).join('')}
+      </tbody></table>`;
+  } catch (err) {
+    $('historial').innerHTML = `<div class="vacio">${esc(err.message)}</div>`;
+  }
+}
+
+prepararZona('zonaDespachos', 'archivoDespachos', previaDespachos);
+prepararZona('zonaPlan', 'archivoPlan', previaPlan);
+cargarHistorial();
+</script>
+</body>
+</html>

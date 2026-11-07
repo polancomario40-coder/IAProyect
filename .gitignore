@@ -104,4 +104,38 @@ PUBLICACION_IIS_SADE/
 PUBLICACION_VMO/
 ACTUALIZACION_VMO/
 
+# VMO application excludes
+VMO/.git/
+VMO/.git_backup/
+VMO/*.db
+VMO/**/*.db
+VMO/conduces/archivos/
+VMO/conduces/data/
+VMO/conduces/db/
+VMO/conduces/facturas/
+VMO/conduces/fallos/
+VMO/conduces/reportes/
+VMO/data/conduces/
+VMO/data/estimaciones/
+VMO/data/logistica/
+VMO/documentos/
+VMO/dropoff/
+VMO/estimaciones/data/*
+!VMO/estimaciones/data/plantilla_estimacion_*.xlsx
+!VMO/estimaciones/data/plantilla_estimacion.xlsx
+!VMO/estimaciones/data/croquis/
+!VMO/estimaciones/data/croquis/**
+VMO/estimaciones/facturas/
+VMO/estimaciones/db/
+VMO/reportes/
+VMO/facturas/
+VMO/backups/
+VMO/misc/
+VMO/.test_tmp_*/
+VMO/.tmp_pytest_*/
+VMO/.claude/*
+!VMO/.claude/commands/
+VMO/.gstack/
+
+
 

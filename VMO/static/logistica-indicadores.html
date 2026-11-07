@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Indicadores — VMO Concretos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="/vendor/xlsx-0.20.3.full.min.js"></script>
+<script src="/logistica.logic.js?v=2026-10-28"></script>
+<script src="/calendario.js?v=2026-10-19b"></script>
+<script src="/logistica.api.js?v=2026-10-08b"></script>
+<style>
+  :root{
+    color-scheme: dark;
+    --vmo-red:#D32F2F; --vmo-red-dark:#F87171;
+    --ink:#EEF2F7; --muted:rgba(238,242,247,0.55); --line:rgba(255,255,255,0.07);
+    --bg:#0D1829; --card:#152535; --elevated:#1C3045;
+    --ok:#34D399; --warn:#F59E0B; --err:#F87171;
+    --bomba:#60A5FA; --camion:#34D399; --tiempo:#F59E0B; --tiempo2:#A78BFA;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Inter','Segoe UI',system-ui,sans-serif;
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(rgba(211,47,47,0.03) 1px, transparent 1px),
+      radial-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size:40px 40px, 20px 20px; background-position:0 0, 10px 10px;
+    color:var(--ink); -webkit-font-smoothing:antialiased;
+  }
+  header{
+    background:var(--card); color:var(--ink); padding:16px 28px;
+    display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--line); flex-wrap:wrap; gap:10px; position:relative;
+  }
+  header::after{content:''; position:absolute; bottom:-1px; left:0; width:180px; height:2px;
+    background:linear-gradient(90deg, var(--vmo-red) 0%, transparent 100%);}
+  header .brand{display:flex; flex-direction:column; gap:2px;}
+  header .brand .tag{text-transform:uppercase; letter-spacing:1px; font-size:10.5px; color:var(--muted);}
+  header h1{margin:0; font-size:17px; font-weight:700; letter-spacing:-.2px;}
+
+  .wrap{max-width:1300px; margin:0 auto; padding:20px 24px 60px;}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:12px;
+    margin-bottom:20px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
+  .panel-head{padding:14px 18px; border-bottom:1px solid var(--line); display:flex;
+    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+  .panel-head h2{margin:0; font-size:14px; font-weight:700;}
+  .panel-head .sub{font-size:12px; color:var(--muted);}
+  .panel-body{padding:16px 18px;}
+  .tabla{overflow-x:auto;}
+
+  .subidas{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .subida{background:var(--elevated); border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-size:12.5px;}
+  .subida strong{display:block; font-size:13px; margin-bottom:2px;}
+  .subida .cargado{color:var(--muted); margin:2px 0 8px;}
+  .subida input[type="file"]{font-family:inherit; font-size:12px; color:var(--muted); max-width:100%;}
+  .subida .estado{margin-top:8px; line-height:1.5;}
+  .subida .estado.ok{color:var(--ok);} .subida .estado.err{color:var(--err);}
+  .btn{padding:7px 14px; background:var(--vmo-red); color:#fff; border:none; border-radius:8px;
+    font-weight:700; font-size:12.5px; cursor:pointer; font-family:inherit; margin-top:8px;}
+  .btn:disabled{opacity:.45; cursor:not-allowed;}
+
+  .filtro{display:flex; align-items:flex-end; flex-wrap:wrap; gap:10px 14px;
+    background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin-bottom:18px;}
+  .filtro .campo{display:flex; flex-direction:column; gap:5px; min-width:160px;}
+  .filtro label{font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-weight:700;}
+  .filtro input[type="date"], .filtro .cal-campo{
+    background:var(--elevated); color:var(--ink); border:1px solid var(--line); border-radius:8px;
+    padding:7px 10px; font-size:13px; font-weight:600; font-family:inherit; min-width:170px;}
+  .filtro .cal-campo:focus-visible{outline:2px solid var(--vmo-red); outline-offset:2px;}
+  .filtro .alcance{margin-left:auto; font-size:11.5px; color:var(--muted); text-align:right; align-self:center; line-height:1.5;}
+
+  .sec{font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:700; margin:26px 0 10px;}
+  .sec .fuente{text-transform:none; letter-spacing:0; font-weight:500; margin-left:8px;}
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:12px;}
+  .kpis + :not(.kpis){margin-top:8px;}
+  .kpi{background:var(--card); border:1px solid var(--line); border-top:3px solid var(--vmo-red);
+    border-radius:12px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
+  .kpi.b{border-top-color:var(--bomba);} .kpi.c{border-top-color:var(--camion);} .kpi.t{border-top-color:var(--tiempo);}
+  .kpi .label{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; font-weight:700;}
+  .kpi .value{font-size:28px; font-weight:700; margin-top:4px; font-variant-numeric:tabular-nums;}
+  .kpi .sub{font-size:11px; color:var(--muted); margin-top:2px; line-height:1.4;}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{text-align:left; padding:9px 10px; background:rgba(0,0,0,.3);
+    border-bottom:1px solid var(--line); color:var(--muted); font-weight:700;
+    text-transform:uppercase; font-size:10.5px; letter-spacing:.7px; white-space:nowrap;}
+  tbody td{padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.03); vertical-align:middle;}
+  tbody tr:hover{background:rgba(255,255,255,.02);}
+  td.num, th.num{text-align:right; font-variant-numeric:tabular-nums;}
+  tr.zona td{background:rgba(255,255,255,.04); padding:7px 10px; font-size:12px;}
+  tr.zona span{color:var(--muted); margin-left:10px;}
+  .gris{color:var(--muted); font-size:11.5px;}
+  td.corta{max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .barra{height:7px; border-radius:4px; background:rgba(255,255,255,.07); overflow:hidden; min-width:70px;}
+  .barra span{display:block; height:100%; border-radius:4px;}
+  .dos{display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start;}
+  .leyenda{display:flex; flex-wrap:wrap; gap:18px; font-size:11.5px; color:var(--muted); margin-top:6px;}
+  .leyenda i{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px;}
+  details.calc{background:var(--card); border:1px dashed rgba(245,158,11,.4); border-radius:12px; margin-bottom:20px;}
+  details.calc summary{cursor:pointer; padding:12px 18px; font-size:13px; font-weight:700;}
+  details.calc .cuerpo{padding:0 18px 14px; font-size:12.5px; line-height:1.55;}
+  details.calc td{padding:6px 10px; vertical-align:top; border-bottom:1px solid rgba(255,255,255,.04);}
+  details.calc td:first-child{width:24%; font-weight:700;}
+  .ojo{color:var(--warn); margin-top:8px;}
+  td.mas-fila{text-align:center; padding:6px;}
+  .btn-todos{background:transparent; border:1px solid var(--line); border-radius:7px; color:var(--muted);
+    font-family:inherit; font-size:12px; padding:5px 12px; cursor:pointer;}
+  .btn-todos:hover{color:var(--ink); border-color:var(--muted);}
+  .empty-state{padding:34px 20px; text-align:center; color:var(--muted); font-size:13px;}
+  svg .punto:hover{r:6;}
+  footer{text-align:center; padding:26px; color:var(--muted); font-size:11.5px;}
+
+  @media (max-width:900px){
+    .kpis{grid-template-columns:repeat(2,1fr);}
+    .dos, .subidas{grid-template-columns:1fr;}
+  }
+  @media (max-width:600px){
+    .wrap{padding:16px;}
+    .filtro .alcance{margin-left:0; text-align:left;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="tag">VMO Concretos · Logística</span>
+    <h1>Indicadores</h1>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="panel-head"><h2>Reportes del sistema</h2><span class="sub">se exportan de CBSListas por rango de fechas; lo nuevo reemplaza lo guardado de esas fechas</span></div>
+    <div class="panel-body subidas">
+      <div class="subida">
+        <strong>Metros bombeados por equipo</strong>
+        <div class="cargado" id="cargadoBombeo">—</div>
+        <input type="file" id="fileBombeo" accept=".xls,.xlsx">
+        <div class="estado" id="estadoBombeo"></div>
+      </div>
+      <div class="subida">
+        <strong>Cumplimiento de tiempos de despacho</strong>
+        <div class="cargado" id="cargadoTiempos">—</div>
+        <input type="file" id="fileTiempos" accept=".xls,.xlsx">
+        <div class="estado" id="estadoTiempos"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="filtro"></div>
+  <div id="contenido"><div class="panel"><div class="empty-state">Cargando...</div></div></div>
+</div>
+
+<footer>VMO Concretos · Indicadores de Logística</footer>
+
+<script>
+// Indicadores de Logistica (2026-10-28), segun el boceto aprobado: metros
+// bombeados por equipo, metros transportados por camion y cumplimiento de
+// tiempos de despacho, siempre separados por zona. El calculo vive en
+// indicadoresDelPeriodo(), en logistica.logic.js; aca se eligen las fechas,
+// se suben los dos reportes del sistema y se dibuja.
+
+const $ = id => document.getElementById(id);
+let diasEnMemoria = [];          // [{fecha, state, assumptions}] del historial, una sola vez
+let reportes = {bombeo: [], tiempos: [], fechas: {bombeo: [], tiempos: []}};
+let fechasElegibles = [];
+let pendiente = {};              // lo leido de un Excel, esperando "Guardar"
+// Las listas largas muestran los primeros 10 de cada zona (pedido del usuario,
+// 2026-10-28); "Mostrar todos" abre esa lista y queda abierta hasta recogerla.
+const TOPE_LISTA = 10;
+const listasAbiertas = new Set();
+const recortar = (id, lista) => listasAbiertas.has(id) ? lista : lista.slice(0, TOPE_LISTA);
+const botonTodos = (id, total, columnas) => total <= TOPE_LISTA ? '' :
+  `<tr><td class="mas-fila" colspan="${columnas}"><button type="button" class="btn-todos" data-lista="${id}">${listasAbiertas.has(id)
+    ? 'Mostrar solo los primeros ' + TOPE_LISTA : 'Mostrar todos (' + total + ')'}</button></td></tr>`;
+
+const n0 = v => v === null || v === undefined ? '—' : Math.round(v).toLocaleString('en-US');
+const n1 = v => v === null || v === undefined ? '—' : (Math.round(v * 10) / 10).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1});
+const pct = p => p === null || p === undefined ? '—' : Math.round(p) + '%';
+const fc = f => f ? f.slice(8, 10) + '/' + f.slice(5, 7) + '/' + f.slice(0, 4) : '—';
+const fcc = f => f.slice(8, 10) + '/' + f.slice(5, 7);
+const barra = (v, max, color) => `<div class="barra"><span style="width:${max ? Math.round(100 * v / max) : 0}%; background:${color};"></span></div>`;
+const colorP = p => p === null ? 'var(--muted)' : p >= 95 ? 'var(--ok)' : p >= 85 ? 'var(--warn)' : 'var(--err)';
+const filaZona = (zona, detalle, columnas) => `<tr class="zona"><td colspan="${columnas}"><strong>${esc(zona)}</strong><span>${detalle}</span></td></tr>`;
+const sinDatoTexto = g => `Sin dato: ${g.n} de ${g.n + g.sin} pedidos con Hora Fin`;
+const calculo = (titulo, fuente, filas, ojo) => `<details class="calc"><summary>Cómo se calcula · ${titulo}</summary>
+  <div class="cuerpo"><div class="gris" style="margin-bottom:8px;">De dónde sale: ${fuente}</div>
+  <table><tbody>${filas.map(([q, c]) => `<tr><td>${q}</td><td>${c}</td></tr>`).join('')}</tbody></table>
+  ${ojo ? `<div class="ojo"><strong>Ojo:</strong> ${ojo}</div>` : ''}</div></details>`;
+
+function mensaje(texto){ $('contenido').innerHTML = `<div class="panel"><div class="empty-state">${texto}</div></div>`; }
+const enRango = f => f >= $('desde').value && f <= $('hasta').value;
+
+// ---- Subida de los dos reportes ----
+function rangoTexto(fechas){
+  return fechas.length ? `Guardado: ${fechas.length} día(s) con datos, ${fc(fechas[0])} al ${fc(fechas[fechas.length - 1])}` : 'Todavía no se subió ninguno.';
+}
+function pintarCargados(){
+  $('cargadoBombeo').textContent = rangoTexto(reportes.fechas.bombeo);
+  $('cargadoTiempos').textContent = rangoTexto(reportes.fechas.tiempos);
+}
+function leerArchivo(input, tipo){
+  const estado = $(tipo === 'bombeo' ? 'estadoBombeo' : 'estadoTiempos');
+  const file = input.files[0];
+  if (!file) return;
+  estado.className = 'estado'; estado.textContent = 'Leyendo...';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array', cellDates: false});
+      const hojas = wb.SheetNames.map(nombre => ({nombre, rows: XLSX.utils.sheet_to_json(wb.Sheets[nombre], {header: 1, defval: null, raw: true})}));
+      const leido = tipo === 'bombeo' ? parseBombeoSheets(hojas) : parseTiemposSheets(hojas);
+      if (!leido || !leido.desde){
+        estado.className = 'estado err';
+        estado.textContent = tipo === 'bombeo' ? 'No es el reporte "Metros bombeados por equipo" (no encontré la columna idEquipo y las fechas).'
+                                               : 'No es el reporte "Cumplimiento de tiempos de despacho" (no encontré OrdComp, Fecha, Cantidad y Total In).';
+        return;
+      }
+      pendiente[tipo] = leido;
+      const ya = reportes.fechas[tipo].filter(f => f >= leido.desde && f <= leido.hasta).length;
+      estado.innerHTML = `${leido.filas.length} ${tipo === 'bombeo' ? 'celdas equipo-día' : 'pedidos'}, del ${fc(leido.desde)} al ${fc(leido.hasta)}.
+        ${ya ? `<br>Reemplaza lo guardado de esas fechas (${ya} día(s) con datos).` : ''}
+        <br><button type="button" class="btn" id="guardar-${tipo}">Guardar</button>`;
+      $('guardar-' + tipo).addEventListener('click', () => guardar(tipo));
+    } catch (err) {
+      estado.className = 'estado err'; estado.textContent = 'Error leyendo el archivo: ' + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function guardar(tipo){
+  const estado = $(tipo === 'bombeo' ? 'estadoBombeo' : 'estadoTiempos');
+  const leido = pendiente[tipo];
+  const btn = $('guardar-' + tipo); if (btn) btn.disabled = true;
+  try {
+    const r = await apiLogistica('/api/logistica/indicadores/' + tipo, {method: 'POST', body: JSON.stringify(leido)});
+    estado.className = 'estado ok';
+    estado.textContent = `✓ Guardado: ${r.filas} filas del ${fc(r.desde)} al ${fc(r.hasta)}.`;
+    delete pendiente[tipo];
+    $(tipo === 'bombeo' ? 'fileBombeo' : 'fileTiempos').value = '';
+    // Si todavia no habia nada que mostrar, la pagina se arma desde cero.
+    if ($('desde')) await cargarReportes(true); else await cargarTodo();
+  } catch (err) {
+    estado.className = 'estado err'; estado.textContent = 'No se pudo guardar: ' + err.message;
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ---- Fechas ----
+function renderFiltro(){
+  $('filtro').innerHTML = `
+    <div class="filtro">
+      <div class="campo"><label for="desde">Desde</label><input type="date" id="desde"></div>
+      <div class="campo"><label for="hasta">Hasta</label><input type="date" id="hasta"></div>
+      <span class="alcance" id="alcance"></span>
+    </div>`;
+  const ultimo = fechasElegibles[fechasElegibles.length - 1];
+  $('desde').value = fechasElegibles.find(f => f.slice(0, 7) === ultimo.slice(0, 7));
+  $('hasta').value = ultimo;
+  ['desde', 'hasta'].forEach(id => {
+    VMOCalendario.mejorar($(id), {permitidos: fechasElegibles});
+    $(id).addEventListener('change', () => cargarReportes(false));
+  });
+}
+
+// ---- Dibujo ----
+function render(){
+  const desde = $('desde').value, hasta = $('hasta').value;
+  if (!desde || !hasta) return mensaje('Elegí las dos fechas.');
+  if (desde > hasta) return mensaje('La fecha "desde" es posterior a "hasta".');
+  const dias = diasEnMemoria.filter(d => enRango(d.fecha));
+  const ind = indicadoresDelPeriodo(dias, reportes);
+  $('alcance').innerHTML = `Bombeo: ${new Set(reportes.bombeo.map(f => f.fecha)).size} día(s) con datos ·
+    Camiones: ${dias.length} día(s) guardados · Tiempos: ${new Set(reportes.tiempos.map(f => f.fecha)).size} día(s)<br>
+    Las tres secciones salen separadas en Santo Domingo y Punta Cana`;
+  $('contenido').innerHTML = seccionBombeo(ind.bombeo) + seccionCamiones(ind.camiones) + seccionTiempos(ind.tiempos);
+}
+
+function seccionBombeo(b){
+  const max = b.equipos.length ? b.equipos[0].m3 : 0;
+  const cuerpo = b.equipos.length ? `<div class="tabla"><table>
+    <thead><tr><th>Equipo</th><th>Nombre</th><th class="num">m³ bombeados</th><th style="width:30%"></th><th class="num">Días trabajados</th><th class="num">m³ por día</th></tr></thead>
+    <tbody>${b.zonas.map(z => filaZona(z.zona, `${n1(z.m3)} m³ · ${z.n} equipos`, 6) + recortar('equipos-' + z.zona, z.equipos).map(e => `<tr>
+      <td><strong>${esc(e.equipo)}</strong></td><td class="gris">${esc(e.nombre || '')}</td><td class="num">${n1(e.m3)}</td>
+      <td>${barra(e.m3, max, 'var(--bomba)')}</td><td class="num">${e.dias}</td><td class="num">${n0(e.m3PorDia)}</td></tr>`).join('')
+      + botonTodos('equipos-' + z.zona, z.equipos.length, 6)).join('')}
+    </tbody></table></div>` : '<div class="empty-state">No hay datos de bombeo en estas fechas. Subí el reporte "Metros bombeados por equipo" arriba.</div>';
+  return `<div class="sec">1 · Metros bombeados por equipo <span class="fuente">reporte del sistema · Macao incluido</span></div>
+    <div class="kpis">
+      <div class="kpi b"><div class="label">m³ bombeados</div><div class="value">${n0(b.m3)}</div><div class="sub">${b.n} equipos</div></div>
+      ${b.zonas.filter(z => z.zona !== 'Sin zona').map(z => `<div class="kpi b"><div class="label">${esc(z.zona)}</div><div class="value">${n0(z.m3)}</div><div class="sub">${z.n} equipos · ${n0(z.mediana)} m³ por equipo al día</div></div>`).join('')}
+      <div class="kpi b"><div class="label">m³ por equipo al día</div><div class="value">${n0(b.mediana)}</div><div class="sub">valor del medio, días que trabajó</div></div>
+    </div>
+    <div class="panel"><div class="panel-head"><h2>Por equipo</h2><span class="sub">separado por zona, del que más bombeó al que menos</span></div>${cuerpo}</div>
+    ${calculo('Metros bombeados por equipo', 'el reporte "Metros bombeados por equipo" del sistema, subido por rango de fechas', [
+      ['m³ bombeados', 'Suma de los m³ del equipo en los días del rango, tal cual vienen en el reporte (con decimales, Macao incluido).'],
+      ['Días trabajados', 'Días del rango en que el equipo tiene m³.'],
+      ['m³ por día', 'm³ bombeados ÷ días trabajados.'],
+      ['m³ por equipo al día', 'Cada equipo en cada día que trabajó, ordenados de menor a mayor: el del medio. Por zona y en total.'],
+      ['Zona del equipo', 'Sale sola del reporte de Cumplimiento de tiempos del mismo rango: la zona de las plantas donde ese equipo hizo pedidos (la que suma más m³). Si un equipo no aparece en ese reporte, sale "Sin zona".'],
+      ['Subida', 'Se exporta el rango que quieras y se sube arriba. Lo nuevo reemplaza lo que había de esas fechas.'],
+    ], 'el reporte no trae servicios por bomba ni planta; la zona depende de que también se suba el reporte de tiempos de ese rango.')}`;
+}
+
+function seccionCamiones(c){
+  const max = c.camiones.length ? c.camiones[0].m3 : 0;
+  const cuerpo = c.camiones.length ? `<div class="tabla"><table>
+    <thead><tr><th>Ficha</th><th>Planta principal</th><th class="num">m³</th><th style="width:20%"></th><th class="num">Días</th><th class="num">m³ por día</th><th class="num">Viajes</th><th class="num">m³ por viaje</th><th class="num">Viajes por día</th></tr></thead>
+    <tbody>${c.zonas.map(z => filaZona(z.zona, `${n0(z.m3)} m³ · ${z.n} camiones · ${n1(z.m3PorCamionDia)} m³ por camión al día`, 9) + recortar('camiones-' + z.zona, z.camiones).map(k => `<tr>
+      <td><strong>${esc(k.ficha)}</strong></td><td class="gris">${esc(k.planta)}</td><td class="num">${n0(k.m3)}</td>
+      <td>${barra(k.m3, max, 'var(--camion)')}</td><td class="num">${k.dias}</td><td class="num"><strong>${n1(k.m3PorDia)}</strong></td>
+      <td class="num">${k.viajes}</td><td class="num">${n1(k.m3PorViaje)}</td><td class="num">${n1(k.viajesPorDia)}</td></tr>`).join('')
+      + botonTodos('camiones-' + z.zona, z.camiones.length, 9)).join('')}
+    </tbody></table></div>` : '<div class="empty-state">No hay días guardados en estas fechas.</div>';
+  const zonas = c.zonas.filter(z => z.zona !== 'Sin zona');
+  return `<div class="sec">2 · Metros transportados por camión <span class="fuente">Excel de cargue · ${c.dias} día(s) guardados · Macao incluido</span></div>
+    <div class="kpis">
+      <div class="kpi c"><div class="label">m³ por camión al día</div><div class="value">${n1(c.m3PorCamionDia)}</div><div class="sub">suma de "m³ por día" ${n1(c.sumaM3PorDia)} ÷ ${c.n} camiones</div></div>
+      ${zonas.map(z => `<div class="kpi c"><div class="label">${esc(z.zona)} · m³ por camión al día</div><div class="value">${n1(z.m3PorCamionDia)}</div><div class="sub">suma de "m³ por día" ${n1(z.sumaM3PorDia)} ÷ ${z.n} camiones</div></div>`).join('')}
+      <div class="kpi c"><div class="label">m³ transportados</div><div class="value">${n0(c.m3)}</div><div class="sub">${n0(c.viajes)} viajes · Macao ${n0(c.viajesMacao)} viajes</div></div>
+    </div>
+    <div class="kpis">
+      <div class="kpi c"><div class="label">Viajes por camión al día</div><div class="value">${n1(c.viajesPorCamionDia)}</div><div class="sub">suma de "viajes por día" ${n1(c.sumaViajesPorDia)} ÷ ${c.n} camiones</div></div>
+      ${zonas.map(z => `<div class="kpi c"><div class="label">${esc(z.zona)} · viajes por camión al día</div><div class="value">${n1(z.viajesPorCamionDia)}</div><div class="sub">suma de "viajes por día" ${n1(z.sumaViajesPorDia)} ÷ ${z.n} camiones</div></div>`).join('')}
+    </div>
+    <div class="panel"><div class="panel-head"><h2>Por camión</h2><span class="sub">separado por zona, del que más transportó al que menos</span></div>${cuerpo}</div>
+    ${calculo('Metros transportados por camión', 'el Excel "Tiempo de Carga por ficha" que se sube cada día (ficha, planta y m³ de cada viaje)', [
+      ['Zona', 'Cada camión va en la zona donde hizo más viajes (la zona de la planta donde cargó, según los supuestos del día).'],
+      ['m³ / Viajes', 'Suma de la cantidad y cantidad de renglones de esa ficha en el rango.'],
+      ['Días', 'Días en que la ficha cargó.'],
+      ['m³ por día (cada camión)', 'm³ del camión ÷ días que trabajó.'],
+      ['m³ por camión al día (zona y total)', 'Se suma la columna "m³ por día" de todos los camiones de la zona y se divide entre la cantidad de camiones.'],
+      ['m³ por viaje', 'm³ ÷ viajes.'],
+      ['Viajes por día', 'Viajes del camión ÷ días que trabajó.'],
+      ['Viajes por camión al día (zona y total)', 'Se suma la columna "viajes por día" de todos los camiones de la zona y se divide entre la cantidad de camiones.'],
+      ['Planta principal', 'La planta donde más veces cargó.'],
+      ['Qué no entra', 'Las "Carga Vacia" (no son un camión) y los despachos a VMO CONCRETOS.'],
+      ['Macao', 'Entra: el día guarda también los viajes de Macao, que siguen fuera del cumplimiento.'],
+    ], 'los días guardados antes del 28/10/2026 no traen los viajes de Macao hasta que se completen.')}`;
+}
+
+function seccionTiempos(t){
+  const conDato = t.zonas.filter(z => z.hayDato && z.zona !== 'Sin zona');
+  const dias = [...new Set(t.zonas.flatMap(z => z.dias.map(d => d.nombre)))].sort();
+  const colores = {'Santo Domingo': 'var(--tiempo)', 'Punta Cana': 'var(--tiempo2)'};
+  const celda = g => g.hayDato ? `<td class="num" style="color:${colorP(g.pct)}; font-weight:700;">${pct(g.pct)}</td>`
+                               : `<td class="num gris" title="${sinDatoTexto(g)}">Sin dato</td>`;
+  return `<div class="sec">3 · Cumplimiento de tiempos de despacho <span class="fuente">reporte del sistema · sin MACAO II (los otros clientes de Macao sí)</span></div>
+    <div class="kpis">
+      <div class="kpi t"><div class="label">Cumplimiento</div><div class="value">${pct(t.pct)}</div><div class="sub">${n0(t.aTiempo)} de ${n0(t.prog)} m³ antes de la Hora Fin · logro ${t.logro}/${t.n}</div></div>
+      ${t.zonas.filter(z => z.zona !== 'Sin zona').map(z => `<div class="kpi t"><div class="label">${esc(z.zona)}</div><div class="value">${z.hayDato ? pct(z.pct) : 'Sin dato'}</div><div class="sub">${z.n} de ${z.n + z.sin} pedidos con Hora Fin${z.hayDato ? '' : ' · menos de la mitad'}</div></div>`).join('')}
+      <div class="kpi t"><div class="label">Aparte, sin entrar al %</div><div class="value">${n0(t.sin + t.sinViajes)}</div><div class="sub">${n0(t.sin)} sin Hora Fin · ${n0(t.sinViajes)} sin ningún viaje</div></div>
+    </div>
+    <div class="panel"><div class="panel-head"><h2>Por día</h2><span class="sub">% de cada día por zona, solo pedidos con Hora Fin</span></div>
+      <div class="panel-body">${graficoPorDia(dias, conDato, colores)}
+        <div class="leyenda">${t.zonas.filter(z => z.zona !== 'Sin zona').map(z => z.hayDato
+          ? `<span><i style="background:${colores[z.zona]}"></i>${esc(z.zona)}</span>`
+          : `<span>${esc(z.zona)}: ${sinDatoTexto(z).toLowerCase()}, no se grafica</span>`).join('')}</div></div></div>
+    <div class="dos">
+      <div class="panel"><div class="panel-head"><h2>Por planta</h2><span class="sub">separado por zona</span></div>
+        <div class="tabla"><table><thead><tr><th>Planta</th><th class="num">%</th><th class="num">Logro</th><th class="num">m³ prog.</th><th class="num">Sin Hora Fin</th></tr></thead>
+        <tbody>${t.zonas.map(z => filaZona(z.zona, z.hayDato ? pct(z.pct) : sinDatoTexto(z), 5) + recortar('plantas-' + z.zona, z.plantas).map(p => `<tr>
+          <td><strong>${esc(p.nombre)}</strong></td>${celda(p)}<td class="num">${p.logro}/${p.n}</td><td class="num">${n0(p.prog)}</td><td class="num">${p.sin}</td></tr>`).join('')
+          + botonTodos('plantas-' + z.zona, z.plantas.length, 5)).join('')}
+        </tbody></table></div></div>
+      <div class="panel"><div class="panel-head"><h2>Por cliente</h2><span class="sub">separado por zona, del que más m³ programó al que menos</span></div>
+        <div class="tabla"><table><thead><tr><th>Cliente</th><th class="num">%</th><th class="num">Logro</th><th class="num">m³ prog.</th></tr></thead>
+        <tbody>${t.zonas.map(z => filaZona(z.zona, `${z.clientes.length} clientes`, 4) + recortar('clientes-' + z.zona, z.clientes).map(p => `<tr>
+          <td class="corta" title="${esc(p.nombre)}"><strong>${esc(p.nombre)}</strong></td>${celda(p)}<td class="num">${p.logro}/${p.n}</td><td class="num">${n0(p.prog)}</td></tr>`).join('')
+          + botonTodos('clientes-' + z.zona, z.clientes.length, 4)).join('')}
+        </tbody></table></div></div>
+    </div>
+    ${calculo('Cumplimiento de tiempos de despacho', 'el reporte "Cumplimiento de tiempos de despacho" del sistema, subido por rango de fechas', [
+      ['Cada pedido', 'm³ a tiempo = m³ de los viajes cargados antes de la Hora Fin ("Total In"). % = m³ a tiempo ÷ m³ programados ("Cantidad"). Logro SI = 100%.'],
+      ['Cumplimiento', 'Suma de m³ a tiempo ÷ suma de m³ programados de los pedidos que entran. Pesa por m³.'],
+      ['Qué entra', 'Pedidos con al menos un viaje y con Hora Fin. Sin Hora Fin y sin viajes van aparte, no como 0% (el sistema los cuenta como 0%).'],
+      ['Zona', 'La de la planta del pedido en el reporte.'],
+      ['Macao II', 'Los pedidos de MACAO ALTO RESORT (MACAO II, ESTRUCTURA) no entran a este indicador. Los otros clientes de Macao sí.'],
+      ['Por día / planta / cliente', 'La misma cuenta con los pedidos de ese día, planta o cliente, siempre separada por zona.'],
+      ['Sin dato', 'Si una zona, planta o cliente tiene Hora Fin en menos de la mitad de sus pedidos con viaje, no se muestra su %: dice "Sin dato" y cuántos la tienen.'],
+    ], 'para que Punta Cana se pueda medir hay que llenar la Hora Fin de los pedidos en el sistema.')}`;
+}
+
+function graficoPorDia(dias, zonas, colores){
+  if (!dias.length || !zonas.length) return '<div class="empty-state">Sin pedidos con Hora Fin en estas fechas.</div>';
+  const W = 1180, H = 190, P = 40;
+  const X = i => dias.length === 1 ? W / 2 : P + i * (W - 2 * P) / (dias.length - 1);
+  const Y = v => H - 26 - v / 100 * (H - 50);
+  const cada = Math.ceil(dias.length / 24);
+  const serie = (z, k) => { let d = '', abierto = false; const pts = [];
+    dias.forEach((f, i) => { const g = z.dias.find(x => x.nombre === f);
+      if (!g || g.pct === null) { abierto = false; return; }
+      d += `${abierto ? 'L' : 'M'}${X(i).toFixed(1)},${Y(g.pct).toFixed(1)} `; abierto = true;
+      pts.push(`<circle class="punto" cx="${X(i)}" cy="${Y(g.pct)}" r="4" fill="${colores[z.zona]}" stroke="var(--card)" stroke-width="2"><title>${esc(z.zona)} ${fcc(f)}: ${pct(g.pct)} · ${g.n} pedidos</title></circle>`); });
+    return `<path d="${d}" fill="none" stroke="${colores[z.zona]}" stroke-width="2" ${k ? 'stroke-dasharray="5 4"' : ''}/>${pts.join('')}`; };
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumplimiento por día">
+    ${[0, 25, 50, 75, 100].map(v => `<line x1="${P}" x2="${W - P}" y1="${Y(v)}" y2="${Y(v)}" stroke="rgba(255,255,255,.07)"/><text x="${P - 6}" y="${Y(v) + 3}" text-anchor="end" fill="rgba(238,242,247,.55)" font-size="10">${v}%</text>`).join('')}
+    ${dias.map((f, i) => i % cada ? '' : `<text x="${X(i)}" y="${H - 6}" text-anchor="middle" fill="rgba(238,242,247,.55)" font-size="9.5">${fcc(f)}</text>`).join('')}
+    ${zonas.map(serie).join('')}</svg>`;
+}
+
+// ---- Carga ----
+async function cargarReportes(recalcularFechas){
+  if (!$('desde')) return;
+  try {
+    const r = await apiLogistica(`/api/logistica/indicadores?desde=${encodeURIComponent($('desde').value)}&hasta=${encodeURIComponent($('hasta').value)}`);
+    reportes = r;
+  } catch (err) { return mensaje('No se pudieron leer los reportes: ' + esc(err.message)); }
+  pintarCargados();
+  if (recalcularFechas){
+    fechasElegibles = [...new Set([...fechasElegibles, ...reportes.fechas.bombeo, ...reportes.fechas.tiempos])].sort();
+    ['desde', 'hasta'].forEach(id => VMOCalendario.mejorar($(id), {permitidos: fechasElegibles}));
+  }
+  render();
+}
+
+async function cargarTodo(){
+  mensaje('Cargando el historial...');
+  let indice, rep;
+  try {
+    indice = (await apiLogistica('/api/logistica/dias')).dias;
+    // Las fechas de los reportes ya subidos, para el calendario.
+    rep = await apiLogistica('/api/logistica/indicadores?desde=0000-00-00&hasta=0000-00-00').catch(() => null);
+  } catch (err) { return mensaje(err.sinToken ? esc(err.message) : 'No se pudo leer el historial: ' + esc(err.message)); }
+  const dias = [];
+  for (let i = 0; i < indice.length; i += 6){
+    mensaje(`Cargando el historial... ${dias.length}/${indice.length} días`);
+    const tanda = await Promise.all(indice.slice(i, i + 6).map(d =>
+      apiLogistica('/api/logistica/dias/' + encodeURIComponent(d.fecha))
+        .then(dia => ({fecha: d.fecha, ...restaurarDia(dia)})).catch(() => null)));
+    tanda.filter(Boolean).forEach(d => dias.push(d));
+  }
+  diasEnMemoria = dias.sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const fr = rep ? rep.fechas : {bombeo: [], tiempos: []};
+  reportes.fechas = fr;
+  pintarCargados();
+  fechasElegibles = [...new Set([...diasEnMemoria.map(d => d.fecha), ...fr.bombeo, ...fr.tiempos])].sort();
+  if (!fechasElegibles.length) return mensaje('Todavía no hay datos: guardá un día en el dashboard o subí uno de los reportes de arriba.');
+  renderFiltro();
+  await cargarReportes(false);
+}
+
+$('fileBombeo').addEventListener('change', ev => leerArchivo(ev.target, 'bombeo'));
+$('contenido').addEventListener('click', ev => {
+  const b = ev.target.closest('.btn-todos'); if (!b) return;
+  const id = b.dataset.lista;
+  if (listasAbiertas.has(id)) listasAbiertas.delete(id); else listasAbiertas.add(id);
+  render();
+});
+$('fileTiempos').addEventListener('change', ev => leerArchivo(ev.target, 'tiempos'));
+cargarTodo();
+</script>
+</body>
+</html>

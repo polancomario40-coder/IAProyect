@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reporte de Cancelados — VMO Concretos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="/logistica.logic.js?v=2026-10-28"></script>
+<script src="/calendario.js?v=2026-10-19b"></script>
+<script src="/logistica.api.js?v=2026-10-08b"></script>
+<style>
+  :root{
+    color-scheme: dark;
+    --vmo-red:#D32F2F; --vmo-red-dark:#F87171;
+    --ink:#EEF2F7; --muted:rgba(238,242,247,0.55); --line:rgba(255,255,255,0.07);
+    --bg:#0D1829; --card:#152535; --elevated:#1C3045;
+    --ok:#34D399; --warn:#F59E0B; --err:#F87171;
+    --brand-glow:rgba(211,47,47,0.22);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Inter','Segoe UI',system-ui,sans-serif;
+    background-color:var(--bg);
+    background-image:
+      radial-gradient(rgba(211,47,47,0.03) 1px, transparent 1px),
+      radial-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size:40px 40px, 20px 20px; background-position:0 0, 10px 10px;
+    color:var(--ink); -webkit-font-smoothing:antialiased;
+  }
+  header{
+    background:var(--card); color:var(--ink); padding:16px 28px;
+    display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--line); flex-wrap:wrap; gap:10px; position:relative;
+  }
+  header::after{content:''; position:absolute; bottom:-1px; left:0; width:180px; height:2px;
+    background:linear-gradient(90deg, var(--vmo-red) 0%, transparent 100%);}
+  header .brand{display:flex; flex-direction:column; gap:2px;}
+  header .brand .tag{text-transform:uppercase; letter-spacing:1px; font-size:10.5px; color:var(--muted);}
+  header h1{margin:0; font-size:17px; font-weight:700; letter-spacing:-.2px;}
+
+  .wrap{max-width:760px; margin:0 auto; padding:24px 24px 60px;}
+  .panel{background:var(--card); border:1px solid var(--line); border-top:3px solid var(--vmo-red);
+    border-radius:12px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
+  .panel-body{padding:22px 24px;}
+  .panel h2{margin:0 0 4px; font-size:16px;}
+  .panel .intro{margin:0 0 20px; font-size:13px; color:var(--muted); line-height:1.55;}
+
+  .fechas{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;}
+  label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.5px;
+        color:var(--muted); font-weight:700; margin-bottom:6px;}
+  input[type="date"], .cal-campo{
+    width:100%; background:var(--elevated); color:var(--ink); border:1px solid var(--line);
+    border-radius:8px; padding:10px 12px; font-size:14px; font-weight:600; font-family:inherit;
+  }
+  .cal-campo:focus-visible, .btn:focus-visible{outline:2px solid var(--vmo-red); outline-offset:2px;}
+
+  .dias{font-size:12.5px; color:var(--muted); line-height:1.6; margin-bottom:18px; min-height:20px;}
+  .dias strong{color:var(--ink);}
+  .btn{
+    width:100%; padding:13px 18px; background:var(--vmo-red); color:#fff; border:none; border-radius:8px;
+    font-weight:700; font-size:14px; cursor:pointer; font-family:inherit;
+    box-shadow:0 4px 14px var(--brand-glow);
+  }
+  .btn:disabled{opacity:.45; cursor:not-allowed; box-shadow:none;}
+
+  .estado{margin-top:16px; font-size:13px; line-height:1.55;}
+  .estado.error{color:var(--err);}
+  .resultado{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:16px;}
+  .dato{background:var(--elevated); border:1px solid var(--line); border-radius:10px; padding:12px 14px;}
+  .dato .v{font-size:20px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .dato .l{font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin-top:2px;}
+  .nota{font-size:12px; color:var(--muted); line-height:1.55;}
+  footer{text-align:center; padding:26px; color:var(--muted); font-size:11.5px;}
+
+  @media (max-width:600px){
+    .wrap{padding:16px;}
+    .fechas, .resultado{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="tag">VMO Concretos · Logística</span>
+    <h1>Reporte de Cancelados</h1>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="panel-body">
+      <h2>Generar reporte</h2>
+      <p class="intro">Elegí un rango de fechas y se descarga un Excel con todos los pedidos de los
+        días guardados de ese rango que no se despacharon nada, más una hoja de resumen por día,
+        por motivo y por responsable.</p>
+      <div class="fechas">
+        <div><label for="desde">Desde</label><input type="date" id="desde"></div>
+        <div><label for="hasta">Hasta</label><input type="date" id="hasta"></div>
+      </div>
+      <div class="dias" id="dias">Cargando los días guardados...</div>
+      <button class="btn" id="btnGenerar" disabled>Generar reporte</button>
+      <div id="estado" class="estado" role="status"></div>
+    </div>
+  </div>
+  <p class="nota">Cancelado es un pedido de la programación que <strong>no se despachó nada</strong>: los
+    despachos parciales no entran, aunque les quede pendiente. Macao sí entra: cuenta como cancelado si ese día
+    ningún camión de ese cliente fue a esa obra y a ese elemento. Los despachos a VMO Concretos no.
+    Solo cuentan los días que se guardaron en el historial.</p>
+</div>
+
+<footer>VMO Concretos · Reporte de Cancelados</footer>
+
+<script>
+// Reporte de cancelados de un rango de dias (2026-10-12).
+//
+// El navegador pide los dias guardados del rango, los recalcula con
+// restaurarDia() y arma filas y resumen con reporteCancelados(), en
+// logistica.logic.js. El servidor solo les da formato de Excel: la libreria
+// de Excel del navegador no escribe estilos ni tablas.
+
+let indice = [];   // los dias guardados, del indice del historial
+const $ = id => document.getElementById(id);
+const fechaCorta = f => f.slice(8, 10) + '/' + f.slice(5, 7);
+const enRango = () => {
+  const desde = $('desde').value, hasta = $('hasta').value;
+  return indice.filter(d => d.fecha >= desde && d.fecha <= hasta)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+};
+
+function estado(texto, error){
+  $('estado').className = 'estado' + (error ? ' error' : '');
+  $('estado').innerHTML = texto;
+}
+
+function actualizarRango(){
+  const desde = $('desde').value, hasta = $('hasta').value;
+  const dias = enRango();
+  let error = '';
+  if (!desde || !hasta) error = 'Elegí las dos fechas.';
+  else if (desde > hasta) error = 'La fecha "desde" es posterior a "hasta".';
+  else if (!dias.length) error = 'No hay días guardados en este rango.';
+  $('dias').innerHTML = error ? esc(error)
+    : `<strong>${dias.length} ${dias.length === 1 ? 'día guardado' : 'días guardados'}</strong> en el rango: ${dias.map(d => fechaCorta(d.fecha)).join(', ')}`;
+  $('btnGenerar').disabled = !!error;
+}
+
+async function cargarIndice(){
+  try { indice = (await apiLogistica('/api/logistica/dias')).dias; }
+  catch (err) { $('dias').textContent = err.sinToken ? err.message : 'No se pudo leer el historial: ' + err.message; return; }
+  if (!indice.length){ $('dias').textContent = 'Todavía no hay días guardados en el historial.'; return; }
+  // Por defecto, el mes del ultimo dia guardado hasta ese dia.
+  const ultimo = indice.map(d => d.fecha).sort().pop();
+  $('desde').value = ultimo.slice(0, 8) + '01';
+  $('hasta').value = ultimo;
+  actualizarRango();
+}
+
+async function generar(){
+  const desde = $('desde').value, hasta = $('hasta').value, dias = enRango();
+  $('btnGenerar').disabled = true;
+  try {
+    const cargados = [];
+    for (let i = 0; i < dias.length; i += 6){
+      estado(`Leyendo los días guardados... ${cargados.length}/${dias.length}`);
+      const tanda = await Promise.all(dias.slice(i, i + 6).map(d =>
+        apiLogistica('/api/logistica/dias/' + encodeURIComponent(d.fecha))
+          .then(dia => ({fecha: d.fecha, ...restaurarDia(dia)}))));
+      cargados.push(...tanda);
+    }
+    const reporte = reporteCancelados(cargados);
+    estado('Armando el Excel...');
+    const token = tokenDelPortal();
+    const res = await fetch('/api/logistica/reporte-cancelados', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+      body: JSON.stringify({desde, hasta, ...reporte}),
+    });
+    if (!res.ok){
+      let detalle = `Error ${res.status}`;
+      try { const c = await res.json(); detalle = c.detail?.detalle || c.detail || detalle; } catch (e) {}
+      throw new Error(typeof detalle === 'string' ? detalle : JSON.stringify(detalle));
+    }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Cancelados_VMO_${desde}_al_${hasta}.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    const r = reporte.resumen;
+    estado(`✓ Descargado <strong>Cancelados_VMO_${desde}_al_${hasta}.xlsx</strong>
+      <div class="resultado">
+        <div class="dato"><div class="v">${fmtInt(r.entregas)}</div><div class="l">pedidos cancelados</div></div>
+        <div class="dato"><div class="v">${fmtInt(r.m3Cancelado)}</div><div class="l">m³ cancelados</div></div>
+        <div class="dato"><div class="v">${r.diasConCancelados} de ${r.diasRevisados}</div><div class="l">días con cancelados</div></div>
+      </div>`);
+  } catch (err) {
+    estado('No se pudo generar el reporte: ' + esc(err.message), true);
+  } finally {
+    actualizarRango();
+  }
+}
+
+$('desde').addEventListener('change', actualizarRango);
+$('hasta').addEventListener('change', actualizarRango);
+$('btnGenerar').addEventListener('click', generar);
+cargarIndice();
+</script>
+</body>
+</html>
