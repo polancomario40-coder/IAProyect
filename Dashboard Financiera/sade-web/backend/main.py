@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
 from database import test_connection
-from routers import dashboard, prestamos, clientes, reportes
+from routers import dashboard, prestamos, clientes, reportes, auth
 
 load_dotenv()
 
@@ -32,6 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(prestamos.router)
 app.include_router(clientes.router)

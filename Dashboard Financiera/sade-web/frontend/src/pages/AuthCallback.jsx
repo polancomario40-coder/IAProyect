@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AUTH_CENTER_URL, CLIENT_ID } from '../context/AuthContext'
 
 export default function AuthCallback() {
   const [status, setStatus] = useState('Procesando credenciales de acceso...')
@@ -49,11 +48,10 @@ export default function AuthCallback() {
           navigate('/dashboard', { replace: true })
         }, 400)
       } else {
-        setStatus('Credenciales no recibidas o expiradas. Redirigiendo al login central...')
+        setStatus('Credenciales no recibidas o expiradas. Redirigiendo al login...')
         timeoutId = setTimeout(() => {
-          const redirectUri = encodeURIComponent(window.location.origin + '/auth-callback')
-          window.location.href = `${AUTH_CENTER_URL}/?client_id=${CLIENT_ID}&redirect_uri=${redirectUri}`
-        }, 1500)
+          navigate('/', { replace: true })
+        }, 1200)
       }
     }
 

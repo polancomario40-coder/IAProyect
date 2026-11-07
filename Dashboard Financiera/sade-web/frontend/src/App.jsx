@@ -6,6 +6,7 @@ import LoanDetail from './pages/LoanDetail'
 import Clientes from './pages/Clientes'
 import Reportes from './pages/Reportes'
 import AuthCallback from './pages/AuthCallback'
+import LoginPage from './pages/LoginPage'
 import { AuthProvider, useAuth } from './context/AuthContext'
 
 function Sidebar({ open, onClose }) {
@@ -169,40 +170,7 @@ function AuthGuard({ children }) {
   }
 
   if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] flex items-center justify-center p-4">
-        <div className="bg-slate-900/90 border border-slate-700 rounded-2xl p-8 max-w-md w-full shadow-2xl text-center backdrop-blur-md">
-          <div className="w-16 h-16 bg-blue-500/10 border border-blue-500/30 rounded-2xl flex items-center justify-center mx-auto mb-5 text-blue-400">
-            <ShieldCheck size={36} />
-          </div>
-
-          <h2 className="text-2xl font-bold text-white mb-2">Acceso Seguro Requerido</h2>
-          <p className="text-sm text-slate-400 mb-6 leading-relaxed">
-            Para acceder a <span className="text-white font-medium">SADE Web (Cartera de Préstamos)</span> debe autenticarse a través del Centro de Autenticación Unificado.
-          </p>
-
-          <div className="space-y-3">
-            <button
-              onClick={() => redirectToLogin(false)}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition duration-150"
-            >
-              Iniciar Sesión en SADE Auth
-            </button>
-
-            <button
-              onClick={() => loginDev('admin', 'SADE Financiera Demo')}
-              className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-xl border border-slate-700 transition duration-150"
-            >
-              Acceso Rápido Local (Modo Desarrollo)
-            </button>
-          </div>
-
-          <p className="text-[11px] text-slate-500 mt-6">
-            Portal Unificado SADE • Seguridad & Permisos
-          </p>
-        </div>
-      </div>
-    )
+    return <LoginPage />
   }
 
   return children
