@@ -5,9 +5,33 @@ import { useQuery } from '@tanstack/react-query'
 
 const API_BASE = '/api'
 
-async function fetchJson(url) {
-  const res = await fetch(url)
+function getAuthHeaders() {
+  const headers = {}
+  const token = localStorage.getItem('jwt_token')
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  const empresaStr = localStorage.getItem('empresa')
+  if (empresaStr) {
+    try {
+      const emp = JSON.parse(empresaStr)
+      if (emp.idEmpresa) headers['X-Selected-Company'] = emp.idEmpresa
+    } catch {}
+  }
+  return headers
+}
+
+async function fetchJson(url, options = {}) {
+  const headers = { ...getAuthHeaders(), ...(options.headers || {}) }
+  const res = await fetch(url, { ...options, headers })
   if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem('jwt_token')
+      localStorage.removeItem('empresa')
+      if (window.location.pathname !== '/auth-callback') {
+        const callbackUrl = encodeURIComponent(window.location.origin + '/auth-callback')
+        const authUrl = import.meta.env.VITE_AUTH_CENTER_URL || 'https://auth.sade.com.do'
+        window.location.href = `${authUrl}/?client_id=sade-financiera&redirect_uri=${callbackUrl}`
+      }
+    }
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(err.detail || `Error ${res.status}`)
   }
@@ -58,10 +82,7 @@ export function useClientes(filtros = {}) {
   const queryString = params.toString()
   return useQuery({
     queryKey: ['clientes', filtros],
-    queryFn: () => fetch(`${API_BASE}/clientes/${queryString ? '?' + queryString : ''}`).then(r => {
-      if (!r.ok) throw new Error('Error al cargar clientes')
-      return r.json()
-    }),
+    queryFn: () => fetchJson(`${API_BASE}/clientes/${queryString ? '?' + queryString : ''}`),
     staleTime: 2 * 60 * 1000,
     retry: 1,
   })
