@@ -23,5 +23,5 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8000 ^| findstr LISTENING') 
 echo Iniciando Uvicorn en http://127.0.0.1:8000...
 echo (Presione Ctrl+C para detener el servidor)
 echo.
-.\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn erp_bridge:app --host 127.0.0.1 --port 8000
 pause

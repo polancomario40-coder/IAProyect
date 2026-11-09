@@ -1064,26 +1064,25 @@
 </head>
 <body>
 
-  <!-- ── LOGIN ── -->
+  <!-- ── LOGIN (SSO AUTH-CENTER) ── -->
   <div id="login-screen">
     <div class="login-box">
       <div class="login-logo">
         <img src="/logo.png" onerror="this.style.display='none'" alt="VMO" />
         <div class="login-logo-text">
           <h1>VMO</h1>
-          <p>Sistema de Conduces</p>
+          <p>Centro de Autenticación Unificado</p>
         </div>
       </div>
-      <div class="login-field">
-        <label>Usuario</label>
+      <div style="display:none">
         <input type="text" id="login-user" placeholder="Usuario" autocomplete="username" />
-      </div>
-      <div class="login-field">
-        <label>Contraseña</label>
         <input type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password" />
+        <div class="login-error" id="login-error">Usuario o contraseña incorrectos</div>
       </div>
-      <div class="login-error" id="login-error">Usuario o contraseña incorrectos</div>
-      <button class="btn-login" onclick="doLogin()">Iniciar sesión</button>
+      <div id="sso-status-text" style="font-size:13px; color:var(--text-secondary); text-align:center; margin:16px 0 20px; line-height:1.5;">
+        Redirigiendo al portal de acceso unificado VMO (Auth-Center)...
+      </div>
+      <button class="btn-login" onclick="irAAuthCenter(false)">Iniciar sesión con Auth-Center</button>
     </div>
   </div>
 
@@ -1106,6 +1105,8 @@
       <button class="module-btn" onclick="switchModule('logistica', this)">Logística</button>
       <button class="module-btn" onclick="switchModule('comercial', this)">Comercial</button>
     </div>
+
+    <div id="sso-user-badge" style="display:none; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary); background:var(--bg-elevated); border:1px solid var(--border); padding:5px 10px; border-radius:var(--r-sm); margin-right:8px; white-space:nowrap;"></div>
 
     <button class="btn-logout" onclick="doLogout()">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -1669,7 +1670,98 @@
 
 
   <script>
+    // ── SSO AUTH-CENTER (https://auth.vmo.do) ──
+    const SSO_CONFIG = Object.assign({
+      enabled: true,
+      auth_center_url: 'https://auth.vmo.do',
+      client_id: 'produccion-embarque'
+    }, window.__VMO_SSO_CONFIG__ || {});
+
+    function decodificarJwtPayload(jwt) {
+      if (!jwt || typeof jwt !== 'string') return null;
+      const partes = jwt.split('.');
+      if (partes.length !== 3) return null;
+      try {
+        const base64 = partes[1].replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+        );
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function tokenJwtExpirado(jwt) {
+      const payload = decodificarJwtPayload(jwt);
+      if (!payload) return true;
+      if (payload.exp && (payload.exp * 1000) < (Date.now() + 15000)) return true;
+      return false;
+    }
+
+    function capturarCallbackSSO() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlToken = params.get('token');
+        if (urlToken) {
+          localStorage.setItem('vmo_token', urlToken);
+          localStorage.setItem('jwt_token', urlToken);
+          const payload = decodificarJwtPayload(urlToken);
+          const usr = (payload && (payload.sub || payload.unique_name || payload.NombreCompleto)) || '';
+          if (usr) {
+            localStorage.setItem('vmo_usuario', usr);
+            localStorage.setItem('usuario', JSON.stringify(usr));
+          }
+          const empId = params.get('empresaId') || '';
+          const empNom = params.get('empresaNombre') || '';
+          const empRnc = params.get('empresaRNC') || '';
+          if (empNom || empId) {
+            const empObj = { idEmpresa: empId, empresa: empNom, rnc: empRnc };
+            localStorage.setItem('vmo_empresa', JSON.stringify(empObj));
+            localStorage.setItem('empresa', JSON.stringify(empObj));
+          }
+          const cleanUrl = window.location.pathname + (window.location.hash || '');
+          window.history.replaceState({}, document.title, cleanUrl);
+        } else if (!localStorage.getItem('vmo_token') && localStorage.getItem('jwt_token')) {
+          localStorage.setItem('vmo_token', localStorage.getItem('jwt_token'));
+        }
+      } catch (e) {}
+    }
+
+    capturarCallbackSSO();
     let token = localStorage.getItem('vmo_token');
+
+    function irAAuthCenter(esLogout) {
+      const base = (SSO_CONFIG.auth_center_url || 'https://auth.vmo.do').replace(/\/+$/, '');
+      const clientId = encodeURIComponent(SSO_CONFIG.client_id || 'produccion-embarque');
+      const redirectUri = encodeURIComponent(window.location.origin + '/');
+      const extra = esLogout ? '&logout=true' : '';
+      window.location.href = `${base}/?client_id=${clientId}&redirect_uri=${redirectUri}${extra}`;
+    }
+
+    function actualizarBadgeUsuarioSSO() {
+      const badge = document.getElementById('sso-user-badge');
+      if (!badge) return;
+      const payload = decodificarJwtPayload(token);
+      const usr = localStorage.getItem('vmo_usuario') || (payload && (payload.sub || payload.unique_name)) || '';
+      let empNom = '';
+      try {
+        const empRaw = localStorage.getItem('vmo_empresa') || localStorage.getItem('empresa');
+        if (empRaw) {
+          const emp = JSON.parse(empRaw);
+          empNom = emp.empresa || emp.empresaNombre || '';
+        }
+      } catch (e) {}
+      if (usr || empNom) {
+        badge.textContent = [usr ? `👤 ${usr}` : '', empNom].filter(Boolean).join(' · ');
+        badge.style.display = 'inline-flex';
+      }
+      // Autocompletar usuario en modales de aprobacion/descarte si estan vacios
+      const apQuien = document.getElementById('aprobar-quien');
+      if (apQuien && !apQuien.value && usr) apQuien.value = usr;
+      const deQuien = document.getElementById('descartar-quien');
+      if (deQuien && !deQuien.value && usr) deQuien.value = usr;
+    }
 
     function authHeaders() {
       return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
@@ -2052,7 +2144,7 @@
       const aviso = _avisoCorteAprobar(fila);
       avisoEl.textContent = aviso || '';
       avisoEl.style.display = aviso ? 'block' : 'none';
-      document.getElementById('aprobar-quien').value = '';
+      document.getElementById('aprobar-quien').value = localStorage.getItem('vmo_usuario') || '';
       document.getElementById('aprobar-motivo').value = '';
       document.getElementById('aprobar-modal-error').style.display = 'none';
       _validarModalAprobar();
@@ -2123,7 +2215,7 @@
       _descartarArchivoActual = archivoPdf;
       document.getElementById('descartar-modal-doc').textContent =
         `${fila.archivo_pdf} — ${fila.id_documento || 'sin ID'} — ${fila.cantidad != null ? fila.cantidad + ' m³' : 'sin cantidad'} — bloqueado por "${fila.motivo}"`;
-      document.getElementById('descartar-quien').value = '';
+      document.getElementById('descartar-quien').value = localStorage.getItem('vmo_usuario') || '';
       document.getElementById('descartar-motivo').value = '';
       document.getElementById('descartar-modal-error').style.display = 'none';
       _validarModalDescartar();
@@ -2333,31 +2425,26 @@
     }
 
     async function doLogin() {
-      const usuario    = document.getElementById('login-user').value.trim();
-      const contrasena = document.getElementById('login-pass').value;
-      const errorEl    = document.getElementById('login-error');
-      errorEl.style.display = 'none';
-      try {
-        const res = await fetch('/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ usuario, contrasena })
-        });
-        if (!res.ok) { errorEl.style.display = 'block'; return; }
-        const data = await res.json();
-        token = data.token;
-        localStorage.setItem('vmo_token', token);
-        document.getElementById('login-screen').style.display = 'none';
-        cargarCompanias();
-      } catch (e) { errorEl.style.display = 'block'; }
+      irAAuthCenter(false);
     }
 
     async function doLogout() {
-      await fetch('/logout', { method: 'POST', headers: authHeaders() });
+      try {
+        await Promise.allSettled([
+          fetch('/api/sso-logout', { method: 'POST', headers: authHeaders() }),
+          fetch('/logout', { method: 'POST', headers: authHeaders() })
+        ]);
+      } catch (e) {}
       localStorage.removeItem('vmo_token');
+      localStorage.removeItem('jwt_token');
+      localStorage.removeItem('vmo_usuario');
+      localStorage.removeItem('vmo_empresa');
+      localStorage.removeItem('empresa');
+      localStorage.removeItem('usuario');
       localStorage.removeItem('claude_history');
       localStorage.removeItem('chat_msgs');
-      location.reload();
+      token = null;
+      irAAuthCenter(true);
     }
 
     let history = [];
@@ -2559,23 +2646,33 @@
     });
 
     window.addEventListener('load', async () => {
-      if (token) {
-        const res = await fetch('/companias', { headers: authHeaders() });
-        if (res.ok) {
-          document.getElementById('login-screen').style.display = 'none';
-          const data = await res.json();
-          ['select-compania', 'factura-compania'].forEach(id => {
-            const select = document.getElementById(id);
-            data.companias.forEach(comp => {
-              const opt = document.createElement('option');
-              opt.value = comp; opt.textContent = comp;
-              select.appendChild(opt);
+      if (token && !tokenJwtExpirado(token)) {
+        document.getElementById('login-screen').style.display = 'none';
+        actualizarBadgeUsuarioSSO();
+        try {
+          const res = await fetch('/companias', { headers: authHeaders() });
+          if (res.ok) {
+            const data = await res.json();
+            ['select-compania', 'factura-compania'].forEach(id => {
+              const select = document.getElementById(id);
+              data.companias.forEach(comp => {
+                const opt = document.createElement('option');
+                opt.value = comp; opt.textContent = comp;
+                select.appendChild(opt);
+              });
             });
-          });
-        } else {
-          localStorage.removeItem('vmo_token');
-          token = null;
-        }
+          } else if (res.status === 401) {
+            localStorage.removeItem('vmo_token');
+            localStorage.removeItem('jwt_token');
+            token = null;
+            irAAuthCenter(false);
+          }
+        } catch (e) {}
+      } else {
+        localStorage.removeItem('vmo_token');
+        localStorage.removeItem('jwt_token');
+        token = null;
+        irAAuthCenter(false);
       }
     });
 

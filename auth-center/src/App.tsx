@@ -124,7 +124,7 @@ export default function App() {
         // If target app is Cuadre de Caja, we might not strictly block if the database group check is for CXPAPP only.
         // We warn or allow access because Cuadre de Caja has its own database privileges.
         console.warn('Acceso denegado en CXPAPP, procediendo con permisos alternativos para Cuadre de Caja / Producción Embarque.');
-        if (clientId !== 'cuadre-caja' && clientId !== 'produccion-embarque' && clientId !== 'textil' && clientId !== 'modulo-lentes') {
+        if (clientId !== 'cuadre-caja' && clientId !== 'produccion-embarque' && clientId !== 'textil' && clientId !== 'modulo-lentes' && clientId !== 'vmo' && clientId !== 'control-puerta') {
           throw new Error(response.data?.mensaje || 'No tiene permisos requeridos para esta compañía.');
         }
       }
