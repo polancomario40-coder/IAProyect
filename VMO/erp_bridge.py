@@ -35,6 +35,10 @@ import time
 import unicodedata
 from datetime import date, datetime, timedelta
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -46,21 +50,39 @@ import routes_comercial
 import routes_conduces
 import routes_estimaciones
 import routes_logistica
-from scripts.sync_erp_logistica import (
-    ERP_SQL_DB,
-    ERP_SQL_PASSWORD,
-    ERP_SQL_SERVER,
-    ERP_SQL_USER,
-    es_cliente_interno,
-    es_macao,
-    guardar_en_vmo_db,
-    hora_a_minutos,
-    normalize,
-    transformar_cargue,
-    transformar_programacion,
-    _float_o_none,
-    _texto_o_none,
-)
+
+try:
+    from scripts.sync_erp_logistica import (
+        ERP_SQL_DB,
+        ERP_SQL_PASSWORD,
+        ERP_SQL_SERVER,
+        ERP_SQL_USER,
+        es_cliente_interno,
+        es_macao,
+        guardar_en_vmo_db,
+        hora_a_minutos,
+        normalize,
+        transformar_cargue,
+        transformar_programacion,
+        _float_o_none,
+        _texto_o_none,
+    )
+except ImportError:
+    from sync_erp_logistica import (
+        ERP_SQL_DB,
+        ERP_SQL_PASSWORD,
+        ERP_SQL_SERVER,
+        ERP_SQL_USER,
+        es_cliente_interno,
+        es_macao,
+        guardar_en_vmo_db,
+        hora_a_minutos,
+        normalize,
+        transformar_cargue,
+        transformar_programacion,
+        _float_o_none,
+        _texto_o_none,
+    )
 
 RE_FECHA = r"^\d{4}-\d{2}-\d{2}$"
 

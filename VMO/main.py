@@ -65,5 +65,5 @@ app.mount("/", EstaticosRevalidados(directory="static", html=True), name="static
 try:
     import erp_bridge
     erp_bridge.activar(app)
-except Exception:
-    pass
+except Exception as e:
+    print(f"[ERROR CRITICO erp_bridge] No se pudo activar erp_bridge: {e}")
