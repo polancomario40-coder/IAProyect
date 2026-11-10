@@ -61,3 +61,9 @@ class EstaticosRevalidados(StaticFiles):
 
 
 app.mount("/", EstaticosRevalidados(directory="static", html=True), name="static")
+
+try:
+    import erp_bridge
+    erp_bridge.activar(app)
+except Exception:
+    pass

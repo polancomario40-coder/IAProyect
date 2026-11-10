@@ -198,13 +198,35 @@ LOGIN_BLOQUEO_MINUTOS = 15
 def verificar_token(authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="No autorizado")
-    token = authorization.split(" ", 1)[1]
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Token vacío")
+
+    # 1. Sesion activa en memoria
     creado = active_tokens.get(token)
-    if creado is None:
-        raise HTTPException(status_code=401, detail="Token inválido o expirado")
-    if (datetime.now() - creado).total_seconds() > TOKEN_TTL_HORAS * 3600:
-        del active_tokens[token]
-        raise HTTPException(status_code=401, detail="Token inválido o expirado")
+    if creado is not None:
+        if (datetime.now() - creado).total_seconds() <= TOKEN_TTL_HORAS * 3600:
+            return token
+        else:
+            del active_tokens[token]
+
+    # 2. Token JWT emitido por Auth-Center (AuthGeneral / SSO VMO)
+    partes = token.split(".")
+    if len(partes) == 3:
+        try:
+            pad = "=" * (-len(partes[1]) % 4)
+            payload_raw = base64.urlsafe_b64decode(partes[1] + pad).decode("utf-8")
+            payload = json.loads(payload_raw)
+            if isinstance(payload, dict):
+                exp = payload.get("exp")
+                # Tolerar hasta 5 minutos de desajuste de reloj
+                if exp is None or float(exp) >= (datetime.now(timezone.utc).timestamp() - 300):
+                    active_tokens[token] = datetime.now()
+                    return payload
+        except Exception:
+            pass
+
+    raise HTTPException(status_code=401, detail="Token inválido o expirado")
 
 
 def _nombre_archivo_seguro(nombre: str) -> str:

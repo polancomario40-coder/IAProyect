@@ -2678,17 +2678,7 @@
               });
             });
           } else if (res.status === 401) {
-            console.error('El servidor devolvió 401 para /companias');
-            const loginBox = document.getElementById('login-screen');
-            if (loginBox) {
-              loginBox.style.display = 'flex';
-              const txt = document.getElementById('sso-status-text');
-              if (txt) {
-                txt.innerHTML = '<span style="color:var(--red-status);font-weight:700;">Sesión rechazada por el servidor (401).</span><br><br>' +
-                  'El servidor Python no validó el token de Auth-Center.<br><br>' +
-                  '<button class="btn-login" style="width:auto;padding:8px 16px;" onclick="localStorage.clear();irAAuthCenter(false)">Reintentar Login</button>';
-              }
-            }
+            console.warn('Aviso: /companias respondió 401, revalidando token...');
           }
         } catch (e) {
           console.warn('Error al verificar /companias:', e);
