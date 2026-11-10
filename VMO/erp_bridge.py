@@ -285,7 +285,8 @@ def ejecutar_sps_sqlserver(consultas: dict[str, str], timeout_seg: int = 120) ->
     import tempfile
 
     def _ps_q(val):
-        return f"'{str(val or '').replace(\"'\", \"''\")}'"
+        escaped = str(val or "").replace("'", "''")
+        return f"'{escaped}'"
 
     queries_json = json.dumps(consultas, ensure_ascii=False)
     ps_runner = f"""[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
