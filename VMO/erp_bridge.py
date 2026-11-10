@@ -253,7 +253,12 @@ def ejecutar_sps_sqlserver(consultas: dict[str, str], timeout_seg: int = 120) ->
                 conn.timeout = timeout_seg
                 cur = conn.cursor()
                 for clave, sql in consultas.items():
-                    cur.execute(sql)
+                    sql_clean = sql.strip()
+                    sql_cmd = sql_clean if sql_clean.upper().startswith("SET NOCOUNT ON") else f"SET NOCOUNT ON; {sql_clean}"
+                    cur.execute(sql_cmd)
+                    while cur.description is None:
+                        if not cur.nextset():
+                            break
                     if cur.description:
                         cols = [c[0] for c in cur.description]
                         filas = []
@@ -276,14 +281,14 @@ def ejecutar_sps_sqlserver(consultas: dict[str, str], timeout_seg: int = 120) ->
     except Exception as e:
         print(f"[ERP Bridge pyodbc aviso] {e} -> usando .NET SqlClient...")
 
-    # 2. Cliente nativo .NET System.Data.SqlClient en Windows
+    # 2. Fallback nativo .NET System.Data.SqlClient en Windows
+    import tempfile
+
     def _ps_q(val):
         return f"'{str(val or '').replace(\"'\", \"''\")}'"
 
     queries_json = json.dumps(consultas, ensure_ascii=False)
-    ps_runner = f"""
-$ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    ps_runner = f"""[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $server = {_ps_q(ERP_SQL_SERVER)}
 $db = {_ps_q(ERP_SQL_DB)}
 $user = {_ps_q(ERP_SQL_USER)}
@@ -292,12 +297,13 @@ $timeout = {int(timeout_seg)}
 $queriesJson = @'
 {queries_json}
 '@
-$queries = $queriesJson | ConvertFrom-Json
-$connStr = 'Server=' + $server + ';Database=' + $db + ';User Id=' + $user + ';Password=' + $pwd + ';Connect Timeout=20;Encrypt=False;'
-$conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
-$conn.Open()
-$out = @{{}}
+
 try {{
+    $queries = $queriesJson | ConvertFrom-Json
+    $connStr = 'Server=' + $server + ';Database=' + $db + ';User Id=' + $user + ';Password=' + $pwd + ';Connect Timeout=20;Encrypt=False;'
+    $conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
+    $conn.Open()
+    $out = @{{ ok = $true; data = @{{}} }}
     foreach ($prop in $queries.PSObject.Properties) {{
         $k = $prop.Name
         $sql = $prop.Value
@@ -318,36 +324,63 @@ try {{
             }}
             $rows.Add($obj)
         }}
-        $out[$k] = $rows
+        $out.data[$k] = $rows
     }}
+}} catch {{
+    $out = @{{ ok = $false; error = $_.Exception.ToString() }}
 }} finally {{
-    $conn.Close()
+    if ($conn) {{ $conn.Close() }}
 }}
 Write-Output ($out | ConvertTo-Json -Depth 5 -Compress)
 """
-    res = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"],
-        input=ps_runner,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=timeout_seg + 15,
-    )
+    tmp_ps1 = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8-sig", delete=False) as tf:
+            tf.write(ps_runner)
+            tmp_ps1 = tf.name
+
+        res = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmp_ps1],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=timeout_seg + 20,
+        )
+    finally:
+        if tmp_ps1 and os.path.exists(tmp_ps1):
+            try:
+                os.remove(tmp_ps1)
+            except Exception:
+                pass
+
     if res.returncode != 0:
         err_msg = (res.stderr or "").strip() or (res.stdout or "").strip()
         print(f"[ERP Bridge Error PowerShell SQL] {err_msg}")
         raise RuntimeError(f"Fallo consulta SQL Server en PowerShell: {err_msg}")
-    stdout = res.stdout.strip()
+
+    stdout = (res.stdout or "").strip()
     if not stdout:
+        err_msg = (res.stderr or "").strip()
+        print(f"[ERP Bridge Salida vacia PowerShell] {err_msg}")
         return {k: [] for k in consultas}
+
     data = json.loads(stdout)
+    if not data.get("ok", True):
+        err = data.get("error", "Error desconocido en SQL Server")
+        print(f"[ERP Bridge Error Conexion SQL] {err}")
+        raise RuntimeError(f"Error SQL Server: {err}")
+
+    data_dict = data.get("data") or {}
     out = {}
     for k in consultas:
-        v = data.get(k)
+        v = data_dict.get(k)
         if v is None:
             out[k] = []
         elif isinstance(v, dict):
             out[k] = [v]
+        else:
+            out[k] = list(v)
+    return out
         else:
             out[k] = list(v)
     return out

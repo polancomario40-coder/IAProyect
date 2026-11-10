@@ -169,80 +169,129 @@ def consultar_sps_sqlserver(fecha_str: str) -> tuple[list[dict], list[dict]]:
             )
             with pyodbc.connect(conn_str, timeout=15) as conn:
                 cur = conn.cursor()
-                cur.execute(
+
+                def _ejecutar_sp(sql_text, params=None):
+                    stmt = sql_text if sql_text.strip().upper().startswith("SET NOCOUNT ON") else f"SET NOCOUNT ON; {sql_text}"
+                    if params:
+                        cur.execute(stmt, params)
+                    else:
+                        cur.execute(stmt)
+                    while cur.description is None:
+                        if not cur.nextset():
+                            return []
+                    cols = [c[0] for c in cur.description]
+                    filas = []
+                    for row in cur.fetchall():
+                        obj = {}
+                        for col_name, val in zip(cols, row):
+                            if isinstance(val, datetime):
+                                obj[col_name] = val.strftime("%Y-%m-%d %H:%M:%S")
+                            elif isinstance(val, date):
+                                obj[col_name] = val.strftime("%Y-%m-%d")
+                            else:
+                                obj[col_name] = val
+                        filas.append(obj)
+                    return filas
+
+                prog_raw = _ejecutar_sp(
                     "EXEC dbo.rsOrdCompProgDespExt @Fecha=?, @idPlanta=NULL, @todo=0",
                     (fecha_str,)
                 )
-                cols_prog = [c[0] for c in cur.description]
-                prog_raw = [dict(zip(cols_prog, row)) for row in cur.fetchall()]
-
-                cur.execute(
+                carg_raw = _ejecutar_sp(
                     "EXEC dbo.biTiempoCargaCamion @desde=?, @hasta=?",
                     (fecha_str, fecha_str)
                 )
-                cols_carg = [c[0] for c in cur.description]
-                carg_raw = [dict(zip(cols_carg, row)) for row in cur.fetchall()]
-                return prog_raw, carg_raw
+                if prog_raw or carg_raw:
+                    return prog_raw, carg_raw
     except ImportError:
         pass
     except Exception as e:
         print(f"[Aviso pyodbc] {e} -> usando .NET SqlClient...")
 
-    # Fallback universal en Windows via .NET System.Data.SqlClient
-    ps_runner = f"""
-$ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    # Fallback universal en Windows via .NET System.Data.SqlClient con archivo temporal
+    import tempfile
+
+    ps_runner = f"""[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $server = {_ps_quote(ERP_SQL_SERVER)}
 $db = {_ps_quote(ERP_SQL_DB)}
 $user = {_ps_quote(ERP_SQL_USER)}
 $pwd = {_ps_quote(ERP_SQL_PASSWORD)}
 $fecha = {_ps_quote(fecha_str)}
-$connStr = 'Server=' + $server + ';Database=' + $db + ';User Id=' + $user + ';Password=' + $pwd + ';Connect Timeout=20;Encrypt=False;'
-$conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
-$conn.Open()
-function Run-Sp($sql) {{
-    $cmd = $conn.CreateCommand()
-    $cmd.CommandTimeout = 60
-    $cmd.CommandText = $sql
-    $da = New-Object System.Data.SqlClient.SqlDataAdapter($cmd)
-    $dt = New-Object System.Data.DataTable
-    [void]$da.Fill($dt)
-    $rows = New-Object System.Collections.Generic.List[object]
-    foreach ($r in $dt.Rows) {{
-        $obj = @{{}}
-        foreach ($c in $dt.Columns) {{
-            $val = $r[$c.ColumnName]
-            if ($val -is [System.DBNull]) {{ $obj[$c.ColumnName] = $null }}
-            elseif ($val -is [DateTime]) {{ $obj[$c.ColumnName] = $val.ToString("yyyy-MM-dd HH:mm:ss") }}
-            else {{ $obj[$c.ColumnName] = $val }}
-        }}
-        $rows.Add($obj)
-    }}
-    return ,$rows
-}}
+
 try {{
+    $connStr = 'Server=' + $server + ';Database=' + $db + ';User Id=' + $user + ';Password=' + $pwd + ';Connect Timeout=20;Encrypt=False;'
+    $conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
+    $conn.Open()
+
+    function Run-Sp($sql) {{
+        $cmd = $conn.CreateCommand()
+        $cmd.CommandTimeout = 60
+        $cmd.CommandText = $sql
+        $da = New-Object System.Data.SqlClient.SqlDataAdapter($cmd)
+        $dt = New-Object System.Data.DataTable
+        [void]$da.Fill($dt)
+        $rows = New-Object System.Collections.Generic.List[object]
+        foreach ($r in $dt.Rows) {{
+            $obj = @{{}}
+            foreach ($c in $dt.Columns) {{
+                $val = $r[$c.ColumnName]
+                if ($val -is [System.DBNull]) {{ $obj[$c.ColumnName] = $null }}
+                elseif ($val -is [DateTime]) {{ $obj[$c.ColumnName] = $val.ToString("yyyy-MM-dd HH:mm:ss") }}
+                else {{ $obj[$c.ColumnName] = $val }}
+            }}
+            $rows.Add($obj)
+        }}
+        return ,$rows
+    }}
+
     $prog = @(Run-Sp "EXEC dbo.rsOrdCompProgDespExt @Fecha='$fecha', @idPlanta=NULL, @todo=0")
     $carg = @(Run-Sp "EXEC dbo.biTiempoCargaCamion @desde='$fecha', @hasta='$fecha'")
+    $out = @{{ ok = $true; programacion = $prog; cargue = $carg }}
+}} catch {{
+    $out = @{{ ok = $false; error = $_.Exception.ToString() }}
 }} finally {{
-    $conn.Close()
+    if ($conn) {{ $conn.Close() }}
 }}
-$out = @{{ programacion = $prog; cargue = $carg }}
+
 Write-Output ($out | ConvertTo-Json -Depth 5 -Compress)
 """
-    res = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"],
-        input=ps_runner,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=120,
-    )
+    tmp_ps1 = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8-sig", delete=False) as tf:
+            tf.write(ps_runner)
+            tmp_ps1 = tf.name
+
+        res = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", tmp_ps1],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=120,
+        )
+    finally:
+        if tmp_ps1 and os.path.exists(tmp_ps1):
+            try:
+                os.remove(tmp_ps1)
+            except Exception:
+                pass
+
     if res.returncode != 0:
         err_msg = (res.stderr or "").strip() or (res.stdout or "").strip()
         print(f"[Error PowerShell SQL] {err_msg}")
         raise RuntimeError(f"Fallo consulta SQL Server en PowerShell: {err_msg}")
 
-    data = json.loads(res.stdout.strip())
+    stdout = (res.stdout or "").strip()
+    if not stdout:
+        err_msg = (res.stderr or "").strip()
+        print(f"[Salida vacia PowerShell] {err_msg}")
+        return [], []
+
+    data = json.loads(stdout)
+    if not data.get("ok", True):
+        err = data.get("error", "Error desconocido")
+        print(f"[Error SQL Server PowerShell] {err}")
+        raise RuntimeError(f"Error en consulta SQL Server: {err}")
+
     return data.get("programacion") or [], data.get("cargue") or []
 
 
