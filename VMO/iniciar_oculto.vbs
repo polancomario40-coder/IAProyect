@@ -1,16 +1,17 @@
-' Script VBScript para lanzar VMO en segundo plano sin ventana visible
+' Script VBScript para lanzar VMO en segundo plano con registro de errores
 Set WshShell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 strCurDir = fso.GetParentFolderName(WScript.ScriptFullName)
 WshShell.CurrentDirectory = strCurDir
 
-' Ejecutar python directamente con ruta absoluta sin pasar por cmd.exe
 strPython = strCurDir & "\.venv\Scripts\python.exe"
 strScript = strCurDir & "\run_server.py"
+strLog = strCurDir & "\server_log.txt"
 
 If fso.FileExists(strPython) Then
-    WshShell.Run """" & strPython & """ """ & strScript & """", 0, False
+    strCmd = "cmd /c """"" & strPython & """ """ & strScript & """ > """ & strLog & """ 2>&1"""
 Else
-    ' Si no hay .venv local, intentar con python del sistema
-    WshShell.Run "python """ & strScript & """", 0, False
+    strCmd = "cmd /c ""python """ & strScript & """ > """ & strLog & """ 2>&1"""
 End If
+
+WshShell.Run strCmd, 0, False
