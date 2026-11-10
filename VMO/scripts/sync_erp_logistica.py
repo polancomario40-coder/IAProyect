@@ -145,6 +145,11 @@ def _float_o_none(v) -> float | None:
         return None
 
 
+def _ps_quote(val) -> str:
+    escaped = str(val or "").replace("'", "''")
+    return f"'{escaped}'"
+
+
 # ================= EXTRACCION DESDE SQL SERVER =================
 
 def consultar_sps_sqlserver(fecha_str: str) -> tuple[list[dict], list[dict]]:
@@ -154,7 +159,8 @@ def consultar_sps_sqlserver(fecha_str: str) -> tuple[list[dict], list[dict]]:
     """
     try:
         import pyodbc
-        drivers = [d for d in pyodbc.drivers() if "SQL Server" in d]
+        raw_drivers = pyodbc.drivers() or []
+        drivers = [d for d in raw_drivers if "SQL Server" in d]
         if drivers:
             driver = sorted(drivers)[-1]
             conn_str = (
@@ -186,12 +192,12 @@ def consultar_sps_sqlserver(fecha_str: str) -> tuple[list[dict], list[dict]]:
     ps_runner = f"""
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$server = {json.dumps(ERP_SQL_SERVER)}
-$db = {json.dumps(ERP_SQL_DB)}
-$user = {json.dumps(ERP_SQL_USER)}
-$pwd = {json.dumps(ERP_SQL_PASSWORD)}
-$fecha = {json.dumps(fecha_str)}
-$connStr = "Server=$server;Database=$db;User Id=$user;Password=$pwd;Connect Timeout=15;Encrypt=False;"
+$server = {_ps_quote(ERP_SQL_SERVER)}
+$db = {_ps_quote(ERP_SQL_DB)}
+$user = {_ps_quote(ERP_SQL_USER)}
+$pwd = {_ps_quote(ERP_SQL_PASSWORD)}
+$fecha = {_ps_quote(fecha_str)}
+$connStr = 'Server=' + $server + ';Database=' + $db + ';User Id=' + $user + ';Password=' + $pwd + ';Connect Timeout=20;Encrypt=False;'
 $conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
 $conn.Open()
 function Run-Sp($sql) {{
@@ -230,8 +236,12 @@ Write-Output ($out | ConvertTo-Json -Depth 5 -Compress)
         text=True,
         encoding="utf-8",
         timeout=120,
-        check=True,
     )
+    if res.returncode != 0:
+        err_msg = (res.stderr or "").strip() or (res.stdout or "").strip()
+        print(f"[Error PowerShell SQL] {err_msg}")
+        raise RuntimeError(f"Fallo consulta SQL Server en PowerShell: {err_msg}")
+
     data = json.loads(res.stdout.strip())
     return data.get("programacion") or [], data.get("cargue") or []
 

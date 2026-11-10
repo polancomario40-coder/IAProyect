@@ -240,7 +240,8 @@ def ejecutar_sps_sqlserver(consultas: dict[str, str], timeout_seg: int = 120) ->
     # 1. Intentar con pyodbc si esta instalado
     try:
         import pyodbc
-        drivers = [d for d in pyodbc.drivers() if "SQL Server" in d]
+        raw_drivers = pyodbc.drivers() or []
+        drivers = [d for d in raw_drivers if "SQL Server" in d]
         if drivers:
             driver = sorted(drivers)[-1]
             conn_str = (
@@ -276,20 +277,23 @@ def ejecutar_sps_sqlserver(consultas: dict[str, str], timeout_seg: int = 120) ->
         print(f"[ERP Bridge pyodbc aviso] {e} -> usando .NET SqlClient...")
 
     # 2. Cliente nativo .NET System.Data.SqlClient en Windows
+    def _ps_q(val):
+        return f"'{str(val or '').replace(\"'\", \"''\")}'"
+
     queries_json = json.dumps(consultas, ensure_ascii=False)
     ps_runner = f"""
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$server = {json.dumps(ERP_SQL_SERVER)}
-$db = {json.dumps(ERP_SQL_DB)}
-$user = {json.dumps(ERP_SQL_USER)}
-$pwd = {json.dumps(ERP_SQL_PASSWORD)}
+$server = {_ps_q(ERP_SQL_SERVER)}
+$db = {_ps_q(ERP_SQL_DB)}
+$user = {_ps_q(ERP_SQL_USER)}
+$pwd = {_ps_q(ERP_SQL_PASSWORD)}
 $timeout = {int(timeout_seg)}
 $queriesJson = @'
 {queries_json}
 '@
 $queries = $queriesJson | ConvertFrom-Json
-$connStr = "Server=$server;Database=$db;User Id=$user;Password=$pwd;Connect Timeout=15;Encrypt=False;"
+$connStr = 'Server=' + $server + ';Database=' + $db + ';User Id=' + $user + ';Password=' + $pwd + ';Connect Timeout=20;Encrypt=False;'
 $conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
 $conn.Open()
 $out = @{{}}
@@ -328,8 +332,11 @@ Write-Output ($out | ConvertTo-Json -Depth 5 -Compress)
         text=True,
         encoding="utf-8",
         timeout=timeout_seg + 15,
-        check=True,
     )
+    if res.returncode != 0:
+        err_msg = (res.stderr or "").strip() or (res.stdout or "").strip()
+        print(f"[ERP Bridge Error PowerShell SQL] {err_msg}")
+        raise RuntimeError(f"Fallo consulta SQL Server en PowerShell: {err_msg}")
     stdout = res.stdout.strip()
     if not stdout:
         return {k: [] for k in consultas}
