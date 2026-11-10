@@ -255,50 +255,58 @@ def ejecutar_sps_sqlserver(consultas: dict[str, str], timeout_seg: int = 120) ->
 
     # 2. Cliente nativo .NET System.Data.SqlClient en Windows
     queries_json = json.dumps(consultas, ensure_ascii=False)
-    ps_script = r"""
-    param($server, $db, $user, $pwd, $queriesJson, $timeout)
-    $ErrorActionPreference = 'Stop'
-    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    $queries = $queriesJson | ConvertFrom-Json
-    $connStr = "Server=$server;Database=$db;User Id=$user;Password=$pwd;Connect Timeout=15;Encrypt=False;"
-    $conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
-    $conn.Open()
-    $out = @{}
-    try {
-        foreach ($prop in $queries.PSObject.Properties) {
-            $k = $prop.Name
-            $sql = $prop.Value
-            $cmd = $conn.CreateCommand()
-            $cmd.CommandTimeout = [int]$timeout
-            $cmd.CommandText = $sql
-            $da = New-Object System.Data.SqlClient.SqlDataAdapter($cmd)
-            $dt = New-Object System.Data.DataTable
-            [void]$da.Fill($dt)
-            $rows = New-Object System.Collections.Generic.List[object]
-            foreach ($r in $dt.Rows) {
-                $obj = @{}
-                foreach ($c in $dt.Columns) {
-                    $val = $r[$c.ColumnName]
-                    if ($val -is [System.DBNull]) { $obj[$c.ColumnName] = $null }
-                    elseif ($val -is [DateTime]) { $obj[$c.ColumnName] = $val.ToString("yyyy-MM-dd HH:mm:ss") }
-                    else { $obj[$c.ColumnName] = $val }
-                }
-                $rows.Add($obj)
-            }
-            $out[$k] = $rows
-        }
-    } finally {
-        $conn.Close()
-    }
-    Write-Output ($out | ConvertTo-Json -Depth 5 -Compress)
-    """
+    ps_runner = f"""
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$server = {json.dumps(ERP_SQL_SERVER)}
+$db = {json.dumps(ERP_SQL_DB)}
+$user = {json.dumps(ERP_SQL_USER)}
+$pwd = {json.dumps(ERP_SQL_PASSWORD)}
+$timeout = {int(timeout_seg)}
+$queriesJson = @'
+{queries_json}
+'@
+$queries = $queriesJson | ConvertFrom-Json
+$connStr = "Server=$server;Database=$db;User Id=$user;Password=$pwd;Connect Timeout=15;Encrypt=False;"
+$conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
+$conn.Open()
+$out = @{{}}
+try {{
+    foreach ($prop in $queries.PSObject.Properties) {{
+        $k = $prop.Name
+        $sql = $prop.Value
+        $cmd = $conn.CreateCommand()
+        $cmd.CommandTimeout = $timeout
+        $cmd.CommandText = $sql
+        $da = New-Object System.Data.SqlClient.SqlDataAdapter($cmd)
+        $dt = New-Object System.Data.DataTable
+        [void]$da.Fill($dt)
+        $rows = New-Object System.Collections.Generic.List[object]
+        foreach ($r in $dt.Rows) {{
+            $obj = @{{}}
+            foreach ($c in $dt.Columns) {{
+                $val = $r[$c.ColumnName]
+                if ($val -is [System.DBNull]) {{ $obj[$c.ColumnName] = $null }}
+                elseif ($val -is [DateTime]) {{ $obj[$c.ColumnName] = $val.ToString("yyyy-MM-dd HH:mm:ss") }}
+                else {{ $obj[$c.ColumnName] = $val }}
+            }}
+            $rows.Add($obj)
+        }}
+        $out[$k] = $rows
+    }}
+}} finally {{
+    $conn.Close()
+}}
+Write-Output ($out | ConvertTo-Json -Depth 5 -Compress)
+"""
     res = subprocess.run(
-        [
-            "powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script,
-            ERP_SQL_SERVER, ERP_SQL_DB, ERP_SQL_USER, ERP_SQL_PASSWORD,
-            queries_json, str(timeout_seg),
-        ],
-        capture_output=True, text=True, encoding="utf-8", check=True,
+        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"],
+        input=ps_runner,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=timeout_seg + 15,
+        check=True,
     )
     stdout = res.stdout.strip()
     if not stdout:

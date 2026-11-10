@@ -183,43 +183,54 @@ def consultar_sps_sqlserver(fecha_str: str) -> tuple[list[dict], list[dict]]:
         print(f"[Aviso pyodbc] {e} -> usando .NET SqlClient...")
 
     # Fallback universal en Windows via .NET System.Data.SqlClient
-    ps_script = r"""
-    param($server, $db, $user, $pwd, $fecha)
-    $ErrorActionPreference = 'Stop'
-    $connStr = "Server=$server;Database=$db;User Id=$user;Password=$pwd;Connect Timeout=15;Encrypt=False;"
-    $conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
-    $conn.Open()
-    function Run-Sp($sql) {
-        $cmd = $conn.CreateCommand()
-        $cmd.CommandTimeout = 60
-        $cmd.CommandText = $sql
-        $da = New-Object System.Data.SqlClient.SqlDataAdapter($cmd)
-        $dt = New-Object System.Data.DataTable
-        [void]$da.Fill($dt)
-        $rows = @()
-        foreach ($r in $dt.Rows) {
-            $obj = @{}
-            foreach ($c in $dt.Columns) {
-                $val = $r[$c.ColumnName]
-                if ($val -is [System.DBNull]) { $obj[$c.ColumnName] = $null }
-                elseif ($val -is [DateTime]) { $obj[$c.ColumnName] = $val.ToString("yyyy-MM-dd HH:mm:ss") }
-                else { $obj[$c.ColumnName] = $val }
-            }
-            $rows += $obj
-        }
-        return ,$rows
-    }
+    ps_runner = f"""
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$server = {json.dumps(ERP_SQL_SERVER)}
+$db = {json.dumps(ERP_SQL_DB)}
+$user = {json.dumps(ERP_SQL_USER)}
+$pwd = {json.dumps(ERP_SQL_PASSWORD)}
+$fecha = {json.dumps(fecha_str)}
+$connStr = "Server=$server;Database=$db;User Id=$user;Password=$pwd;Connect Timeout=15;Encrypt=False;"
+$conn = New-Object System.Data.SqlClient.SqlConnection($connStr)
+$conn.Open()
+function Run-Sp($sql) {{
+    $cmd = $conn.CreateCommand()
+    $cmd.CommandTimeout = 60
+    $cmd.CommandText = $sql
+    $da = New-Object System.Data.SqlClient.SqlDataAdapter($cmd)
+    $dt = New-Object System.Data.DataTable
+    [void]$da.Fill($dt)
+    $rows = New-Object System.Collections.Generic.List[object]
+    foreach ($r in $dt.Rows) {{
+        $obj = @{{}}
+        foreach ($c in $dt.Columns) {{
+            $val = $r[$c.ColumnName]
+            if ($val -is [System.DBNull]) {{ $obj[$c.ColumnName] = $null }}
+            elseif ($val -is [DateTime]) {{ $obj[$c.ColumnName] = $val.ToString("yyyy-MM-dd HH:mm:ss") }}
+            else {{ $obj[$c.ColumnName] = $val }}
+        }}
+        $rows.Add($obj)
+    }}
+    return ,$rows
+}}
+try {{
     $prog = @(Run-Sp "EXEC dbo.rsOrdCompProgDespExt @Fecha='$fecha', @idPlanta=NULL, @todo=0")
     $carg = @(Run-Sp "EXEC dbo.biTiempoCargaCamion @desde='$fecha', @hasta='$fecha'")
+}} finally {{
     $conn.Close()
-    $out = @{ programacion = $prog; cargue = $carg }
-    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    Write-Output ($out | ConvertTo-Json -Depth 5 -Compress)
-    """
+}}
+$out = @{{ programacion = $prog; cargue = $carg }}
+Write-Output ($out | ConvertTo-Json -Depth 5 -Compress)
+"""
     res = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script,
-         ERP_SQL_SERVER, ERP_SQL_DB, ERP_SQL_USER, ERP_SQL_PASSWORD, fecha_str],
-        capture_output=True, text=True, encoding="utf-8", check=True
+        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "-"],
+        input=ps_runner,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+        check=True,
     )
     data = json.loads(res.stdout.strip())
     return data.get("programacion") or [], data.get("cargue") or []
