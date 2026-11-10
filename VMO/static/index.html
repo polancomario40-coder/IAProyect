@@ -1682,28 +1682,40 @@
       const partes = jwt.split('.');
       if (partes.length !== 3) return null;
       try {
-        const base64 = partes[1].replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = decodeURIComponent(
-          atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
-        );
-        return JSON.parse(jsonPayload);
+        let base64 = partes[1].replace(/-/g, '+').replace(/_/g, '/');
+        while (base64.length % 4 !== 0) {
+          base64 += '=';
+        }
+        const decoded = atob(base64);
+        try {
+          return JSON.parse(decodeURIComponent(
+            decoded.split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+          ));
+        } catch (e2) {
+          return JSON.parse(decoded);
+        }
       } catch (e) {
+        console.warn('Error decodificando JWT:', e);
         return null;
       }
     }
 
     function tokenJwtExpirado(jwt) {
+      if (!jwt) return true;
       const payload = decodificarJwtPayload(jwt);
-      if (!payload) return true;
-      if (payload.exp && (payload.exp * 1000) < (Date.now() + 15000)) return true;
+      if (!payload) return false; // NUNCA marcar como expirado si falló el decode en el cliente; dejar que el backend lo verifique
+      if (payload.exp && (payload.exp * 1000) < (Date.now() - 30000)) return true;
       return false;
     }
+
+    let token = localStorage.getItem('vmo_token') || localStorage.getItem('jwt_token');
 
     function capturarCallbackSSO() {
       try {
         const params = new URLSearchParams(window.location.search);
         const urlToken = params.get('token');
         if (urlToken) {
+          token = urlToken;
           localStorage.setItem('vmo_token', urlToken);
           localStorage.setItem('jwt_token', urlToken);
           const payload = decodificarJwtPayload(urlToken);
@@ -1722,14 +1734,16 @@
           }
           const cleanUrl = window.location.pathname + (window.location.hash || '');
           window.history.replaceState({}, document.title, cleanUrl);
-        } else if (!localStorage.getItem('vmo_token') && localStorage.getItem('jwt_token')) {
-          localStorage.setItem('vmo_token', localStorage.getItem('jwt_token'));
+        } else if (!token && localStorage.getItem('jwt_token')) {
+          token = localStorage.getItem('jwt_token');
+          localStorage.setItem('vmo_token', token);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Error capturando SSO callback:', e);
+      }
     }
 
     capturarCallbackSSO();
-    let token = localStorage.getItem('vmo_token');
 
     function irAAuthCenter(esLogout) {
       const base = (SSO_CONFIG.auth_center_url || 'https://auth.vmo.do').replace(/\/+$/, '');
@@ -2646,6 +2660,7 @@
     });
 
     window.addEventListener('load', async () => {
+      token = localStorage.getItem('vmo_token') || localStorage.getItem('jwt_token');
       if (token && !tokenJwtExpirado(token)) {
         document.getElementById('login-screen').style.display = 'none';
         actualizarBadgeUsuarioSSO();
@@ -2655,6 +2670,7 @@
             const data = await res.json();
             ['select-compania', 'factura-compania'].forEach(id => {
               const select = document.getElementById(id);
+              if (!select) return;
               data.companias.forEach(comp => {
                 const opt = document.createElement('option');
                 opt.value = comp; opt.textContent = comp;
@@ -2662,16 +2678,22 @@
               });
             });
           } else if (res.status === 401) {
-            localStorage.removeItem('vmo_token');
-            localStorage.removeItem('jwt_token');
-            token = null;
-            irAAuthCenter(false);
+            console.error('El servidor devolvió 401 para /companias');
+            const loginBox = document.getElementById('login-screen');
+            if (loginBox) {
+              loginBox.style.display = 'flex';
+              const txt = document.getElementById('sso-status-text');
+              if (txt) {
+                txt.innerHTML = '<span style="color:var(--red-status);font-weight:700;">Sesión rechazada por el servidor (401).</span><br><br>' +
+                  'El servidor Python no validó el token de Auth-Center.<br><br>' +
+                  '<button class="btn-login" style="width:auto;padding:8px 16px;" onclick="localStorage.clear();irAAuthCenter(false)">Reintentar Login</button>';
+              }
+            }
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('Error al verificar /companias:', e);
+        }
       } else {
-        localStorage.removeItem('vmo_token');
-        localStorage.removeItem('jwt_token');
-        token = null;
         irAAuthCenter(false);
       }
     });
