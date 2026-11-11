@@ -382,9 +382,6 @@ Write-Output ($out | ConvertTo-Json -Depth 5 -Compress)
         else:
             out[k] = list(v)
     return out
-        else:
-            out[k] = list(v)
-    return out
 
 
 def _fecha_sql(fecha_iso: str) -> str:
