@@ -98,3 +98,70 @@ def test_es_documentacion_distingue_ruta_de_extension():
     assert estado._es_documentacion("documentos/mail_para_X_2026-09-03.pdf")
     assert not estado._es_documentacion("core.py")
     assert not estado._es_documentacion("estimaciones/plantillas/base.xlsx")
+
+
+# ---- Salida con caracteres que cp1252 no tiene (2026-11-04) ----
+# El cierre se cayo en "issues abiertos" por la flecha del titulo del issue
+# #98: con la salida a un pipe, Windows le da a Python cp1252.
+
+import io  # noqa: E402
+import subprocess  # noqa: E402
+
+TITULO = "  #98 Idea: mapa ejecutivo de plantas, obras y flujos planta → obra"
+
+
+def _salida_cp1252():
+    return io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+
+
+def test_reproduce_el_fallo_sin_el_arreglo(monkeypatch):
+    """Que el test de abajo pruebe algo: sin consola_utf8, revienta."""
+    monkeypatch.setattr(sys, "stdout", _salida_cp1252())
+    monkeypatch.setattr(estado, "_correr", lambda cmd, timeout=60: (TITULO, None))
+    try:
+        estado.bloque_issues()
+    except UnicodeEncodeError:
+        return
+    raise AssertionError("se esperaba UnicodeEncodeError con salida cp1252")
+
+
+def test_bloque_issues_no_revienta_con_un_titulo_que_cp1252_no_tiene(monkeypatch):
+    salida = _salida_cp1252()
+    monkeypatch.setattr(sys, "stdout", salida)
+    monkeypatch.setattr(estado, "_correr", lambda cmd, timeout=60: (TITULO, None))
+    estado.consola_utf8()
+    estado.bloque_issues()
+    salida.flush()
+    assert "planta → obra" in salida.buffer.getvalue().decode("utf-8")
+
+
+def test_consola_utf8_no_revienta_si_stdout_no_es_un_textiowrapper(monkeypatch):
+    monkeypatch.setattr(sys, "stdout", io.StringIO())
+    estado.consola_utf8()
+
+
+def test_en_un_pipe_cp1252_de_verdad_sale_en_utf8():
+    """El caso real: otro proceso, salida a un pipe y cp1252 forzado."""
+    scripts = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
+    codigo = "import sys; sys.path.insert(0, sys.argv[1]); import estado; estado.consola_utf8(); print('planta \u2192 obra')"
+    r = subprocess.run([sys.executable, "-c", codigo, scripts], capture_output=True,
+                       env={**os.environ, "PYTHONIOENCODING": "cp1252"}, timeout=60)
+    assert r.returncode == 0, r.stderr.decode("utf-8", "replace")
+    assert r.stdout.decode("utf-8").strip() == "planta → obra"
+
+
+def test_estado_main_arregla_la_salida_antes_de_imprimir(monkeypatch):
+    """Lo primero que hace main es pasar la salida a UTF-8; se corta ahi para
+    no correr git, las bases ni gh."""
+    class Corte(Exception):
+        pass
+
+    def cortar():
+        raise Corte()
+
+    monkeypatch.setattr(estado, "consola_utf8", cortar)
+    try:
+        estado.main()
+    except Corte:
+        return
+    raise AssertionError("main no llamo a consola_utf8 antes de imprimir")

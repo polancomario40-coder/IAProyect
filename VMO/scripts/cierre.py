@@ -295,6 +295,7 @@ def correr_backup():
 
 
 def main():
+    estado.consola_utf8()
     print("=" * 64)
     print("CIERRE DE SESION")
     print("=" * 64)

@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/vendor/xlsx-0.20.3.full.min.js"></script>
-<script src="/logistica.logic.js?v=2026-10-28"></script>
+<script src="/logistica.logic.js?v=2026-11-17"></script>
 <script src="/calendario.js?v=2026-10-19b"></script>
 <script src="/logistica.api.js?v=2026-10-08b"></script>
 <style>
@@ -51,7 +51,7 @@
   .panel-body{padding:16px 18px;}
   .tabla{overflow-x:auto;}
 
-  .subidas{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .subidas{display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:14px;}
   .subida{background:var(--elevated); border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-size:12.5px;}
   .subida strong{display:block; font-size:13px; margin-bottom:2px;}
   .subida .cargado{color:var(--muted); margin:2px 0 8px;}
@@ -79,9 +79,16 @@
   .kpi{background:var(--card); border:1px solid var(--line); border-top:3px solid var(--vmo-red);
     border-radius:12px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,0.45);}
   .kpi.b{border-top-color:var(--bomba);} .kpi.c{border-top-color:var(--camion);} .kpi.t{border-top-color:var(--tiempo);}
+  .kpi.e{border-top-color:var(--bomba);} .kpi.p{border-top-color:var(--tiempo2);} .kpi.s{border-top-color:var(--tiempo);} .kpi.d{border-top-color:var(--vmo-red-dark);}
   .kpi .label{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; font-weight:700;}
   .kpi .value{font-size:28px; font-weight:700; margin-top:4px; font-variant-numeric:tabular-nums;}
   .kpi .sub{font-size:11px; color:var(--muted); margin-top:2px; line-height:1.4;}
+  .kpis.metas{grid-template-columns:repeat(5,1fr);}
+  .kpis.metas.seis{grid-template-columns:repeat(3,1fr);}
+  .kpi.m.si{border-top-color:var(--ok);} .kpi.m.no{border-top-color:var(--err);} .kpi.m.sd{border-top-color:var(--muted);}
+  .em{font-weight:700;} .em.si{color:var(--ok);} .em.no{color:var(--err);}
+  .zonas-meta{display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11.5px; margin-top:8px; color:var(--muted);}
+  .zonas-meta strong{color:var(--ink); font-variant-numeric:tabular-nums;}
 
   table{width:100%; border-collapse:collapse; font-size:13px;}
   thead th{text-align:left; padding:9px 10px; background:rgba(0,0,0,.3);
@@ -114,7 +121,7 @@
   footer{text-align:center; padding:26px; color:var(--muted); font-size:11.5px;}
 
   @media (max-width:900px){
-    .kpis{grid-template-columns:repeat(2,1fr);}
+    .kpis, .kpis.metas, .kpis.metas.seis{grid-template-columns:repeat(2,1fr);}
     .dos, .subidas{grid-template-columns:1fr;}
   }
   @media (max-width:600px){
@@ -135,20 +142,7 @@
 <div class="wrap">
   <div class="panel">
     <div class="panel-head"><h2>Reportes del sistema</h2><span class="sub">se exportan de CBSListas por rango de fechas; lo nuevo reemplaza lo guardado de esas fechas</span></div>
-    <div class="panel-body subidas">
-      <div class="subida">
-        <strong>Metros bombeados por equipo</strong>
-        <div class="cargado" id="cargadoBombeo">—</div>
-        <input type="file" id="fileBombeo" accept=".xls,.xlsx">
-        <div class="estado" id="estadoBombeo"></div>
-      </div>
-      <div class="subida">
-        <strong>Cumplimiento de tiempos de despacho</strong>
-        <div class="cargado" id="cargadoTiempos">—</div>
-        <input type="file" id="fileTiempos" accept=".xls,.xlsx">
-        <div class="estado" id="estadoTiempos"></div>
-      </div>
-    </div>
+    <div class="panel-body subidas" id="subidas"></div>
   </div>
 
   <div id="filtro"></div>
@@ -166,7 +160,7 @@
 
 const $ = id => document.getElementById(id);
 let diasEnMemoria = [];          // [{fecha, state, assumptions}] del historial, una sola vez
-let reportes = {bombeo: [], tiempos: [], fechas: {bombeo: [], tiempos: []}};
+let reportes = {bombeo: [], tiempos: [], fechas: {}};
 let fechasElegibles = [];
 let pendiente = {};              // lo leido de un Excel, esperando "Guardar"
 // Las listas largas muestran los primeros 10 de cada zona (pedido del usuario,
@@ -195,53 +189,86 @@ const calculo = (titulo, fuente, filas, ojo) => `<details class="calc"><summary>
 function mensaje(texto){ $('contenido').innerHTML = `<div class="panel"><div class="empty-state">${texto}</div></div>`; }
 const enRango = f => f >= $('desde').value && f <= $('hasta').value;
 
-// ---- Subida de los dos reportes ----
+// ---- Subida de los reportes ----
+// Los dos primeros desde el 2026-10-28; los otros cinco, listas de CBS para
+// los indicadores de gestion, desde el 2026-11-17. Las batchadas vienen en dos
+// archivos (SDN y las moviles) y se pueden elegir los dos juntos.
+const REPORTES = [
+  {tipo: 'bombeo', titulo: 'Metros bombeados por equipo', leer: parseBombeoSheets, unidad: 'celdas equipo-día',
+   error: 'No es el reporte "Metros bombeados por equipo" (no encontré la columna idEquipo y las fechas).'},
+  {tipo: 'tiempos', titulo: 'Cumplimiento de tiempos de despacho', leer: parseTiemposSheets, unidad: 'pedidos',
+   error: 'No es el reporte "Cumplimiento de tiempos de despacho" (no encontré OrdComp, Fecha, Cantidad y Total In).'},
+  {tipo: 'disponibilidad', titulo: 'Disponibilidad de Equipos y el Uso', leer: parseDisponibilidadSheets, unidad: 'equipos por día'},
+  {tipo: 'batchadas', titulo: 'Batchadas PLC y Bachadas PLC Planta Moviles Centralizado', leer: parseBatchadasSheets, unidad: 'cargas', varios: true,
+   nota: 'Los dos archivos: el de SDN y el centralizado de las móviles.'},
+  {tipo: 'incidencias', titulo: 'Bitácora Incidencias en Servicios', leer: parseIncidenciasSheets, unidad: 'servicios'},
+  {tipo: 'reclamos', titulo: 'Reporte de Reclamaciones', leer: parseReclamosSheets, unidad: 'reclamos'},
+  {tipo: 'anulados', titulo: 'Conduce Anulados', leer: parseAnuladosSheets, unidad: 'conduces'},
+];
+const fechasDe = tipo => (reportes.fechas || {})[tipo] || [];
 function rangoTexto(fechas){
   return fechas.length ? `Guardado: ${fechas.length} día(s) con datos, ${fc(fechas[0])} al ${fc(fechas[fechas.length - 1])}` : 'Todavía no se subió ninguno.';
 }
-function pintarCargados(){
-  $('cargadoBombeo').textContent = rangoTexto(reportes.fechas.bombeo);
-  $('cargadoTiempos').textContent = rangoTexto(reportes.fechas.tiempos);
+function armarSubidas(){
+  $('subidas').innerHTML = REPORTES.map(r => `<div class="subida">
+      <strong>${r.titulo}</strong>${r.nota ? `<div class="cargado">${r.nota}</div>` : ''}
+      <div class="cargado" id="cargado-${r.tipo}">—</div>
+      <input type="file" id="file-${r.tipo}" accept=".xls,.xlsx"${r.varios ? ' multiple' : ''}>
+      <div class="estado" id="estado-${r.tipo}"></div>
+    </div>`).join('');
+  REPORTES.forEach(r => $('file-' + r.tipo).addEventListener('change', ev => leerArchivos(ev.target, r)));
 }
-function leerArchivo(input, tipo){
-  const estado = $(tipo === 'bombeo' ? 'estadoBombeo' : 'estadoTiempos');
-  const file = input.files[0];
-  if (!file) return;
-  estado.className = 'estado'; estado.textContent = 'Leyendo...';
+function pintarCargados(){
+  REPORTES.forEach(r => { $('cargado-' + r.tipo).textContent = rangoTexto(fechasDe(r.tipo)); });
+}
+const leerUno = file => new Promise((ok, mal) => {
   const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      const wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array', cellDates: false});
-      const hojas = wb.SheetNames.map(nombre => ({nombre, rows: XLSX.utils.sheet_to_json(wb.Sheets[nombre], {header: 1, defval: null, raw: true})}));
-      const leido = tipo === 'bombeo' ? parseBombeoSheets(hojas) : parseTiemposSheets(hojas);
+  reader.onload = ev => { try {
+    const wb = XLSX.read(new Uint8Array(ev.target.result), {type: 'array', cellDates: false});
+    ok(wb.SheetNames.map(nombre => ({nombre, rows: XLSX.utils.sheet_to_json(wb.Sheets[nombre], {header: 1, defval: null, raw: true})})));
+  } catch (err) { mal(err); } };
+  reader.onerror = () => mal(reader.error);
+  reader.readAsArrayBuffer(file);
+});
+async function leerArchivos(input, r){
+  const estado = $('estado-' + r.tipo), files = [...input.files];
+  if (!files.length) return;
+  estado.className = 'estado'; estado.textContent = 'Leyendo...';
+  delete pendiente[r.tipo];
+  try {
+    const leidos = [];
+    for (const file of files){
+      const leido = r.leer(await leerUno(file));
       if (!leido || !leido.desde){
         estado.className = 'estado err';
-        estado.textContent = tipo === 'bombeo' ? 'No es el reporte "Metros bombeados por equipo" (no encontré la columna idEquipo y las fechas).'
-                                               : 'No es el reporte "Cumplimiento de tiempos de despacho" (no encontré OrdComp, Fecha, Cantidad y Total In).';
+        estado.textContent = files.length > 1 ? `"${file.name}": ${r.error || `no es el reporte "${r.titulo}".`}` : (r.error || `No es el reporte "${r.titulo}".`);
         return;
       }
-      pendiente[tipo] = leido;
-      const ya = reportes.fechas[tipo].filter(f => f >= leido.desde && f <= leido.hasta).length;
-      estado.innerHTML = `${leido.filas.length} ${tipo === 'bombeo' ? 'celdas equipo-día' : 'pedidos'}, del ${fc(leido.desde)} al ${fc(leido.hasta)}.
-        ${ya ? `<br>Reemplaza lo guardado de esas fechas (${ya} día(s) con datos).` : ''}
-        <br><button type="button" class="btn" id="guardar-${tipo}">Guardar</button>`;
-      $('guardar-' + tipo).addEventListener('click', () => guardar(tipo));
-    } catch (err) {
-      estado.className = 'estado err'; estado.textContent = 'Error leyendo el archivo: ' + err.message;
+      leidos.push(leido);
     }
-  };
-  reader.readAsArrayBuffer(file);
+    pendiente[r.tipo] = leidos;
+    const desde = leidos.map(l => l.desde).sort()[0], hasta = leidos.map(l => l.hasta).sort().pop();
+    const ya = fechasDe(r.tipo).filter(f => f >= desde && f <= hasta).length;
+    estado.textContent = '';
+    estado.insertAdjacentHTML('beforeend', leidos.map(l => `${n0(l.filas.length)} ${r.unidad}${l.fuente ? ` (${l.fuente === 'sdn' ? 'SDN' : 'móviles'})` : ''}, del ${fc(l.desde)} al ${fc(l.hasta)}.`).join('<br>')
+      + (ya ? `<br>Reemplaza lo guardado de esas fechas (${ya} día(s) con datos).` : '')
+      + `<br><button type="button" class="btn" id="guardar-${r.tipo}">Guardar</button>`);
+    $('guardar-' + r.tipo).addEventListener('click', () => guardar(r));
+  } catch (err) {
+    estado.className = 'estado err'; estado.textContent = 'Error leyendo el archivo: ' + err.message;
+  }
 }
-async function guardar(tipo){
-  const estado = $(tipo === 'bombeo' ? 'estadoBombeo' : 'estadoTiempos');
-  const leido = pendiente[tipo];
-  const btn = $('guardar-' + tipo); if (btn) btn.disabled = true;
+async function guardar(r){
+  const estado = $('estado-' + r.tipo), leidos = pendiente[r.tipo] || [];
+  const btn = $('guardar-' + r.tipo); if (btn) btn.disabled = true;
   try {
-    const r = await apiLogistica('/api/logistica/indicadores/' + tipo, {method: 'POST', body: JSON.stringify(leido)});
+    const hechos = [];
+    for (const leido of leidos)
+      hechos.push(await apiLogistica('/api/logistica/indicadores/' + r.tipo, {method: 'POST', body: JSON.stringify(leido)}));
     estado.className = 'estado ok';
-    estado.textContent = `✓ Guardado: ${r.filas} filas del ${fc(r.desde)} al ${fc(r.hasta)}.`;
-    delete pendiente[tipo];
-    $(tipo === 'bombeo' ? 'fileBombeo' : 'fileTiempos').value = '';
+    estado.textContent = hechos.map(h => `✓ Guardado: ${n0(h.filas)} filas del ${fc(h.desde)} al ${fc(h.hasta)}.`).join(' ');
+    delete pendiente[r.tipo];
+    $('file-' + r.tipo).value = '';
     // Si todavia no habia nada que mostrar, la pagina se arma desde cero.
     if ($('desde')) await cargarReportes(true); else await cargarTodo();
   } catch (err) {
@@ -274,10 +301,64 @@ function render(){
   if (desde > hasta) return mensaje('La fecha "desde" es posterior a "hasta".');
   const dias = diasEnMemoria.filter(d => enRango(d.fecha));
   const ind = indicadoresDelPeriodo(dias, reportes);
-  $('alcance').innerHTML = `Bombeo: ${new Set(reportes.bombeo.map(f => f.fecha)).size} día(s) con datos ·
-    Camiones: ${dias.length} día(s) guardados · Tiempos: ${new Set(reportes.tiempos.map(f => f.fecha)).size} día(s)<br>
-    Las tres secciones salen separadas en Santo Domingo y Punta Cana`;
-  $('contenido').innerHTML = seccionBombeo(ind.bombeo) + seccionCamiones(ind.camiones) + seccionTiempos(ind.tiempos);
+  const diasDe = tipo => new Set((reportes[tipo] || []).map(f => f.fecha)).size;
+  $('alcance').innerHTML = `Bombeo: ${diasDe('bombeo')} día(s) con datos ·
+    Camiones: ${dias.length} día(s) guardados · Tiempos: ${diasDe('tiempos')} día(s)<br>
+    Disponibilidad: ${diasDe('disponibilidad')} · Batchadas: ${diasDe('batchadas')} · Bitácora: ${diasDe('incidencias')} · Reclamos: ${diasDe('reclamos')} · Anulados: ${diasDe('anulados')} día(s)<br>
+    Separado en Santo Domingo y Punta Cana donde el reporte trae la planta`;
+  $('contenido').innerHTML = seccionMetas(metasDelPeriodo(dias, ind))
+    + seccionBombeo(ind.bombeo) + seccionCamiones(ind.camiones) + seccionTiempos(ind.tiempos)
+    + seccionDisponibilidad(ind.disponibilidad) + seccionCarga(ind.carga)
+    + seccionServicio(ind.incidencias, ind.reclamos) + seccionDevuelto(ind.devuelto);
+}
+
+// Contra la meta (2026-11-11): los indicadores de Logistica que la app ya
+// calcula, al lado de su meta de la hoja de indicadores de gestion. La cuenta
+// vive en metasDelPeriodo(), en logistica.logic.js.
+const estadoMeta = c => c === null ? '<span class="em">— Sin dato</span>'
+  : c ? '<span class="em si">✓ Cumple</span>' : '<span class="em no">✗ No cumple</span>';
+function tarjetaMeta(titulo, que, x, fmt, metaTexto, detalle){
+  const valor = v => v === null ? (x.vacio || 'Sin dato') : fmt(v);
+  return `<div class="kpi m ${x.cumple === null ? 'sd' : x.cumple ? 'si' : 'no'}">
+    <div class="label">${titulo}</div>
+    <div class="sub">${que}</div>
+    <div class="value">${valor(x.valor)}</div>
+    <div class="sub">${estadoMeta(x.cumple)}<br>meta: ${metaTexto}</div>
+    ${x.zonas ? `<div class="zonas-meta">${x.zonas.map(z => `<span>${esc(z.zona)}: <strong>${valor(z.valor)}</strong>${z.cumple === null ? '' : z.cumple ? ' ✓' : ' ✗'}</span>`).join('')}</div>` : ''}
+    ${detalle ? `<div class="sub">${detalle}</div>` : ''}</div>`;
+}
+function seccionMetas(m){
+  const p = v => v + '%', f = v => v.toFixed(1);
+  return `<div class="sec">Contra la meta <span class="fuente">metas de la hoja "Indicadores de Gestión de VMO Concretos 2026" · las fechas elegidas</span></div>
+    <div class="kpis metas seis">
+      ${tarjetaMeta('Tiempo de despacho', 'm³ antes de la Hora Fin', m.tiempos, p, `${m.tiempos.meta}% o más`)}
+      ${tarjetaMeta('Uso de flota', 'viajes por camión al día', m.flota, f, `${f(m.flota.meta)} o más`)}
+      ${tarjetaMeta('Servicio cancelado', 'de los servicios programados', m.cancelados, p, `${m.cancelados.meta}% o menos`, `${n0(m.cancelados.cancelados)} de ${n0(m.cancelados.servicios)} servicios · ${n0(m.cancelados.m3)} m³`)}
+    </div>
+    <div class="kpis metas seis">
+      ${tarjetaMeta('Disponibilidad · camiones', 'equipo-días disponibles', m.disponibilidadCamiones, p, `${m.disponibilidadCamiones.meta}% o más`,
+        m.disponibilidadCamiones.registros ? `contando ${n0(m.disponibilidadCamiones.sinDato)} sin dato: ${pct(m.disponibilidadCamiones.pctTodos)}` : '')}
+      ${tarjetaMeta('Disponibilidad · bombas', 'equipo-días disponibles', m.disponibilidadBombas, p, `${m.disponibilidadBombas.meta}% o más`,
+        m.disponibilidadBombas.registros ? `contando ${n0(m.disponibilidadBombas.sinDato)} sin dato: ${pct(m.disponibilidadBombas.pctTodos)}` : '')}
+      ${tarjetaMeta('Eficiencia de carga', 'tiempo según capacidad ÷ tiempo real', {...m.eficiencia, vacio: m.eficiencia.ritmo === null ? 'Sin dato' : 'Falta capacidad'}, p,
+        `${m.eficiencia.meta}% o más`, m.eficiencia.ritmo === null ? '' : `ritmo real ${n0(m.eficiencia.ritmo)} m³/h en ${n0(m.eficiencia.cargas)} cargas`)}
+      ${tarjetaMeta('Control de insumos', 'cargas con cemento y agregados en tolerancia', m.insumos, p, `${m.insumos.meta}% o más`,
+        m.insumos.cargas ? `con agua y aditivos: ${pct(m.insumos.todos)}` : '')}
+      ${tarjetaMeta('Incidencias de clientes', 'servicios con incidencia', m.incidencias, p, `${m.incidencias.meta}% o menos`,
+        m.incidencias.servicios ? `${n0(m.incidencias.conIncidencia)} de ${n0(m.incidencias.servicios)} servicios` : '')}
+      ${tarjetaMeta('Reclamos solucionados', 'de los reclamos', m.reclamos, p, `${m.reclamos.meta}% o más`,
+        m.reclamos.total ? `${m.reclamos.solucionados} de ${m.reclamos.total} reclamos` : '')}
+    </div>
+    ${calculo('Contra la meta', 'los mismos cálculos de esta página, del dashboard y del Reporte de cancelados, en las fechas elegidas', [
+      ['Tiempo de despacho', `El cumplimiento de la sección 3 (reporte "Cumplimiento de tiempos de despacho"). Meta ${m.tiempos.meta}% o más.`],
+      ['Uso de flota', `Los viajes por camión al día de la sección 2: suma de "viajes por día" de cada camión ÷ cantidad de camiones. Meta ${f(m.flota.meta)} o más.`],
+      ['Servicio cancelado', `Renglones del Reporte de cancelados (Macao incluido) ÷ servicios programados. Un servicio es un renglón de la programación con m³: cliente, obra, bomba, elemento y hora. Meta ${m.cancelados.meta}% o menos.`],
+      ['Disponibilidad', `La sección 4: equipo-días disponibles ÷ equipo-días con dato, camiones y bombas por separado. Meta ${m.disponibilidadCamiones.meta}% o más.`],
+      ['Eficiencia de carga', `La sección 5: tiempo que debería tardar cada carga según la capacidad de la planta ÷ tiempo real. Falta la capacidad de cada planta; mientras tanto dice el ritmo real. Meta ${m.eficiencia.meta}% o más.`],
+      ['Control de insumos', `La sección 5: cargas con cemento ±1% y agregados ±2% del teórico ÷ cargas. Debajo, la versión que además exige agua ±1% y aditivos ±3%. Meta ${m.insumos.meta}% o más.`],
+      ['Incidencias y reclamos', `La sección 6: servicios de la bitácora con alguna incidencia ÷ servicios (meta ${m.incidencias.meta}% o menos), y reclamos solucionados ÷ reclamos (meta ${m.reclamos.meta}% o más).`],
+      ['Cumple', 'Se compara el número tal como se muestra, redondeado: 2.6 contra una meta de 2.6 cumple.'],
+    ], 'Servicio cancelado cuenta todos los cancelados; la hoja pide solo los que canceló el cliente, y hoy ninguno tiene responsable puesto. La programación no trae zona, por eso no va separado por zona.')}`;
 }
 
 function seccionBombeo(b){
@@ -403,6 +484,104 @@ function graficoPorDia(dias, zonas, colores){
     ${zonas.map(serie).join('')}</svg>`;
 }
 
+// ---- Los reportes nuevos de CBS (2026-11-17) ----
+const sinReporte = titulo => `<div class="panel"><div class="empty-state">No hay datos en estas fechas. Subí el reporte "${titulo}" arriba.</div></div>`;
+
+function seccionDisponibilidad(d){
+  const tipos = d.tipos.filter(t => t.registros);
+  const kpis = `<div class="kpis">${tipos.map(t => `<div class="kpi e"><div class="label">${esc(t.tipo)} disponibles</div><div class="value">${pct(t.pct)}</div>
+      <div class="sub">${n0(t.disponibles)} de ${n0(t.conDato)} equipo-días con dato · ${t.equipos.length} equipos</div>
+      <div class="sub">contando los ${n0(t.sinDato)} sin dato como no disponibles: ${pct(t.pctTodos)}</div></div>`).join('')}</div>`;
+  const tabla = `<div class="panel"><div class="panel-head"><h2>Por equipo</h2><span class="sub">primero los que más días no estuvieron disponibles</span></div>
+    <div class="tabla"><table><thead><tr><th>Equipo</th><th class="num">Días</th><th class="num">Disponible</th><th class="num">No disponible</th><th class="num">Sin dato</th><th class="num">Usado</th><th class="num">% disponible</th></tr></thead>
+    <tbody>${tipos.map(t => filaZona(t.tipo, `${t.equipos.length} equipos · ${pct(t.pct)}`, 7) + recortar('disp-' + t.tipo, t.equipos).map(e => `<tr>
+      <td><strong>${esc(e.equipo)}</strong></td><td class="num">${e.registros}</td><td class="num">${e.disponibles}</td><td class="num">${e.noDisponibles}</td>
+      <td class="num">${e.sinDato}</td><td class="num">${e.usados}</td><td class="num">${pct(e.pct)}</td></tr>`).join('')
+      + botonTodos('disp-' + t.tipo, t.equipos.length, 7)).join('')}</tbody></table></div></div>`;
+  return `<div class="sec">4 · Disponibilidad de equipos <span class="fuente">lista de CBS "Disponibilidad de Equipos y el Uso" · meta 85%</span></div>
+    ${tipos.length ? kpis + tabla : sinReporte('Disponibilidad de Equipos y el Uso')}
+    ${calculo('Disponibilidad de equipos', 'la lista de CBS "Disponibilidad de Equipos y el Uso": cada equipo, cada día, si estuvo disponible y cuánto se usó', [
+      ['% disponible', 'Equipo-días disponibles ÷ equipo-días que traen el dato, sumando todos los días de las fechas elegidas. Camiones (TROMPOS) y bombas (CAMION BOMBA) por separado.'],
+      ['Sin dato', 'Días en que el sistema no dice si el equipo estaba disponible. No entran al %; aparte se muestra el % contándolos como no disponibles.'],
+      ['Usado', 'Días en que el equipo tuvo uso (Utilizado mayor que 0).'],
+    ], 'hay días en que un equipo se usó aunque está marcado como no disponible: falta confirmar qué significa "Disponible" en CBS.')}`;
+}
+
+function seccionCarga(k){
+  const ef = k.eficiencia === null ? `<div class="value">${n0(k.ritmo)} <span style="font-size:14px">m³/h</span></div><div class="sub">ritmo real cargando · falta la capacidad de cada planta para el %</div>`
+                                   : `<div class="value">${pct(k.eficiencia)}</div><div class="sub">ritmo real ${n0(k.ritmo)} m³/h</div>`;
+  const kpis = `<div class="kpis">
+      <div class="kpi p"><div class="label">Eficiencia de carga</div>${ef}</div>
+      ${k.zonas.filter(z => z.zona !== 'Sin zona').map(z => `<div class="kpi p"><div class="label">${esc(z.zona)} · ritmo</div><div class="value">${n0(z.ritmo)} <span style="font-size:14px">m³/h</span></div><div class="sub">${n0(z.n)} cargas · ${n1(z.minutosPorCarga)} min por carga</div></div>`).join('')}
+      <div class="kpi p"><div class="label">Control de insumos</div><div class="value">${pct(k.insumos)}</div><div class="sub">cemento y agregados dentro de tolerancia · con agua y aditivos: ${pct(k.insumosTodos)}</div></div>
+    </div>`;
+  const fuera = p => ['cemento', 'agregados', 'agua', 'aditivos'].map(m => n0(p.fallas[m])).join(' · ');
+  const tabla = `<div class="panel"><div class="panel-head"><h2>Por planta</h2><span class="sub">separado por zona</span></div>
+    <div class="tabla"><table><thead><tr><th>Planta</th><th class="num">Cargas</th><th class="num">m³</th><th class="num">Min por carga</th><th class="num">Ritmo m³/h</th><th class="num">Capacidad</th><th class="num">Eficiencia</th>
+      <th class="num">Insumos: cem. y agr.</th><th class="num">Con agua y aditivos</th><th class="num">Fuera: cem · agr · agua · adit</th></tr></thead>
+    <tbody>${ZONAS.map(zona => { const ps = k.plantas.filter(p => p.zona === zona); if (!ps.length) return '';
+      const z = k.zonas.find(x => x.zona === zona) || {};
+      return filaZona(zona, `${n0(z.n)} cargas · ${n0(z.ritmo)} m³/h · insumos ${pct(z.insumos)}`, 10) + ps.map(p => `<tr>
+        <td><strong>${esc(p.planta)}</strong></td><td class="num">${n0(p.n)}</td><td class="num">${n0(p.m3)}</td><td class="num">${n1(p.minutosPorCarga)}</td>
+        <td class="num">${n0(p.ritmo)}</td><td class="num">${p.capacidad ? n0(p.capacidad) : '—'}</td><td class="num">${pct(p.eficiencia)}</td>
+        <td class="num" style="color:${colorP(p.insumos)}; font-weight:700;">${pct(p.insumos)}</td><td class="num">${pct(p.insumosTodos)}</td><td class="num gris">${fuera(p)}</td></tr>`).join(''); }).join('')}
+    </tbody></table></div>
+    ${k.sinBatchadas.length ? `<div class="panel-body gris">Plantas del cargue sin batchadas en estas fechas: ${k.sinBatchadas.map(esc).join(', ')}.</div>` : ''}</div>`;
+  return `<div class="sec">5 · Carga en planta <span class="fuente">batchadas del PLC de cada planta · eficiencia meta 75% · insumos meta 85%</span></div>
+    ${k.n ? kpis + tabla : sinReporte('Batchadas PLC')}
+    ${calculo('Carga en planta', 'las listas de CBS "Batchadas PLC" (SDN) y "Bachadas PLC Planta Moviles Centralizado" (las móviles y SanIsidro): una fila por carga, con su tiempo y el material teórico y real', [
+      ['Qué entra', 'Las cargas "Realizado" con m³. Las canceladas o en proceso no.'],
+      ['Ritmo', 'm³ cargados ÷ minutos que tardaron las cargas, en m³ por hora. Min por carga: el valor del medio.'],
+      ['Eficiencia de carga', 'Tiempo que debería tardar cada carga según la capacidad de la planta (m³ ÷ m³ por hora) ÷ tiempo real. Sale cuando la planta tiene su capacidad cargada en la app; falta que Producción la mande.'],
+      ['Control de insumos', 'Cargas con cemento dentro de ±1% del teórico y cada agregado dentro de ±2% ÷ cargas. "Con agua y aditivos" además exige agua ±1% y aditivos ±3% (norma ASTM C94). Cuando hay varios agregados o aditivos, cuenta el que más se aleja.'],
+      ['Fuera', 'Cuántas cargas se salieron de la tolerancia en cada material.'],
+    ], 'el agua casi nunca cuadra con el teórico, posiblemente porque la planta la ajusta por la humedad de la arena; por eso se muestran las dos versiones.')}`;
+}
+
+function seccionServicio(inc, rec){
+  const zonas = inc.zonas.filter(z => z.zona !== 'Sin zona');
+  const kpis = `<div class="kpis">
+      <div class="kpi s"><div class="label">Servicios con incidencia</div><div class="value">${inc.n ? pct(inc.pct) : 'Sin dato'}</div><div class="sub">${n0(inc.conIncidencia)} de ${n0(inc.n)} servicios de la bitácora</div></div>
+      ${zonas.map(z => `<div class="kpi s"><div class="label">${esc(z.zona)}</div><div class="value">${pct(z.pct)}</div><div class="sub">${n0(z.conIncidencia)} de ${n0(z.n)} servicios</div></div>`).join('')}
+      <div class="kpi s"><div class="label">Reclamos solucionados</div><div class="value">${rec.n ? pct(rec.pct) : 'Sin dato'}</div><div class="sub">${rec.solucionados} de ${rec.n} reclamos · ${rec.procede} proceden · RD$ ${n0(rec.costo)}</div></div>
+    </div>`;
+  const tipos = inc.tipos.length ? `<div class="panel"><div class="panel-head"><h2>Incidencias por tipo</h2><span class="sub">lo que dijo el cliente en la bitácora</span></div>
+    <div class="tabla"><table><thead><tr><th>Incidencia</th>${ZONAS.map(z => `<th class="num">${esc(z)}</th>`).join('')}<th class="num">Total</th></tr></thead>
+    <tbody>${recortar('inc-tipos', inc.tipos).map(t => `<tr><td><strong>${esc(t.tipo)}</strong></td>${t.zonas.map(z => `<td class="num">${z.n}</td>`).join('')}<td class="num">${t.n}</td></tr>`).join('')
+      + botonTodos('inc-tipos', inc.tipos.length, ZONAS.length + 2)}</tbody></table></div></div>` : '';
+  const reclamos = rec.n ? `<div class="panel"><div class="panel-head"><h2>Reclamos</h2><span class="sub">${rec.estados.map(e => `${esc(e.estado)}: ${e.n}`).join(' · ')}</span></div>
+    <div class="tabla"><table><thead><tr><th>Fecha</th><th>Reclamo</th><th>Cliente</th><th>Estado</th><th>Procede</th><th class="num">Costo RD$</th></tr></thead>
+    <tbody>${recortar('reclamos', rec.lista).map(r => `<tr><td>${fc(r.fecha)}</td><td>${esc(r.reclamo)}</td><td class="corta" title="${esc(r.cliente || '')}">${esc(r.cliente || '—')}</td>
+      <td>${esc(r.estado || '—')}</td><td>${esc(r.procede || '—')}</td><td class="num">${n0(r.costo)}</td></tr>`).join('')
+      + botonTodos('reclamos', rec.lista.length, 6)}</tbody></table></div></div>` : '';
+  return `<div class="sec">6 · Servicio al cliente <span class="fuente">listas de CBS "Bitácora Incidencias en Servicios" y "Reporte de Reclamaciones" · incidencias meta 20% o menos · reclamos meta 80%</span></div>
+    ${inc.n || rec.n ? kpis + `<div class="dos">${tipos}${reclamos}</div>` : sinReporte('Bitácora Incidencias en Servicios')}
+    ${calculo('Servicio al cliente', 'la bitácora de servicios (la percepción del cliente en cada servicio) y el reporte de reclamaciones', [
+      ['Incidencias', 'Servicios cuya percepción no dice "sin novedad" ÷ servicios de la bitácora. La zona sale de la planta del servicio (la bitácora a veces trae directamente "Santo Domingo").'],
+      ['Reclamos solucionados', 'Reclamos en estado solucionado o cerrado ÷ reclamos con fecha de reclamación en las fechas elegidas.'],
+    ], 'la bitácora no trae todos los servicios del mes (643 en octubre, contra unos 990 pedidos), y los reclamos no traen la planta, por eso no van por zona.')}`;
+}
+
+function seccionDevuelto(dv){
+  const kpis = `<div class="kpis">
+      <div class="kpi d"><div class="label">Concreto devuelto</div><div class="value">${n1(dv.m3)} <span style="font-size:14px">m³</span></div><div class="sub">${dv.conduces} conduces anulados por desperdicio</div></div>
+      <div class="kpi d"><div class="label">Sobre lo transportado</div><div class="value">${dv.pct === null ? '—' : n1(dv.pct) + '%'}</div><div class="sub">de ${n0(dv.m3Despachados)} m³ de la sección 2</div></div>
+      <div class="kpi d"><div class="label">Conduces anulados</div><div class="value">${dv.anulados}</div><div class="sub">${n1(dv.m3Anulados)} m³ por todas las causas</div></div>
+    </div>`;
+  const tabla = `<div class="dos">
+    <div class="panel"><div class="panel-head"><h2>Por causa</h2></div><div class="tabla"><table><thead><tr><th>Causa</th><th class="num">Conduces</th><th class="num">m³</th></tr></thead>
+      <tbody>${dv.causas.map(c => `<tr><td><strong>${esc(c.causa)}</strong></td><td class="num">${c.n}</td><td class="num">${n1(c.m3)}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="panel"><div class="panel-head"><h2>Conduces anulados</h2></div><div class="tabla"><table><thead><tr><th>Fecha</th><th>Planta</th><th class="num">m³</th><th>Causa</th><th>Comentario</th></tr></thead>
+      <tbody>${recortar('anulados', dv.lista).map(a => `<tr><td>${fc(a.fecha)}</td><td>${esc(a.planta || '—')}</td><td class="num">${n1(a.m3)}</td><td>${esc(a.causa || '—')}</td>
+        <td class="corta" title="${esc(a.comentario || '')}">${esc(a.comentario || '')}</td></tr>`).join('') + botonTodos('anulados', dv.lista.length, 5)}</tbody></table></div></div></div>`;
+  return `<div class="sec">7 · Concreto devuelto <span class="fuente">lista de CBS "Conduce Anulados" · sin meta en la hoja</span></div>
+    ${dv.anulados ? kpis + tabla : sinReporte('Conduce Anulados')}
+    ${calculo('Concreto devuelto', 'la lista de CBS "Conduce Anulados": cada conduce anulado con su causa y comentario', [
+      ['Concreto devuelto', 'm³ de los conduces anulados por DESPERDICIO ÷ m³ transportados en las fechas elegidas (sección 2, del cargue de cada día).'],
+      ['Las otras causas', 'DESVIO A OTRO CLIENTE e INFORMACION INCORRECTA se muestran aparte: el concreto no se perdió.'],
+    ])}`;
+}
+
 // ---- Carga ----
 async function cargarReportes(recalcularFechas){
   if (!$('desde')) return;
@@ -412,7 +591,7 @@ async function cargarReportes(recalcularFechas){
   } catch (err) { return mensaje('No se pudieron leer los reportes: ' + esc(err.message)); }
   pintarCargados();
   if (recalcularFechas){
-    fechasElegibles = [...new Set([...fechasElegibles, ...reportes.fechas.bombeo, ...reportes.fechas.tiempos])].sort();
+    fechasElegibles = [...new Set([...fechasElegibles, ...Object.values(reportes.fechas || {}).flat()])].sort();
     ['desde', 'hasta'].forEach(id => VMOCalendario.mejorar($(id), {permitidos: fechasElegibles}));
   }
   render();
@@ -435,23 +614,22 @@ async function cargarTodo(){
     tanda.filter(Boolean).forEach(d => dias.push(d));
   }
   diasEnMemoria = dias.sort((a, b) => a.fecha.localeCompare(b.fecha));
-  const fr = rep ? rep.fechas : {bombeo: [], tiempos: []};
+  const fr = rep ? rep.fechas : {};
   reportes.fechas = fr;
   pintarCargados();
-  fechasElegibles = [...new Set([...diasEnMemoria.map(d => d.fecha), ...fr.bombeo, ...fr.tiempos])].sort();
+  fechasElegibles = [...new Set([...diasEnMemoria.map(d => d.fecha), ...Object.values(fr).flat()])].sort();
   if (!fechasElegibles.length) return mensaje('Todavía no hay datos: guardá un día en el dashboard o subí uno de los reportes de arriba.');
   renderFiltro();
   await cargarReportes(false);
 }
 
-$('fileBombeo').addEventListener('change', ev => leerArchivo(ev.target, 'bombeo'));
 $('contenido').addEventListener('click', ev => {
   const b = ev.target.closest('.btn-todos'); if (!b) return;
   const id = b.dataset.lista;
   if (listasAbiertas.has(id)) listasAbiertas.delete(id); else listasAbiertas.add(id);
   render();
 });
-$('fileTiempos').addEventListener('change', ev => leerArchivo(ev.target, 'tiempos'));
+armarSubidas();
 cargarTodo();
 </script>
 </body>

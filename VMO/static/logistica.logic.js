@@ -67,7 +67,13 @@
     // 2026-10-21, pedido del usuario
     'SIN SISTEMA', 'OPERACIONES',
     // 2026-10-23, pedido del usuario
-    'PRIORIDAD OTRO SERVICIO'];
+    'PRIORIDAD OTRO SERVICIO',
+    // 2026-11-11, pedido del usuario
+    'LOGISTICA',
+    // 2026-11-12, pedido del usuario
+    'BRIGADA',
+    // 2026-11-12, pedido del usuario
+    'SOLICITUD DE CARGUE'];
 
   // Punta Cana se parte en "Proyecto (Macao)" y "Clientes generales": va al
   // proyecto todo lo que tenga MACAO en el cliente o en la obra.
@@ -724,6 +730,17 @@ function computeCumplimiento(state, assumptions){
   // todos los pares pedido-obra por puntaje y, en empate, por cuantos camiones
   // de esa obra traen un elemento del pedido; recien despues por el orden de la
   // programacion, que es lo unico que decidia antes.
+  //
+  // Si tambien empatan en elemento, gana el pedido con menos palabras que el
+  // cargue no trae (2026-11-10). El 06/11 "EPOKAL - AREA HOTEL" (LOSA, 6 m3,
+  // 00:00) y "EPOKAL - COMERCIAL" (LOSA, 60 m3, 14:00) empataban 0,40 contra
+  // "EPOKAL AREA COMERCIAL, PUNTA CANA" y los dos eran LOSA: HOTEL se llevaba
+  // los 10 camiones (+14h34) y COMERCIAL salia cancelada con 60 m3. HOTEL tiene
+  // "HOTEL", que el cargue no dice; COMERCIAL no tiene nada de mas.
+  const palabrasDeMas = (obraProg, obraCargue) => {
+    const delCargue = new Set(normalize(obraCargue).split(' ').filter(w => w.length >= 3));
+    return normalize(obraProg).split(' ').filter(w => w.length >= 3 && !delCargue.has(w)).length;
+  };
   const elementosDelPedido = pedido => [...new Set(pedido.filas.map(f => normalize(f.elemento)).filter(Boolean))];
   const coincidenciaDeElemento = (pedido, orows) => {
     const elementos = elementosDelPedido(pedido);
@@ -742,10 +759,11 @@ function computeCumplimiento(state, assumptions){
     const clienteKey = normalize(pedido.cliente);
     libresDelCliente(clienteKey).forEach((orows, ok)=>{
       const score = obraScore(pedido.obraProg, orows[0].obra);
-      if (score > 0) pares.push({orden, clienteKey, ok, orows, score, elemento: coincidenciaDeElemento(pedido, orows)});
+      if (score > 0) pares.push({orden, clienteKey, ok, orows, score, elemento: coincidenciaDeElemento(pedido, orows),
+                                 deMas: palabrasDeMas(pedido.obraProg, orows[0].obra)});
     });
   });
-  pares.sort((a, b) => b.score - a.score || b.elemento - a.elemento || a.orden - b.orden);
+  pares.sort((a, b) => b.score - a.score || b.elemento - a.elemento || a.deMas - b.deMas || a.orden - b.orden);
   const asignado = new Map();   // orden del pedido -> {ok, orows, confianza}
   pares.forEach(par => {
     const clave = par.clienteKey+'||'+par.ok;
@@ -2060,9 +2078,362 @@ function computeResumen(state, assumptions = {}){
   // `reportes`: {bombeo, tiempos} con las filas del servidor en el rango.
   function indicadoresDelPeriodo(dias, reportes = {}){
     const tiempos = (reportes.tiempos || []).map(f => 'ord_comp' in f ? tiempoDeServidor(f) : f);
+    const camiones = transportePorCamion(dias);
     return {bombeo: bombeoPorEquipo(reportes.bombeo || [], tiempos),
-            camiones: transportePorCamion(dias),
-            tiempos: cumplimientoDeTiempos(tiempos)};
+            camiones,
+            tiempos: cumplimientoDeTiempos(tiempos),
+            // Los reportes de CBS agregados el 2026-11-17 (ver mas abajo).
+            disponibilidad: disponibilidadDeEquipos(reportes.disponibilidad || []),
+            carga: cargaEnPlanta(reportes.batchadas || [], plantasDelCargue(dias)),
+            incidencias: incidenciasDeClientes(reportes.incidencias || []),
+            reclamos: reclamosDelPeriodo(reportes.reclamos || []),
+            devuelto: concretoDevuelto(reportes.anulados || [], camiones.m3)};
+  }
+
+  // ================= MAS REPORTES DE CBS (2026-11-17) =================
+  //
+  // Cinco listas de CBSListas que el usuario bajo para los indicadores de
+  // gestion que no tenian de donde salir. Como bombeo y tiempos: el
+  // navegador lee el Excel, el servidor guarda las filas por rango de fechas
+  // y la cuenta vive aca. Los lectores devuelven las filas ya con los nombres
+  // de las columnas del servidor, asi las mismas funciones sirven para lo
+  // recien leido y para lo guardado.
+
+  // Minutos de una duracion: "00:10:59" (texto del PLC), una fraccion de dia
+  // de Excel o un numero que ya viene en minutos (`enMinutos`).
+  function duracionEnMinutos(v, enMinutos){
+    if (v === null || v === undefined || v === '') return null;
+    if (typeof v === 'number') return enMinutos ? v : v * 1440;
+    const m = String(v).trim().match(/^(\d+):(\d{1,2}):(\d{1,2})$/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 60 : null;
+  }
+  // Desvio en % de lo real contra lo teorico; null si no lleva ese material.
+  const desvio = (real, teorico) => {
+    const r = numeroDe(real), t = numeroDe(teorico);
+    return t > 0 && r !== null ? 100 * (r - t) / t : null;
+  };
+  // De varios desvios del mismo grupo (las arenas y gravas, los aditivos),
+  // el que mas se aleja, con su signo.
+  const elPeor = vs => vs.filter(v => v !== null).reduce((a, v) => a === null || Math.abs(v) > Math.abs(a) ? v : a, null);
+  const nombreDePlanta = p => textoDe(p) && textoDe(p).replace(/^MOVIL\b/i, 'Movil');
+
+  // "Disponibilidad de Equipos y el Uso": un renglon por equipo y dia.
+  // Disponible 1/0; vacio es que el sistema no lo tiene (null, no 0).
+  function parseDisponibilidadSheets(hojas){
+    for (const {rows} of hojas){
+      const h = findHeaderRowIndex(rows, ['TIPO', 'EQUIPO', 'UTILIZADO', 'DISPONIBLE']);
+      if (h === -1) continue;
+      const H = rows[h], c = n => colIndex(H, n);
+      const i = {tipo: c(['Tipo']), equipo: c(['Equipo']), usado: c(['Utilizado']), disp: c(['Disponible']), fecha: c(['Fecha'])};
+      if (Object.values(i).some(x => x < 0)) continue;
+      const filas = [];
+      for (let r = h + 1; r < rows.length; r++){
+        const row = rows[r] || [], fecha = fechaDeCelda(row[i.fecha]), equipo = textoDe(row[i.equipo]);
+        if (!fecha || !equipo || !textoDe(row[i.tipo])) continue;   // la fila de totales viene sin equipo
+        const d = numeroDe(row[i.disp]);
+        filas.push({fecha, tipo: textoDe(row[i.tipo]), equipo, utilizado: numeroDe(row[i.usado]) || 0,
+                    disponible: d === 1 ? 1 : d === 0 ? 0 : null});
+      }
+      return {...rangoDe(filas.map(f => f.fecha)), filas};
+    }
+    return null;
+  }
+
+  // Las batchadas del computador de cada planta, una por carga. Vienen en dos
+  // formatos: "Batchadas PLC" (SDN: TiempoCarga en minutos y cada material
+  // con su teorico) y "Bachadas PLC Planta Moviles Centralizado" (las moviles
+  // y SanIsidro: TimeBatch hh:mm:ss y T/R de cada material). `fuente` dice
+  // cual es, porque cada uno reemplaza solo sus propias plantas.
+  function parseBatchadasSheets(hojas){
+    for (const {rows} of hojas){
+      let h = findHeaderRowIndex(rows, ['CEMENTOTEORICO', 'TIEMPOCARGA']);
+      if (h >= 0){
+        const H = rows[h], c = n => colIndex(H, n), v = (row, n) => { const k = c([n]); return k >= 0 ? row[k] : null; };
+        const iFecha = c(['Fecha']);
+        if (iFecha < 0) continue;
+        const filas = [];
+        for (let r = h + 1; r < rows.length; r++){
+          const row = rows[r] || [], fecha = fechaDeCelda(row[iFecha]), planta = nombreDePlanta(v(row, 'Planta'));
+          if (!fecha || !planta) continue;
+          filas.push({fecha, fuente: 'sdn', planta, conduce: textoDe(v(row, 'txt_Conduce')), m3: numeroDe(v(row, 'Metros')) || 0,
+                      minutos: duracionEnMinutos(v(row, 'TiempoCarga'), true), estado: 'Realizado',
+                      dev_cemento: desvio(v(row, 'Cemento'), v(row, 'CementoTeorico')),
+                      dev_agregados: elPeor(['Arena', 'Grava', 'Gravillita', 'Caliza'].map(m => desvio(v(row, m), v(row, m + 'Teorico')))),
+                      dev_agua: desvio(v(row, 'Agua'), v(row, 'AguaTeorico')),
+                      dev_aditivos: elPeor([1, 2, 3, 4, 5, 6, 7].map(n => desvio(v(row, 'Ejec_Adit' + n), v(row, 'SP_Adit' + n))))});
+        }
+        return {...rangoDe(filas.map(f => f.fecha)), fuente: 'sdn', filas};
+      }
+      h = findHeaderRowIndex(rows, ['TIMEBATCH', 'METROSCUBICOS']);
+      if (h >= 0){
+        const H = rows[h], c = n => colIndex(H, n), v = (row, n) => { const k = c([n]); return k >= 0 ? row[k] : null; };
+        const iFecha = c(['Fecha']);
+        if (iFecha < 0) continue;
+        const par = (row, m) => desvio(v(row, 'R' + m), v(row, 'T' + m));
+        const filas = [];
+        for (let r = h + 1; r < rows.length; r++){
+          const row = rows[r] || [], fecha = fechaDeCelda(row[iFecha]), planta = nombreDePlanta(v(row, 'idPlanta'));
+          if (!fecha || !planta) continue;
+          filas.push({fecha, fuente: 'moviles', planta, conduce: textoDe(v(row, 'Remision')), m3: numeroDe(v(row, 'MetrosCubicos')) || 0,
+                      minutos: duracionEnMinutos(v(row, 'TimeBatch')), estado: textoDe(v(row, 'BatchStatus')),
+                      dev_cemento: elPeor(['Cemento1', 'Cemento2', 'Cemento4'].map(m => par(row, m))),
+                      dev_agregados: elPeor(['Agregado1', 'Agregado2', 'Agregado3', 'Agregado4'].map(m => par(row, m))),
+                      dev_agua: par(row, 'Agua'),
+                      dev_aditivos: elPeor([1, 2, 3, 4, 5, 6, 7].map(n => par(row, 'Aditivo' + n)))});
+        }
+        return {...rangoDe(filas.map(f => f.fecha)), fuente: 'moviles', filas};
+      }
+    }
+    return null;
+  }
+
+  // "Bitacora Incidencias en Servicios": un renglon por servicio con la
+  // percepcion del cliente ("Realizado sin novedad", "Tardanza Bomba"...).
+  function parseIncidenciasSheets(hojas){
+    for (const {rows} of hojas){
+      const h = findHeaderRowIndex(rows, ['PERCEPCION', 'CLIENTE']);
+      if (h === -1) continue;
+      const H = rows[h], c = n => colIndex(H, n);
+      const i = {fecha: c(['Fecha']), planta: c(['Planta']), cliente: c(['Cliente']), vol: c(['VolumenServido']), per: c(['Percepcion'])};
+      if (i.fecha < 0 || i.per < 0) continue;
+      const filas = [];
+      for (let r = h + 1; r < rows.length; r++){
+        const row = rows[r] || [], fecha = fechaDeCelda(row[i.fecha]);
+        if (!fecha) continue;
+        filas.push({fecha, planta: i.planta >= 0 ? textoDe(row[i.planta]) : null, cliente: i.cliente >= 0 ? textoDe(row[i.cliente]) : null,
+                    volumen: i.vol >= 0 ? numeroDe(row[i.vol]) : null, percepcion: textoDe(row[i.per])});
+      }
+      return {...rangoDe(filas.map(f => f.fecha)), filas};
+    }
+    return null;
+  }
+
+  // "Reporte de Reclamaciones": un renglon por reclamo, fechado el dia del
+  // reclamo.
+  function parseReclamosSheets(hojas){
+    for (const {rows} of hojas){
+      const h = findHeaderRowIndex(rows, ['RECLAMO', 'ESTADO', 'FECHARECLAMACION']);
+      if (h === -1) continue;
+      const H = rows[h], c = n => colIndex(H, n);
+      const i = {fecha: c(['FechaReclamacion']), reclamo: c(['Reclamo']), cliente: c(['Cliente']), tipo: c(['TipoReclamo']),
+                 estado: c(['Estado']), procede: c(['Procede']), costo: c(['CostoReclamacion'])};
+      if (i.fecha < 0 || i.reclamo < 0 || i.estado < 0) continue;
+      const filas = [];
+      for (let r = h + 1; r < rows.length; r++){
+        const row = rows[r] || [], fecha = fechaDeCelda(row[i.fecha]), reclamo = textoDe(row[i.reclamo]);
+        if (!fecha || !reclamo) continue;
+        filas.push({fecha, reclamo, cliente: i.cliente >= 0 ? textoDe(row[i.cliente]) : null, tipo: i.tipo >= 0 ? textoDe(row[i.tipo]) : null,
+                    estado: textoDe(row[i.estado]), procede: i.procede >= 0 ? textoDe(row[i.procede]) : null,
+                    costo: i.costo >= 0 ? numeroDe(row[i.costo]) : null});
+      }
+      return {...rangoDe(filas.map(f => f.fecha)), filas};
+    }
+    return null;
+  }
+
+  // "Conduce Anulados": cada conduce anulado con su causa (DESPERDICIO,
+  // DESVIO A OTRO CLIENTE, INFORMACION INCORRECTA).
+  function parseAnuladosSheets(hojas){
+    for (const {rows} of hojas){
+      const h = findHeaderRowIndex(rows, ['CAUSAANULACION', 'CONDUCE']);
+      if (h === -1) continue;
+      const H = rows[h], c = n => colIndex(H, n);
+      const i = {planta: c(['idPlanta']), conduce: c(['Conduce']), fecha: c(['Fecha']), cliente: c(['Cliente']),
+                 m3: c(['Cantidad']), causa: c(['CausaAnulacion']), comentario: c(['ComentarioAnulacion'])};
+      if (i.fecha < 0 || i.conduce < 0 || i.causa < 0) continue;
+      const filas = [];
+      for (let r = h + 1; r < rows.length; r++){
+        const row = rows[r] || [], fecha = fechaDeCelda(row[i.fecha]), conduce = textoDe(row[i.conduce]);
+        if (!fecha || !conduce) continue;
+        filas.push({fecha, conduce, planta: i.planta >= 0 ? nombreDePlanta(row[i.planta]) : null,
+                    cliente: i.cliente >= 0 ? textoDe(row[i.cliente]) : null, m3: i.m3 >= 0 ? numeroDe(row[i.m3]) || 0 : 0,
+                    causa: textoDe(row[i.causa]), comentario: i.comentario >= 0 ? textoDe(row[i.comentario]) : null});
+      }
+      return {...rangoDe(filas.map(f => f.fecha)), filas};
+    }
+    return null;
+  }
+
+  // 4. Disponibilidad de equipos (meta 85%): equipos disponibles / equipos,
+  // sumando todos los dias. Camiones y bombas por separado. `pct` cuenta
+  // solo los registros que traen el dato; `pctTodos` cuenta los vacios como
+  // no disponibles. Octubre 2026: camiones 75% / 66%, bombas 70% / 60%.
+  const tipoDeEquipo = t => /BOMBA/.test(normalize(t)) ? 'Bombas' : 'Camiones';
+  function disponibilidadDeEquipos(filas){
+    const resumen = fs => {
+      const conDato = fs.filter(f => f.disponible === 0 || f.disponible === 1).length;
+      const disp = fs.filter(f => f.disponible === 1).length;
+      return {registros: fs.length, conDato, sinDato: fs.length - conDato, disponibles: disp,
+              noDisponibles: conDato - disp, equipos: new Set(fs.map(f => f.equipo)).size,
+              usados: fs.filter(f => f.utilizado > 0).length,
+              pct: conDato ? 100 * disp / conDato : null, pctTodos: fs.length ? 100 * disp / fs.length : null};
+    };
+    return {...resumen(filas), dias: new Set(filas.map(f => f.fecha)).size,
+            tipos: ['Camiones', 'Bombas'].map(tipo => {
+              const fs = filas.filter(f => tipoDeEquipo(f.tipo) === tipo);
+              return {tipo, ...resumen(fs), equipos: [...groupBy(fs, f => f.equipo)].map(([equipo, g]) => ({equipo, ...resumen(g)}))
+                .sort((a, b) => b.noDisponibles - a.noDisponibles || b.sinDato - a.sinDato || String(a.equipo).localeCompare(String(b.equipo)))};
+            })};
+  }
+
+  // 5. Carga en planta, de las batchadas (solo las "Realizado").
+  // Eficiencia de carga (meta 75%): tiempo que deberia tardar segun la
+  // capacidad de la planta (m3 / m3 por hora) / tiempo real de la carga.
+  // Falta que Produccion mande la capacidad de cada planta: mientras tanto
+  // se muestra el ritmo real (m3 por hora cargando).
+  // Control de insumos (meta 85%): cargas con todos los materiales dentro de
+  // la tolerancia de la norma ASTM C94 / cargas. Se muestran dos: cemento y
+  // agregados, y todos (con agua y aditivos), porque el agua casi nunca
+  // cuadra (la planta la ajusta por la humedad de la arena): octubre 2026,
+  // 51% contra 24%.
+  const CAPACIDAD_PLANTA = {};
+  const TOLERANCIA_INSUMOS = {cemento: 1, agregados: 2, agua: 1, aditivos: 3};
+  const MATERIALES = ['cemento', 'agregados', 'agua', 'aditivos'];
+  const fueraDe = (b, m) => b['dev_' + m] !== null && b['dev_' + m] !== undefined && Math.abs(b['dev_' + m]) > TOLERANCIA_INSUMOS[m];
+  const capacidadDe = planta => CAPACIDAD_PLANTA[normalize(planta).replace(/ /g, '')] ?? null;
+  const plantasDelCargue = dias => [...new Set(dias.flatMap(d => [...(d.state.cargue || []), ...(d.state.cargueMacao || [])]
+    .map(c => textoDe(c.planta)).filter(Boolean)))].sort();
+  function cargaEnPlanta(filas, plantasCargue = []){
+    const hechas = filas.filter(b => normalize(b.estado) === 'REALIZADO' && b.m3 > 0);
+    const resumen = bs => {
+      const conTiempo = bs.filter(b => b.minutos > 0), min = sumaDe(conTiempo, b => b.minutos);
+      const conCap = conTiempo.filter(b => capacidadDe(b.planta)), minCap = sumaDe(conCap, b => b.minutos);
+      const conMaterial = bs.filter(b => b.dev_cemento !== null && b.dev_cemento !== undefined
+                                      || b.dev_agregados !== null && b.dev_agregados !== undefined);
+      const ok = ms => conMaterial.length ? 100 * conMaterial.filter(b => !ms.some(m => fueraDe(b, m))).length / conMaterial.length : null;
+      return {n: bs.length, m3: sumaDe(bs, b => b.m3), conTiempo: conTiempo.length,
+              minutosPorCarga: conTiempo.length ? medianaDe(conTiempo.map(b => b.minutos)) : null,
+              ritmo: min ? 60 * sumaDe(conTiempo, b => b.m3) / min : null,
+              eficiencia: minCap ? 100 * sumaDe(conCap, b => 60 * b.m3 / capacidadDe(b.planta)) / minCap : null,
+              conMaterial: conMaterial.length, insumos: ok(['cemento', 'agregados']), insumosTodos: ok(MATERIALES),
+              fallas: Object.fromEntries(MATERIALES.map(m => [m, conMaterial.filter(b => fueraDe(b, m)).length]))};
+    };
+    const zonaB = b => zonaDePlanta(b.planta) || ZONA_SIN;
+    const plantas = [...groupBy(hechas, b => b.planta)].map(([planta, bs]) => ({planta, zona: zonaB(bs[0]), capacidad: capacidadDe(planta), ...resumen(bs)}))
+      .sort((a, b) => a.zona.localeCompare(b.zona) || b.m3 - a.m3 || a.planta.localeCompare(b.planta));
+    const conBatchadas = new Set(plantas.map(p => normalize(p.planta).replace(/ /g, '')));
+    return {...resumen(hechas), plantas, sinBatchadas: plantasCargue.filter(p => !conBatchadas.has(normalize(p).replace(/ /g, ''))),
+            zonas: porZona(hechas, zonaB, resumen)};
+  }
+
+  // 6. Servicio al cliente. Incidencias (meta 20% o menos): servicios de la
+  // bitacora que no dicen "sin novedad" / servicios. La planta de la bitacora
+  // puede ser una planta o ya una zona ("Santo Domingo").
+  const sinNovedad = p => /SIN NOVEDAD/.test(normalize(p));
+  const zonaDeTexto = p => ZONAS.find(z => normalize(z) === normalize(p)) || (textoDe(p) ? zonaDePlanta(p) : null) || ZONA_SIN;
+  function incidenciasDeClientes(filas){
+    const resumen = fs => { const inc = fs.filter(f => !sinNovedad(f.percepcion)).length;
+      return {n: fs.length, conIncidencia: inc, pct: fs.length ? 100 * inc / fs.length : null}; };
+    const conZona = filas.map(f => ({...f, zona: zonaDeTexto(f.planta)}));
+    const tipos = [...groupBy(conZona.filter(f => !sinNovedad(f.percepcion)), f => textoDe(f.percepcion) || 'Sin percepción')]
+      .map(([tipo, fs]) => ({tipo, n: fs.length, zonas: ZONAS.map(zona => ({zona, n: fs.filter(f => f.zona === zona).length}))}))
+      .sort((a, b) => b.n - a.n || a.tipo.localeCompare(b.tipo));
+    return {...resumen(conZona), zonas: porZona(conZona, f => f.zona, resumen), tipos};
+  }
+  // Reclamos solucionados (meta 80%): reclamos solucionados o cerrados /
+  // reclamos. Octubre 2026: los 6 estan PENDIENTE.
+  const estaSolucionado = e => /^(SOLUCIONAD|CERRAD|RESUELT)/.test(normalize(e));
+  function reclamosDelPeriodo(filas){
+    const sol = filas.filter(f => estaSolucionado(f.estado)).length;
+    return {n: filas.length, solucionados: sol, pct: filas.length ? 100 * sol / filas.length : null,
+            procede: filas.filter(f => normalize(f.procede) === 'PROCEDE').length, costo: sumaDe(filas, f => f.costo),
+            estados: [...groupBy(filas, f => textoDe(f.estado) || 'Sin estado')].map(([estado, fs]) => ({estado, n: fs.length}))
+              .sort((a, b) => b.n - a.n || a.estado.localeCompare(b.estado)),
+            lista: [...filas].sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.reclamo).localeCompare(String(b.reclamo)))};
+  }
+
+  // 7. Concreto devuelto (sin meta en la hoja): m3 de los conduces anulados
+  // por DESPERDICIO / m3 transportados en el rango (la seccion 2, del cargue
+  // de cada dia). Los desviados a otro cliente o anulados por informacion
+  // incorrecta se muestran aparte: el concreto no se perdio. Octubre 2026:
+  // 53.5 m3, lo mismo que "Desperdicio de concreto" de Indicadores diarios.
+  function concretoDevuelto(filas, m3Despachados){
+    const devueltos = filas.filter(f => normalize(f.causa) === 'DESPERDICIO'), m3 = sumaDe(devueltos, f => f.m3);
+    return {anulados: filas.length, m3Anulados: sumaDe(filas, f => f.m3), conduces: devueltos.length, m3, m3Despachados,
+            pct: m3Despachados ? 100 * m3 / m3Despachados : null,
+            causas: [...groupBy(filas, f => textoDe(f.causa) || 'Sin causa')].map(([causa, fs]) => ({causa, n: fs.length, m3: sumaDe(fs, f => f.m3)}))
+              .sort((a, b) => b.m3 - a.m3 || a.causa.localeCompare(b.causa)),
+            lista: [...filas].sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.conduce).localeCompare(String(b.conduce)))};
+  }
+
+  // ================= METAS (2026-11-11) =================
+  //
+  // Los indicadores de Logistica que la app ya calcula, al lado de su meta de
+  // la hoja "Indicadores de Gestion de VMO Concretos 2026" (pedido del
+  // usuario). `minimo`: cumple si llega a la meta; si no, si no la pasa.
+  // Se compara el numero tal como se muestra (redondeado), para que nunca
+  // diga "2.6 · no cumple" contra una meta de 2.6.
+  // La primera carga (Frecuencia de despacho e Inicio de carga) NO va aca:
+  // vive en Estadisticas. Estuvo del 11 al 17-11-2026 y daba otro numero por
+  // contar otros dias; el usuario pidio quitarla (un indicador, un lugar).
+  const METAS = {
+    tiempos: {meta: 90, minimo: true},
+    flota: {meta: 2.6, minimo: true},
+    cancelados: {meta: 15, minimo: false},
+    // 2026-11-17, con los reportes nuevos de CBS
+    disponibilidad: {meta: 85, minimo: true},
+    eficiencia: {meta: 75, minimo: true},
+    insumos: {meta: 85, minimo: true},
+    incidencias: {meta: 20, minimo: false},
+    reclamos: {meta: 80, minimo: true},
+  };
+  const redondeo = (v, dec) => v === null || v === undefined ? null : Math.round(v * 10 ** dec) / 10 ** dec;
+  function contraMeta(clave, valor, dec){
+    const {meta, minimo} = METAS[clave], v = redondeo(valor, dec);
+    return {valor: v, cumple: v === null ? null : minimo ? v >= meta : v <= meta};
+  }
+
+  // Servicio cancelado en el dia de vaciado: renglones del Reporte de
+  // cancelados (los mismos, Macao incluido) / servicios programados. Un
+  // servicio es un renglon de la programacion con m3 (cliente, obra, bomba,
+  // elemento y hora: la misma clave de lo no despachado), de la programacion
+  // y de la de Macao, porque el reporte cuenta los dos. Octubre 2026: 109 de
+  // 811 = 13%. Cuenta todos los cancelados: la hoja pide solo los del cliente
+  // y ninguno de los 109 tiene responsable puesto.
+  function canceladosDelPeriodo(dias){
+    const servicios = sumaDe(dias, d => new Set([...(d.state.programacion || []), ...(d.state.programacionMacao || [])]
+      .filter(f => f.cantidad > 0).map(f => claveFila(f.cliente, f.obra, f.bomba, f.elemento, f.horaMin))).size);
+    const r = reporteCancelados(dias).resumen;
+    return {cancelados: r.entregas, servicios, m3: r.m3Cancelado,
+            pct: servicios ? 100 * r.entregas / servicios : null};
+  }
+
+  // `dias`: los del rango de restaurarDia(). `ind`: lo que devolvio
+  // indicadoresDelPeriodo() para el mismo rango.
+  function metasDelPeriodo(dias, ind){
+    const zonasDe = (lista, valor) => lista.filter(z => z.zona !== ZONA_SIN).map(z => ({zona: z.zona, ...valor(z)}));
+    const t = ind.tiempos, c = ind.camiones, can = canceladosDelPeriodo(dias);
+    return {
+      tiempos: {...contraMeta('tiempos', t.n ? t.pct : null, 0), meta: METAS.tiempos.meta,
+                zonas: zonasDe(t.zonas, z => z.hayDato ? contraMeta('tiempos', z.pct, 0) : {valor: null, cumple: null, sinDato: true})},
+      flota: {...contraMeta('flota', c.viajesPorCamionDia, 1), meta: METAS.flota.meta,
+              zonas: zonasDe(c.zonas, z => contraMeta('flota', z.viajesPorCamionDia, 1))},
+      cancelados: {...contraMeta('cancelados', can.pct, 0), meta: METAS.cancelados.meta,
+                   cancelados: can.cancelados, servicios: can.servicios, m3: can.m3},
+      // Los de los reportes nuevos de CBS (2026-11-17). Sin el reporte en
+      // estas fechas, "Sin dato".
+      ...metasDeReportesNuevos(ind, zonasDe),
+    };
+  }
+  function metasDeReportesNuevos(ind, zonasDe){
+    const d = ind.disponibilidad || {tipos: []}, k = ind.carga || {zonas: []}, inc = ind.incidencias || {zonas: []}, rec = ind.reclamos || {};
+    const disp = tipo => { const t = d.tipos.find(x => x.tipo === tipo) || {};
+      return {...contraMeta('disponibilidad', t.conDato ? t.pct : null, 0), meta: METAS.disponibilidad.meta,
+              pctTodos: redondeo(t.registros ? t.pctTodos : null, 0), sinDato: t.sinDato || 0, registros: t.registros || 0}; };
+    return {
+      disponibilidadCamiones: disp('Camiones'),
+      disponibilidadBombas: disp('Bombas'),
+      eficiencia: {...contraMeta('eficiencia', k.eficiencia ?? null, 0), meta: METAS.eficiencia.meta,
+                   ritmo: redondeo(k.ritmo ?? null, 0), cargas: k.n || 0},
+      insumos: {...contraMeta('insumos', k.conMaterial ? k.insumos : null, 0), meta: METAS.insumos.meta,
+                todos: redondeo(k.conMaterial ? k.insumosTodos : null, 0), cargas: k.conMaterial || 0,
+                zonas: zonasDe(k.zonas, z => contraMeta('insumos', z.conMaterial ? z.insumos : null, 0))},
+      incidencias: {...contraMeta('incidencias', inc.n ? inc.pct : null, 0), meta: METAS.incidencias.meta,
+                    servicios: inc.n || 0, conIncidencia: inc.conIncidencia || 0,
+                    zonas: zonasDe(inc.zonas, z => contraMeta('incidencias', z.n ? z.pct : null, 0))},
+      reclamos: {...contraMeta('reclamos', rec.n ? rec.pct : null, 0), meta: METAS.reclamos.meta,
+                 total: rec.n || 0, solucionados: rec.solucionados || 0},
+    };
   }
 
   const api = {
@@ -2081,7 +2452,10 @@ function computeResumen(state, assumptions = {}){
     SERVICIOS, NOMBRE_SERVICIO, servicioDeFila, filtrarPorServicio, filtrarDiasPorServicio,
     NOMBRE_PCT, NOMBRE_PCT_PEDIDOS,
     ADELANTO_POR_DEFECTO, ESPACIAMIENTO_POR_DEFECTO, RESPONSABLES, MOTIVOS,
-    evaluarEspaciamiento, filasCancelados, reporteCancelados, reporteDelDia, reporteDelPeriodo, indicadoresDelPeriodo, parseBombeoSheets, parseTiemposSheets, medianaDe, filasImagenCumplimiento, paretoDeMotivos, motivosPorResponsable, porcentajesQueSuman100, agruparIncumplidos, conteosDelDia,
+    evaluarEspaciamiento, filasCancelados, reporteCancelados, reporteDelDia, reporteDelPeriodo, indicadoresDelPeriodo, METAS, canceladosDelPeriodo, metasDelPeriodo,
+    parseDisponibilidadSheets, parseBatchadasSheets, parseIncidenciasSheets, parseReclamosSheets, parseAnuladosSheets,
+    disponibilidadDeEquipos, cargaEnPlanta, incidenciasDeClientes, reclamosDelPeriodo, concretoDevuelto,
+    CAPACIDAD_PLANTA, TOLERANCIA_INSUMOS, duracionEnMinutos, parseBombeoSheets, parseTiemposSheets, medianaDe, filasImagenCumplimiento, paretoDeMotivos, motivosPorResponsable, porcentajesQueSuman100, agruparIncumplidos, conteosDelDia,
   };
 
   // El navegador: las funciones quedan globales, como cuando vivian en el HTML.

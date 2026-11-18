@@ -9,6 +9,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
   <script src="/calendario.js?v=2026-10-19b"></script>
+  <script>
+    /* Con sesion guardada, el login no se pinta mientras se confirma con el
+       servidor: se ve "Cargando..." y el login solo aparece si la sesion
+       vencio (antes se veia el login un momento en cada refresh). */
+    try { if (localStorage.getItem('vmo_token')) document.documentElement.classList.add('verificando'); } catch (e) {}
+  </script>
   <style>
     /* ── VARIABLES ── */
     :root {
@@ -723,6 +729,14 @@
       align-items: center;
       justify-content: center;
       z-index: 1000;
+    }
+    #cargando-sesion { display: none; }
+    html.verificando #login-screen { display: none; }
+    html.verificando #cargando-sesion {
+      position: fixed; inset: 0; z-index: 1000;
+      background: var(--bg-base);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted); font-size: 13px;
     }
     .login-box {
       background: var(--bg-surface);
@@ -1841,6 +1855,33 @@
       if (mod === 'estimaciones') iniciarTickerMacao2();
       else detenerTickerMacao2();
       closeSidebar();
+      guardarVista();
+    }
+
+    /* Volver a la misma pantalla al refrescar (2026-11-04): el modulo y la
+       seccion abiertos se guardan en sessionStorage (solo esta pestaña, se
+       borra al cerrarla). Se restaura haciendo clic en los mismos botones,
+       asi pasa por el mismo camino que si el usuario los tocara. */
+    const PREFIJO_PANEL = {conduces: 'panel-', estimaciones: 'panel-est-', logistica: 'panel-log-', comercial: 'panel-com-'};
+
+    function guardarVista() {
+      const cont = document.querySelector('.module-container:not(.hidden)');
+      if (!cont) return;
+      const mod = cont.id.replace('module-', '');
+      const activo = cont.querySelector('.content-panel.active');
+      const panel = activo && PREFIJO_PANEL[mod] ? activo.id.slice(PREFIJO_PANEL[mod].length) : '';
+      try { sessionStorage.setItem('vmo_vista', JSON.stringify({mod, panel})); } catch (e) {}
+    }
+
+    function restaurarVista() {
+      let vista = null;
+      try { vista = JSON.parse(sessionStorage.getItem('vmo_vista') || 'null'); } catch (e) {}
+      if (!vista || !PREFIJO_PANEL[vista.mod]) return;
+      const porOnclick = (sel, texto) => [...document.querySelectorAll(sel)].find(b => (b.getAttribute('onclick') || '').includes(texto));
+      const btnMod = porOnclick('.module-btn', `switchModule('${vista.mod}',`);
+      const btnPanel = /^[a-z-]+$/.test(vista.panel || '') && porOnclick(`#module-${vista.mod} .nav-item`, `('${vista.panel}',`);
+      if (btnMod) btnMod.click();
+      if (btnPanel) btnPanel.click();
     }
 
     /* ── Logistica: el sidebar del modulo ──
@@ -1873,6 +1914,7 @@
       if (btn) btn.classList.add('active');
       cargarIframeLog(id);
       closeSidebar();
+      guardarVista();
     }
 
     /* ── Comercial: el sidebar del modulo (2026-10-19) ──
@@ -1896,6 +1938,7 @@
       if (btn) btn.classList.add('active');
       cargarIframeCom(id);
       closeSidebar();
+      guardarVista();
     }
 
     /* Se subio informacion comercial: el dashboard, si ya estaba abierto,
@@ -1976,6 +2019,7 @@
       document.getElementById('panel-est-' + id).classList.add('active');
       btn.classList.add('active');
       closeSidebar();
+      guardarVista();
       if (id === 'pendientes') cargarPendientesRevision();
       if (id === 'claves') cargarClavesResueltas();
     }
@@ -2423,6 +2467,7 @@
       document.getElementById('panel-' + id).classList.add('active');
       btn.classList.add('active');
       closeSidebar();
+      guardarVista();
     }
 
     /* ── MOBILE SIDEBAR (drawer) — no-op on desktop, .sidebar has no
@@ -2457,6 +2502,7 @@
       localStorage.removeItem('usuario');
       localStorage.removeItem('claude_history');
       localStorage.removeItem('chat_msgs');
+      try { sessionStorage.removeItem('vmo_vista'); } catch (e) {}
       token = null;
       irAAuthCenter(true);
     }
@@ -2659,7 +2705,9 @@
       if (e.key === 'Enter') doLogin();
     });
 
-    window.addEventListener('load', async () => {
+    // Confirma la sesion apenas esta el HTML, sin esperar a las letras y el
+    // logo ('load'). Mientras tanto se ve "Cargando..." (html.verificando).
+    document.addEventListener('DOMContentLoaded', async () => {
       token = localStorage.getItem('vmo_token') || localStorage.getItem('jwt_token');
       if (token && !tokenJwtExpirado(token)) {
         document.getElementById('login-screen').style.display = 'none';
@@ -2667,6 +2715,7 @@
         try {
           const res = await fetch('/companias', { headers: authHeaders() });
           if (res.ok) {
+            if (typeof restaurarVista === 'function') restaurarVista();
             const data = await res.json();
             ['select-compania', 'factura-compania'].forEach(id => {
               const select = document.getElementById(id);
@@ -2686,6 +2735,7 @@
       } else {
         irAAuthCenter(false);
       }
+      document.documentElement.classList.remove('verificando');
     });
 
     document.getElementById('input').addEventListener('keydown', e => {

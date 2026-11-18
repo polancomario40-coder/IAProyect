@@ -47,6 +47,12 @@ LOG_MOTIVOS = (
     "SIN SISTEMA", "OPERACIONES",
     # 2026-10-23, pedido del usuario
     "PRIORIDAD OTRO SERVICIO",
+    # 2026-11-11, pedido del usuario
+    "LOGISTICA",
+    # 2026-11-12, pedido del usuario
+    "BRIGADA",
+    # 2026-11-12, pedido del usuario
+    "SOLICITUD DE CARGUE",
 )
 
 
@@ -313,6 +319,151 @@ async def logistica_subir_tiempos(req: LogTiemposRequest, authorization: str = H
         (f.fecha, i, f.ordComp, f.planta, f.cliente, f.horaIni, f.horaFin, f.cantidad, f.totalIn,
          f.logro, f.totalDespachado, f.viajesProgramados, f.viajesEfectuados, f.bomba)
         for i, f in enumerate(req.filas)])
+
+
+# Cinco listas mas de CBSListas (2026-11-17), mismo camino: el navegador lee
+# el Excel (parse*Sheets en logistica.logic.js) y aca se guardan por rango.
+Txt = lambda n: Field(default=None, max_length=n)  # noqa: E731
+
+
+class LogFilaDisponibilidad(BaseModel):
+    fecha: str = Field(pattern=RE_FECHA)
+    tipo: str = Field(min_length=1, max_length=60)
+    equipo: str = Field(min_length=1, max_length=60)
+    utilizado: float = Field(ge=0)
+    disponible: int | None = Field(default=None, ge=0, le=1)
+
+
+class LogFilaBatchada(BaseModel):
+    fecha: str = Field(pattern=RE_FECHA)
+    planta: str = Field(min_length=1, max_length=60)
+    conduce: str | None = Txt(40)
+    m3: float = Field(ge=0)
+    minutos: float | None = Field(default=None, ge=0)
+    estado: str | None = Txt(40)
+    dev_cemento: float | None = None
+    dev_agregados: float | None = None
+    dev_agua: float | None = None
+    dev_aditivos: float | None = None
+
+
+class LogFilaIncidencia(BaseModel):
+    fecha: str = Field(pattern=RE_FECHA)
+    planta: str | None = Txt(60)
+    cliente: str | None = Txt(200)
+    volumen: float | None = Field(default=None, ge=0)
+    percepcion: str | None = Txt(120)
+
+
+class LogFilaReclamo(BaseModel):
+    fecha: str = Field(pattern=RE_FECHA)
+    reclamo: str = Field(min_length=1, max_length=40)
+    cliente: str | None = Txt(200)
+    tipo: str | None = Txt(60)
+    estado: str | None = Txt(60)
+    procede: str | None = Txt(40)
+    costo: float | None = None
+
+
+class LogFilaAnulado(BaseModel):
+    fecha: str = Field(pattern=RE_FECHA)
+    conduce: str = Field(min_length=1, max_length=40)
+    planta: str | None = Txt(60)
+    cliente: str | None = Txt(200)
+    m3: float = Field(ge=0)
+    causa: str | None = Txt(80)
+    comentario: str | None = Txt(1000)
+
+
+class LogDisponibilidadRequest(BaseModel):
+    desde: str = Field(pattern=RE_FECHA)
+    hasta: str = Field(pattern=RE_FECHA)
+    filas: list[LogFilaDisponibilidad] = Field(max_length=core.LOG_MAX_FILAS)
+
+
+class LogBatchadasRequest(BaseModel):
+    desde: str = Field(pattern=RE_FECHA)
+    hasta: str = Field(pattern=RE_FECHA)
+    fuente: str = Field(pattern=r"^(sdn|moviles)$")
+    filas: list[LogFilaBatchada] = Field(max_length=core.LOG_MAX_FILAS)
+
+
+class LogIncidenciasRequest(BaseModel):
+    desde: str = Field(pattern=RE_FECHA)
+    hasta: str = Field(pattern=RE_FECHA)
+    filas: list[LogFilaIncidencia] = Field(max_length=core.LOG_MAX_FILAS)
+
+
+class LogReclamosRequest(BaseModel):
+    desde: str = Field(pattern=RE_FECHA)
+    hasta: str = Field(pattern=RE_FECHA)
+    filas: list[LogFilaReclamo] = Field(max_length=core.LOG_MAX_FILAS)
+
+
+class LogAnuladosRequest(BaseModel):
+    desde: str = Field(pattern=RE_FECHA)
+    hasta: str = Field(pattern=RE_FECHA)
+    filas: list[LogFilaAnulado] = Field(max_length=core.LOG_MAX_FILAS)
+
+
+def _ind_sin_repetidos(claves: list[tuple], error: str):
+    if len(set(claves)) != len(claves):
+        raise HTTPException(status_code=422, detail=error)
+
+
+@router.post("/api/logistica/indicadores/disponibilidad")
+async def logistica_subir_disponibilidad(req: LogDisponibilidadRequest, authorization: str = Header(None)):
+    """"Disponibilidad de Equipos y el Uso": reemplaza las fechas del rango."""
+    verificar_token(authorization)
+    _ind_validar_rango(req.desde, req.hasta, [f.fecha for f in req.filas])
+    _ind_sin_repetidos([(f.fecha, f.tipo, f.equipo) for f in req.filas], "equipo_repetido_en_un_dia")
+    return _ind_guardar("logistica_disponibilidad", req.desde, req.hasta,
+                        [(f.fecha, f.tipo, f.equipo, f.utilizado, f.disponible) for f in req.filas])
+
+
+@router.post("/api/logistica/indicadores/batchadas")
+async def logistica_subir_batchadas(req: LogBatchadasRequest, authorization: str = Header(None)):
+    """Batchadas del PLC: reemplaza las fechas del rango, solo de ese formato."""
+    verificar_token(authorization)
+    _ind_validar_rango(req.desde, req.hasta, [f.fecha for f in req.filas])
+    core.setup_logistica_db()
+    conn = core._log_conn()
+    try:
+        return core._log_ind_reemplazar(conn, "logistica_batchada", req.desde, req.hasta, [
+            (f.fecha, req.fuente, i, f.planta, f.conduce, f.m3, f.minutos, f.estado,
+             f.dev_cemento, f.dev_agregados, f.dev_agua, f.dev_aditivos)
+            for i, f in enumerate(req.filas)], fuente=req.fuente)
+    finally:
+        conn.close()
+
+
+@router.post("/api/logistica/indicadores/incidencias")
+async def logistica_subir_incidencias(req: LogIncidenciasRequest, authorization: str = Header(None)):
+    """"Bitacora Incidencias en Servicios": reemplaza las fechas del rango."""
+    verificar_token(authorization)
+    _ind_validar_rango(req.desde, req.hasta, [f.fecha for f in req.filas])
+    return _ind_guardar("logistica_incidencia", req.desde, req.hasta, [
+        (f.fecha, i, f.planta, f.cliente, f.volumen, f.percepcion) for i, f in enumerate(req.filas)])
+
+
+@router.post("/api/logistica/indicadores/reclamos")
+async def logistica_subir_reclamos(req: LogReclamosRequest, authorization: str = Header(None)):
+    """"Reporte de Reclamaciones": reemplaza las fechas del rango."""
+    verificar_token(authorization)
+    _ind_validar_rango(req.desde, req.hasta, [f.fecha for f in req.filas])
+    _ind_sin_repetidos([(f.fecha, f.reclamo) for f in req.filas], "reclamo_repetido")
+    return _ind_guardar("logistica_reclamo", req.desde, req.hasta, [
+        (f.fecha, f.reclamo, f.cliente, f.tipo, f.estado, f.procede, f.costo) for f in req.filas])
+
+
+@router.post("/api/logistica/indicadores/anulados")
+async def logistica_subir_anulados(req: LogAnuladosRequest, authorization: str = Header(None)):
+    """"Conduce Anulados": reemplaza las fechas del rango."""
+    verificar_token(authorization)
+    _ind_validar_rango(req.desde, req.hasta, [f.fecha for f in req.filas])
+    _ind_sin_repetidos([(f.fecha, f.conduce) for f in req.filas], "conduce_repetido")
+    return _ind_guardar("logistica_anulado", req.desde, req.hasta, [
+        (f.fecha, f.conduce, f.planta, f.cliente, f.m3, f.causa, f.comentario) for f in req.filas])
 
 
 @router.get("/api/logistica/indicadores")

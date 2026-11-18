@@ -257,3 +257,18 @@ def test_el_cierre_de_sesion_pasa_con_periodos_contiguos(tmp_path, monkeypatch):
     monkeypatch.setattr(estado, "DB_ESTIMACIONES", _bd_libro(tmp_path, [
         f for f in DOBLE_CIERRE_2026_10_05 if f[4] != "2026-08-17_2026-09-16"]))
     assert cierre.revisar_libro_mayor()[0] is True
+
+
+def test_cierre_arregla_la_salida_antes_de_imprimir(monkeypatch):
+    """2026-11-04: el cierre se cayo por una flecha en un titulo de issue
+    (cp1252). Lo primero que hace main es pasar la salida a UTF-8; se corta
+    ahi para no correr el resto (respaldo, servidores)."""
+    class Corte(Exception):
+        pass
+
+    def cortar():
+        raise Corte()
+
+    monkeypatch.setattr(estado, "consola_utf8", cortar)
+    with pytest.raises(Corte):
+        cierre.main()

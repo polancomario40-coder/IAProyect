@@ -5765,6 +5765,69 @@ def setup_logistica_db(conn=None):
             bomba             TEXT,
             PRIMARY KEY (fecha, orden)
         );
+        -- Cinco listas mas de CBSListas para los indicadores de gestion
+        -- (2026-11-17). Como las dos de arriba: se suben por rango de fechas
+        -- y un rango nuevo reemplaza esas fechas.
+        -- "Disponibilidad de Equipos y el Uso": cada equipo cada dia.
+        -- disponible 1/0; NULL es que el sistema no lo trae.
+        CREATE TABLE IF NOT EXISTS logistica_disponibilidad (
+            fecha      TEXT NOT NULL,
+            tipo       TEXT NOT NULL,
+            equipo     TEXT NOT NULL,
+            utilizado  REAL NOT NULL,
+            disponible INTEGER CHECK (disponible IN (0, 1)),
+            PRIMARY KEY (fecha, tipo, equipo)
+        );
+        -- Las batchadas del PLC de cada planta, una por carga. `fuente` es el
+        -- formato ('sdn' o 'moviles'): cada uno reemplaza solo lo suyo. Los
+        -- desvios son % de lo real contra lo teorico (NULL: no lleva).
+        CREATE TABLE IF NOT EXISTS logistica_batchada (
+            fecha         TEXT NOT NULL,
+            fuente        TEXT NOT NULL CHECK (fuente IN ('sdn', 'moviles')),
+            orden         INTEGER NOT NULL,
+            planta        TEXT NOT NULL,
+            conduce       TEXT,
+            m3            REAL NOT NULL,
+            minutos       REAL,
+            estado        TEXT,
+            dev_cemento   REAL,
+            dev_agregados REAL,
+            dev_agua      REAL,
+            dev_aditivos  REAL,
+            PRIMARY KEY (fecha, fuente, orden)
+        );
+        -- "Bitacora Incidencias en Servicios": un renglon por servicio.
+        CREATE TABLE IF NOT EXISTS logistica_incidencia (
+            fecha      TEXT NOT NULL,
+            orden      INTEGER NOT NULL,
+            planta     TEXT,
+            cliente    TEXT,
+            volumen    REAL,
+            percepcion TEXT,
+            PRIMARY KEY (fecha, orden)
+        );
+        -- "Reporte de Reclamaciones": un renglon por reclamo, en su fecha.
+        CREATE TABLE IF NOT EXISTS logistica_reclamo (
+            fecha   TEXT NOT NULL,
+            reclamo TEXT NOT NULL,
+            cliente TEXT,
+            tipo    TEXT,
+            estado  TEXT,
+            procede TEXT,
+            costo   REAL,
+            PRIMARY KEY (fecha, reclamo)
+        );
+        -- "Conduce Anulados": cada conduce anulado con su causa.
+        CREATE TABLE IF NOT EXISTS logistica_anulado (
+            fecha      TEXT NOT NULL,
+            conduce    TEXT NOT NULL,
+            planta     TEXT,
+            cliente    TEXT,
+            m3         REAL NOT NULL,
+            causa      TEXT,
+            comentario TEXT,
+            PRIMARY KEY (fecha, conduce)
+        );
         CREATE TABLE IF NOT EXISTS logistica_responsable (
             fecha TEXT NOT NULL,
             clave TEXT NOT NULL,
@@ -5899,16 +5962,37 @@ LOG_IND_COLUMNAS = {
     "logistica_tiempo_pedido": ("fecha", "orden", "ord_comp", "planta", "cliente", "hora_ini",
                                 "hora_fin", "cantidad", "total_in", "logro", "total_despachado",
                                 "viajes_programados", "viajes_efectuados", "bomba"),
+    "logistica_disponibilidad": ("fecha", "tipo", "equipo", "utilizado", "disponible"),
+    "logistica_batchada": ("fecha", "fuente", "orden", "planta", "conduce", "m3", "minutos", "estado",
+                           "dev_cemento", "dev_agregados", "dev_agua", "dev_aditivos"),
+    "logistica_incidencia": ("fecha", "orden", "planta", "cliente", "volumen", "percepcion"),
+    "logistica_reclamo": ("fecha", "reclamo", "cliente", "tipo", "estado", "procede", "costo"),
+    "logistica_anulado": ("fecha", "conduce", "planta", "cliente", "m3", "causa", "comentario"),
+}
+# El nombre de cada reporte en la API y la pagina, y su tabla.
+LOG_IND_REPORTES = {
+    "bombeo": "logistica_bombeo",
+    "tiempos": "logistica_tiempo_pedido",
+    "disponibilidad": "logistica_disponibilidad",
+    "batchadas": "logistica_batchada",
+    "incidencias": "logistica_incidencia",
+    "reclamos": "logistica_reclamo",
+    "anulados": "logistica_anulado",
 }
 
 
-def _log_ind_reemplazar(conn, tabla: str, desde: str, hasta: str, filas: list[tuple]) -> dict:
+def _log_ind_reemplazar(conn, tabla: str, desde: str, hasta: str, filas: list[tuple],
+                        fuente: str | None = None) -> dict:
+    """`fuente` (solo batchadas): reemplaza solo las filas de ese formato, para
+    que subir las moviles no borre las de SDN de las mismas fechas."""
     cols = LOG_IND_COLUMNAS[tabla]
+    donde, params = "fecha BETWEEN ? AND ?", [desde, hasta]
+    if fuente is not None:
+        donde, params = donde + " AND fuente = ?", params + [fuente]
     conn.execute("BEGIN")
     try:
-        antes = conn.execute(f"SELECT COUNT(*) FROM {tabla} WHERE fecha BETWEEN ? AND ?",
-                             (desde, hasta)).fetchone()[0]
-        conn.execute(f"DELETE FROM {tabla} WHERE fecha BETWEEN ? AND ?", (desde, hasta))
+        antes = conn.execute(f"SELECT COUNT(*) FROM {tabla} WHERE {donde}", params).fetchone()[0]
+        conn.execute(f"DELETE FROM {tabla} WHERE {donde}", params)
         conn.executemany(f"INSERT INTO {tabla} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
                          filas)
         conn.execute("COMMIT")
@@ -5919,7 +6003,7 @@ def _log_ind_reemplazar(conn, tabla: str, desde: str, hasta: str, filas: list[tu
 
 
 def _log_ind_leer(conn, desde: str, hasta: str) -> dict:
-    """Las filas de los dos reportes en el rango, y que fechas hay cargadas de
+    """Las filas de los reportes en el rango, y que fechas hay cargadas de
     cada uno (para que la pagina diga que falta subir)."""
     def filas(tabla):
         cols = LOG_IND_COLUMNAS[tabla]
@@ -5930,9 +6014,8 @@ def _log_ind_leer(conn, desde: str, hasta: str) -> dict:
     def fechas(tabla):
         return [f[0] for f in conn.execute(f"SELECT DISTINCT fecha FROM {tabla} ORDER BY fecha")]
 
-    return {"bombeo": filas("logistica_bombeo"), "tiempos": filas("logistica_tiempo_pedido"),
-            "fechas": {"bombeo": fechas("logistica_bombeo"),
-                       "tiempos": fechas("logistica_tiempo_pedido")}}
+    return {**{nombre: filas(tabla) for nombre, tabla in LOG_IND_REPORTES.items()},
+            "fechas": {nombre: fechas(tabla) for nombre, tabla in LOG_IND_REPORTES.items()}}
 
 
 def _log_listar_dias(conn) -> list[dict]:

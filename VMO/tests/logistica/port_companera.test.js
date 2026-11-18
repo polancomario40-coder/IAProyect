@@ -209,7 +209,7 @@ test('la lista de motivos es la que paso el usuario, en ese orden', () => {
     'DISPONIBILIDAD DE MANGUERAS', 'PRIORIDAD OTRO ELEMENTO', 'PERMISOS DE OBRA',
     'MISMO HORARIO ELEMENTOS', 'PASE DE INGRESO A OBRA', 'DESPACHO VMO',
     'INICIO DE CARGA VMO', 'HORARIO PROGRAMADO', 'CAMBIO DE PEDIDO', 'SIN SISTEMA', 'OPERACIONES',
-    'PRIORIDAD OTRO SERVICIO']);
+    'PRIORIDAD OTRO SERVICIO', 'LOGISTICA', 'BRIGADA', 'SOLICITUD DE CARGUE']);
 });
 
 test('el motivo viaja al guardar y vuelve al abrir; vacio o desconocido no se guarda', () => {

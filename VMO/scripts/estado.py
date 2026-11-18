@@ -23,6 +23,7 @@ solo lee, y abre las bases en modo solo-lectura.
 import shutil
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,6 +33,24 @@ DB_ESTIMACIONES = BASE_DIR / "estimaciones" / "db" / "estimaciones.db"
 
 # Prefijo que separa un commit del siguiente al parsear `git log --name-only`.
 CENTINELA = "@@"
+
+
+def consola_utf8():
+    """Que un caracter raro en un titulo no tumbe el script.
+
+    Con la salida a un pipe (Claude Code, `| tee`, un .bat que redirige),
+    Windows le da a Python la codificacion del sistema, cp1252, y un `print`
+    con algo que cp1252 no tiene revienta con UnicodeEncodeError. El
+    2026-11-04 el cierre se cayo en "issues abiertos" por la flecha del titulo
+    del issue #98, despues de hacer el respaldo pero antes de decir que
+    faltaba. Se escribe en UTF-8 y, si aun asi algo no se puede escribir,
+    sale reemplazado en vez de cortar.
+    """
+    for flujo in (sys.stdout, sys.stderr):
+        try:
+            flujo.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass  # no es un TextIOWrapper (lo reemplazo un test o un IDE)
 
 
 def _correr(cmd, timeout=60):
@@ -248,6 +267,7 @@ def bloque_tests():
 
 
 def main():
+    consola_utf8()
     print("=" * 64)
     print("ESTADO DEL PROYECTO — calculado ahora, no escrito a mano")
     print("=" * 64)

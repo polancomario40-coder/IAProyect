@@ -151,6 +151,27 @@ test('dos obras empatadas por texto: gana la que coincide en elemento, no la pri
   }
 });
 
+test('empate en texto y en elemento: gana la que no tiene palabras de mas (06/11)', () => {
+  // El 06/11 "EPOKAL - AREA HOTEL" (LOSA, 6 m3, 00:00) y "EPOKAL - COMERCIAL"
+  // (LOSA, 60 m3, 14:00) empataban 0,40 contra "EPOKAL AREA COMERCIAL, PUNTA
+  // CANA" y en elemento. HOTEL se llevaba los camiones por ir primera (+14h34)
+  // y COMERCIAL salia cancelada aunque se despacho.
+  const losa = p => ({...p, elemento: 'LOSA'});
+  const hotel = losa(pedido('EPOKAL', 'EPOKAL - AREA HOTEL', 60, 6));
+  const comercial = losa(pedido('EPOKAL', 'EPOKAL - COMERCIAL', 840, 60));
+  const cargue = [
+    {...camion('EPOKAL', 'EPOKAL AREA COMERCIAL, PUNTA CANA', 889), elemento: 'LOSA'},
+    {...camion('EPOKAL', 'EPOKAL AREA COMERCIAL, PUNTA CANA', 901, { ficha: 'F-2' }), elemento: 'LOSA'},
+  ];
+  for (const programacion of [[hotel, comercial], [comercial, hotel]]){
+    const { results, sinCruce } = estado(programacion, cargue);
+    const cruzada = results.find(r => r.obraReal === 'EPOKAL AREA COMERCIAL, PUNTA CANA');
+    assert.equal(cruzada.obraProg, 'EPOKAL - COMERCIAL', 'el orden de la programacion no decide');
+    assert.equal(cruzada.cargues, 2);
+    assert.deepEqual(sinCruce.map(s => s.obra), ['EPOKAL - AREA HOTEL']);
+  }
+});
+
 test('con dos obras reales y ningun parecido NO adivina: descarta', () => {
   const { results, sinCruce } = estado(
     [pedido('ACME', 'OBRA-4417', 480)],
