@@ -183,3 +183,136 @@ def test_las_rutas_nuevas_piden_token(cliente):
     for tipo in ("disponibilidad", "batchadas", "incidencias", "reclamos", "anulados"):
         assert c.post(f"/api/logistica/indicadores/{tipo}",
                       json={"desde": "2026-10-01", "hasta": "2026-10-01", "fuente": "sdn", "filas": []}).status_code == 401, tipo
+
+
+# ---- Rotacion de cartera (2026-11-19): "Solicitudes" por fecha de corte ----
+
+def factura(cliente="IRUYA SRL", moneda="RD$", fecha="2026-10-31", **cambios):
+    return {"fecha": fecha, "moneda": moneda, "cliente": cliente, "factura": "FT-00061555",
+            "fechaFactura": "2026-10-20", "no_venc": 100, "d30": 50, "d60": 0, "d90": 0, "d120": 0,
+            "balance": 150, **cambios}
+
+
+def corte(filas, fecha="2026-10-31", tasa=60.5689):
+    return {"desde": fecha, "hasta": fecha, "tasa": tasa, "filas": filas}
+
+
+def test_la_cartera_se_guarda_por_corte_y_vuelve_con_la_clasificacion(cliente):
+    c, h = cliente
+    res = c.post("/api/logistica/indicadores/cartera", json=corte([factura(), factura("DOMICEM (MACAO)", "US$")]), headers=h)
+    assert res.status_code == 200, res.text
+    d = leer(c, h)
+    assert [(f["fecha"], f["moneda"], f["cliente"], f["no_venc"], f["tasa"]) for f in d["cartera"]] == [
+        ("2026-10-31", "RD$", "IRUYA SRL", 100, 60.5689), ("2026-10-31", "US$", "DOMICEM (MACAO)", 100, 60.5689)]
+    assert d["fechas"]["cartera"] == ["2026-10-31"]
+    # La clasificacion de octubre viene cargada en una base nueva.
+    clas = {x["cliente"]: (x["zona"], x["trato"]) for x in d["cartera_clientes"]}
+    assert len(clas) == 129
+    assert clas["IRUYA SRL"] == ("Santo Domingo", "normal")
+    assert clas["CONSTRUCTORA A E SRL"] == ("Santo Domingo", "especial")
+    assert clas["DOMICEM (MACAO)"] == ("Punta Cana", "normal")
+    assert clas["TEKTON SRL"] == (None, "fuera")
+    # Subir el mismo corte otra vez lo reemplaza entero.
+    res = c.post("/api/logistica/indicadores/cartera", json=corte([factura(no_venc=7)]), headers=h)
+    assert res.json()["reemplazadas"] == 2
+    assert [f["no_venc"] for f in leer(c, h)["cartera"]] == [7]
+
+
+def test_la_cartera_es_un_corte_por_vez_y_con_dolares_pide_la_tasa(cliente):
+    c, h = cliente
+    def sube(cuerpo):
+        return c.post("/api/logistica/indicadores/cartera", json=cuerpo, headers=h)
+    res = sube({"desde": "2026-10-01", "hasta": "2026-10-31", "filas": [factura()]})
+    assert (res.status_code, res.json()["detail"]) == (422, "un_solo_corte")
+    res = sube(corte([factura(moneda="US$")], tasa=None))
+    assert (res.status_code, res.json()["detail"]) == (422, "falta_tasa")
+    assert sube(corte([factura()], tasa=None)).status_code == 200, "solo RD$ no necesita tasa"
+    assert sube(corte([factura(moneda="EUR")])).status_code == 422
+    assert sube(corte([factura(fecha="2026-10-30")])).status_code == 422, "fila de otro corte"
+
+
+def test_la_zona_de_un_cliente_de_la_cartera_se_cambia(cliente):
+    c, h = cliente
+    def pon(cuerpo):
+        return c.put("/api/logistica/cartera/clientes", json=cuerpo, headers=h)
+    res = pon({"cliente": "ERIMIL SRL ", "zona": "Santo Domingo", "trato": "normal"})
+    assert res.status_code == 200, res.text
+    assert res.json() == {"cliente": "ERIMIL SRL", "zona": "Santo Domingo", "trato": "normal"}
+    assert pon({"cliente": "IRUYA SRL", "zona": "Santo Domingo", "trato": "fuera"}).json()["zona"] is None
+    clas = {x["cliente"]: (x["zona"], x["trato"]) for x in leer(c, h)["cartera_clientes"]}
+    assert clas["ERIMIL SRL"] == ("Santo Domingo", "normal")
+    assert clas["IRUYA SRL"] == (None, "fuera")
+    assert len(clas) == 130
+    res = pon({"cliente": "X", "zona": None, "trato": "normal"})
+    assert (res.status_code, res.json()["detail"]) == (422, "falta_zona")
+    assert pon({"cliente": "X", "zona": "Santiago", "trato": "normal"}).status_code == 422
+    assert pon({"cliente": "X", "zona": "Punta Cana", "trato": "otro"}).status_code == 422
+    assert c.put("/api/logistica/cartera/clientes", json={"cliente": "X", "zona": "Punta Cana", "trato": "normal"}).status_code == 401
+    assert c.post("/api/logistica/indicadores/cartera", json=corte([factura()])).status_code == 401
+
+
+# ---- Cumplimiento a cubicacion (2026-11-19): el empleado del reporte de tiempos ----
+
+def test_el_reporte_de_tiempos_guarda_el_empleado(cliente):
+    c, h = cliente
+    res = c.post("/api/logistica/indicadores/tiempos", headers=h, json={
+        "desde": "2026-10-01", "hasta": "2026-10-01",
+        "filas": [pedido(empleado="ZABDIEL FRUCTUOSO"), pedido(ordComp="00112597")]})
+    assert res.status_code == 200, res.text
+    assert [(f["ord_comp"], f["empleado"]) for f in leer(c, h)["tiempos"]] == [
+        ("00112596", "ZABDIEL FRUCTUOSO"), ("00112597", None)]
+
+
+def test_una_base_sin_la_columna_empleado_la_recibe(tmp_path, monkeypatch):
+    monkeypatch.setattr(core, "LOG_DB_PATH", str(tmp_path / "vieja.db"))
+    core.setup_logistica_db()
+    conn = core._log_conn()
+    try:
+        conn.execute("ALTER TABLE logistica_tiempo_pedido DROP COLUMN empleado")
+        core.setup_logistica_db(conn)
+        assert "empleado" in [c[1] for c in conn.execute("PRAGMA table_info(logistica_tiempo_pedido)")]
+    finally:
+        conn.close()
+
+
+# ---- Resistencia a compresion (2026-11-19): las roturas de Calidad ----
+
+def test_las_roturas_se_guardan_por_rango(cliente):
+    c, h = cliente
+    fila = {"fecha": "2026-10-01", "planta": "Movil VII", "conduce": "M200122790", "cliente": "TERRAMARE",
+            "producto": "HORMIGON 350", "fc": 350, "r7": 391.08, "r28": 510.48}
+    res = c.post("/api/logistica/indicadores/roturas", headers=h, json={
+        "desde": "2026-10-01", "hasta": "2026-10-03", "filas": [fila, {**fila, "fecha": "2026-10-03", "r28": None}]})
+    assert res.status_code == 200, res.text
+    d = leer(c, h)
+    assert [(f["fecha"], f["planta"], f["fc"], f["r28"]) for f in d["roturas"]] == [
+        ("2026-10-01", "Movil VII", 350, 510.48), ("2026-10-03", "Movil VII", 350, None)]
+    assert d["fechas"]["roturas"] == ["2026-10-01", "2026-10-03"]
+    # Subir el rango de nuevo lo reemplaza; una rotura en 0 o una fila fuera del rango no entran.
+    assert c.post("/api/logistica/indicadores/roturas", headers=h, json={
+        "desde": "2026-10-01", "hasta": "2026-10-03", "filas": [fila]}).json()["reemplazadas"] == 2
+    assert c.post("/api/logistica/indicadores/roturas", headers=h, json={
+        "desde": "2026-10-01", "hasta": "2026-10-03", "filas": [{**fila, "r28": 0}]}).status_code == 422
+    assert c.post("/api/logistica/indicadores/roturas", headers=h, json={
+        "desde": "2026-10-01", "hasta": "2026-10-02", "filas": [{**fila, "fecha": "2026-10-05"}]}).status_code == 422
+    assert c.post("/api/logistica/indicadores/roturas", json={"desde": "2026-10-01", "hasta": "2026-10-01", "filas": []}).status_code == 401
+
+
+# ---- Compras: entregas en el plazo (2026-11-19) ----
+
+def test_las_compras_se_guardan_por_rango_de_la_oc(cliente):
+    c, h = cliente
+    linea = {"fecha": "2026-10-30", "solicitud": "59781-33", "descripcion": "ALAMBRE", "fechaSolicitud": "2025-07-29",
+             "fechaRecepcion": "2026-11-19", "dias": 477, "objetivo": 30, "aplica": True, "cumple": False}
+    res = c.post("/api/logistica/indicadores/compras", headers=h, json={
+        "desde": "2026-10-01", "hasta": "2026-10-31", "filas": [linea, {**linea, "solicitud": "65833-1", "dias": 3, "cumple": True}]})
+    assert res.status_code == 200, res.text
+    d = leer(c, h)
+    assert [(f["solicitud"], f["dias"], f["objetivo"], f["aplica"], f["cumple"]) for f in d["compras"]] == [
+        ("59781-33", 477, 30, 1, 0), ("65833-1", 3, 30, 1, 1)]
+    assert d["fechas"]["compras"] == ["2026-10-30"]
+    assert c.post("/api/logistica/indicadores/compras", headers=h, json={
+        "desde": "2026-10-01", "hasta": "2026-10-31", "filas": [linea]}).json()["reemplazadas"] == 2
+    assert c.post("/api/logistica/indicadores/compras", headers=h, json={
+        "desde": "2026-10-01", "hasta": "2026-10-31", "filas": [{**linea, "cumple": None}]}).status_code == 422
+    assert c.post("/api/logistica/indicadores/compras", json={"desde": "2026-10-01", "hasta": "2026-10-01", "filas": []}).status_code == 401

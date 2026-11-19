@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/vendor/xlsx-0.20.3.full.min.js"></script>
-<script src="/logistica.logic.js?v=2026-11-17"></script>
+<script src="/logistica.logic.js?v=2026-11-19d"></script>
 <script src="/calendario.js?v=2026-10-19b"></script>
 <script src="/logistica.api.js?v=2026-10-08b"></script>
 <style>
@@ -18,7 +18,7 @@
     --ink:#EEF2F7; --muted:rgba(238,242,247,0.55); --line:rgba(255,255,255,0.07);
     --bg:#0D1829; --card:#152535; --elevated:#1C3045;
     --ok:#34D399; --warn:#F59E0B; --err:#F87171;
-    --bomba:#60A5FA; --camion:#34D399; --tiempo:#F59E0B; --tiempo2:#A78BFA;
+    --bomba:#60A5FA; --camion:#34D399; --tiempo:#F59E0B; --tiempo2:#A78BFA; --cartera:#22D3EE;
   }
   *{box-sizing:border-box;}
   body{
@@ -85,6 +85,19 @@
   .kpi .sub{font-size:11px; color:var(--muted); margin-top:2px; line-height:1.4;}
   .kpis.metas{grid-template-columns:repeat(5,1fr);}
   .kpis.metas.seis{grid-template-columns:repeat(3,1fr);}
+  /* Contra la meta con cartera, cubicacion, resistencia y compras (2026-11-19): 15 tarjetas, 5 por fila */
+  .kpis.metas.doce{grid-template-columns:repeat(5,1fr);}
+  .kpi.f{border-top-color:var(--cartera);}
+  .sel-cartera{background:var(--elevated); color:var(--ink); border:1px solid var(--line); border-radius:6px;
+    padding:4px 6px; font-family:inherit; font-size:12px; max-width:230px;}
+  .sel-cartera:focus-visible{outline:2px solid var(--vmo-red); outline-offset:1px;}
+  td.tachado{text-decoration:line-through; color:var(--muted);}
+  .aviso{color:var(--warn); font-size:12.5px; line-height:1.6;}
+  .corte-campos{display:flex; flex-wrap:wrap; gap:8px 12px; margin:8px 0 4px;}
+  .corte-campos label{display:flex; flex-direction:column; gap:3px; font-size:11px; color:var(--muted);}
+  .corte-campos input{background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:6px;
+    padding:5px 8px; font-family:inherit; font-size:12.5px; width:150px;}
+  .err-corte{color:var(--err);}
   .kpi.m.si{border-top-color:var(--ok);} .kpi.m.no{border-top-color:var(--err);} .kpi.m.sd{border-top-color:var(--muted);}
   .em{font-weight:700;} .em.si{color:var(--ok);} .em.no{color:var(--err);}
   .zonas-meta{display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11.5px; margin-top:8px; color:var(--muted);}
@@ -121,7 +134,7 @@
   footer{text-align:center; padding:26px; color:var(--muted); font-size:11.5px;}
 
   @media (max-width:900px){
-    .kpis, .kpis.metas, .kpis.metas.seis{grid-template-columns:repeat(2,1fr);}
+    .kpis, .kpis.metas, .kpis.metas.seis, .kpis.metas.doce{grid-template-columns:repeat(2,1fr);}
     .dos, .subidas{grid-template-columns:1fr;}
   }
   @media (max-width:600px){
@@ -204,6 +217,18 @@ const REPORTES = [
   {tipo: 'incidencias', titulo: 'Bitácora Incidencias en Servicios', leer: parseIncidenciasSheets, unidad: 'servicios'},
   {tipo: 'reclamos', titulo: 'Reporte de Reclamaciones', leer: parseReclamosSheets, unidad: 'reclamos'},
   {tipo: 'anulados', titulo: 'Conduce Anulados', leer: parseAnuladosSheets, unidad: 'conduces'},
+  // Compras (2026-11-19): las lineas de solicitud recibidas, por fecha de la O/C.
+  {tipo: 'compras', titulo: 'Tiempos de sol. compra', leer: parseComprasSheets, unidad: 'líneas de solicitud',
+   nota: 'Se filtra por la fecha de la orden de compra y solo trae lo recibido: conviene bajarla desde el mes anterior.',
+   error: 'No es la lista "Tiempos de sol. compra" (no encontré Solicitud, FechaSolicitud, Objetivo y Cumple).'},
+  // Las roturas de Calidad (2026-11-19): solo las cargas con muestra.
+  {tipo: 'roturas', titulo: 'Batchada vs Roturas de Calidad', leer: parseRoturasSheets, unidad: 'muestras',
+   nota: 'La rotura a 28 días llega un mes después: conviene bajarla desde el mes anterior.',
+   error: 'No es la lista "Batchada vs Roturas de Calidad" (no encontré Planta, Fecha, Resistencia y Roturas28).'},
+  // La cartera (2026-11-19): un corte por vez, con su fecha y la tasa del dolar.
+  {tipo: 'cartera', titulo: 'Solicitudes (antigüedad de saldos)', leer: parseCarteraSheets, unidad: 'facturas', corte: true,
+   nota: 'Bajada con fecha de corte (el cierre del mes). Al subirla se pone esa fecha y la tasa del dólar.',
+   error: 'No es la lista "Solicitudes" (no encontré Moneda, Nombre, Factura, los tramos y Balance Final).'},
 ];
 const fechasDe = tipo => (reportes.fechas || {})[tipo] || [];
 function rangoTexto(fechas){
@@ -219,7 +244,9 @@ function armarSubidas(){
   REPORTES.forEach(r => $('file-' + r.tipo).addEventListener('change', ev => leerArchivos(ev.target, r)));
 }
 function pintarCargados(){
-  REPORTES.forEach(r => { $('cargado-' + r.tipo).textContent = rangoTexto(fechasDe(r.tipo)); });
+  REPORTES.forEach(r => { const f = fechasDe(r.tipo);
+    $('cargado-' + r.tipo).textContent = !r.corte ? rangoTexto(f)
+      : f.length ? `Guardado: ${f.length} corte(s), el último del ${fc(f[f.length - 1])}` : 'Todavía no se subió ninguno.'; });
 }
 const leerUno = file => new Promise((ok, mal) => {
   const reader = new FileReader();
@@ -247,6 +274,16 @@ async function leerArchivos(input, r){
       leidos.push(leido);
     }
     pendiente[r.tipo] = leidos;
+    if (r.corte){
+      const l = leidos[0];
+      estado.innerHTML = `${n0(l.filas.length)} ${r.unidad} de ${n0(l.clientes)} clientes${l.conDolares ? ', en RD$ y US$' : ''}; la más nueva es del ${fc(l.hasta)}.
+        <div class="corte-campos"><label>Fecha de corte<input type="date" id="corte-${r.tipo}" value="${l.hasta}"></label>
+        ${l.conDolares ? `<label>Tasa del dólar (RD$)<input type="number" id="tasa-${r.tipo}" min="0" step="0.0001" inputmode="decimal"></label>` : ''}</div>
+        <span class="gris">Si ya hay un corte guardado con esa fecha, se reemplaza.</span><div class="err-corte" id="err-${r.tipo}"></div>
+        <button type="button" class="btn" id="guardar-${r.tipo}">Guardar</button>`;
+      $('guardar-' + r.tipo).addEventListener('click', () => guardar(r));
+      return;
+    }
     const desde = leidos.map(l => l.desde).sort()[0], hasta = leidos.map(l => l.hasta).sort().pop();
     const ya = fechasDe(r.tipo).filter(f => f >= desde && f <= hasta).length;
     estado.textContent = '';
@@ -261,12 +298,21 @@ async function leerArchivos(input, r){
 async function guardar(r){
   const estado = $('estado-' + r.tipo), leidos = pendiente[r.tipo] || [];
   const btn = $('guardar-' + r.tipo); if (btn) btn.disabled = true;
+  let envios = leidos;
+  if (r.corte){
+    // La cartera va con la fecha de corte y la tasa que se escribieron.
+    const corte = $('corte-' + r.tipo).value, tasaEl = $('tasa-' + r.tipo), tasa = tasaEl ? parseFloat(tasaEl.value) : null;
+    const falta = !/^\d{4}-\d{2}-\d{2}$/.test(corte) ? 'Elegí la fecha de corte.' : tasaEl && !(tasa > 0) ? 'Poné la tasa del dólar de ese día.' : '';
+    if (falta){ $('err-' + r.tipo).textContent = falta; if (btn) btn.disabled = false; return; }
+    envios = leidos.map(l => ({desde: corte, hasta: corte, tasa, filas: l.filas.map(f => ({...f, fecha: corte}))}));
+  }
   try {
     const hechos = [];
-    for (const leido of leidos)
+    for (const leido of envios)
       hechos.push(await apiLogistica('/api/logistica/indicadores/' + r.tipo, {method: 'POST', body: JSON.stringify(leido)}));
     estado.className = 'estado ok';
-    estado.textContent = hechos.map(h => `✓ Guardado: ${n0(h.filas)} filas del ${fc(h.desde)} al ${fc(h.hasta)}.`).join(' ');
+    estado.textContent = hechos.map(h => r.corte ? `✓ Guardado: ${n0(h.filas)} ${r.unidad} al corte del ${fc(h.hasta)}.`
+      : `✓ Guardado: ${n0(h.filas)} filas del ${fc(h.desde)} al ${fc(h.hasta)}.`).join(' ');
     delete pendiente[r.tipo];
     $('file-' + r.tipo).value = '';
     // Si todavia no habia nada que mostrar, la pagina se arma desde cero.
@@ -300,16 +346,17 @@ function render(){
   if (!desde || !hasta) return mensaje('Elegí las dos fechas.');
   if (desde > hasta) return mensaje('La fecha "desde" es posterior a "hasta".');
   const dias = diasEnMemoria.filter(d => enRango(d.fecha));
-  const ind = indicadoresDelPeriodo(dias, reportes);
+  const ind = indicadoresDelPeriodo(dias, reportes, diasEnMemoria);
   const diasDe = tipo => new Set((reportes[tipo] || []).map(f => f.fecha)).size;
   $('alcance').innerHTML = `Bombeo: ${diasDe('bombeo')} día(s) con datos ·
     Camiones: ${dias.length} día(s) guardados · Tiempos: ${diasDe('tiempos')} día(s)<br>
-    Disponibilidad: ${diasDe('disponibilidad')} · Batchadas: ${diasDe('batchadas')} · Bitácora: ${diasDe('incidencias')} · Reclamos: ${diasDe('reclamos')} · Anulados: ${diasDe('anulados')} día(s)<br>
+    Disponibilidad: ${diasDe('disponibilidad')} · Batchadas: ${diasDe('batchadas')} · Bitácora: ${diasDe('incidencias')} · Reclamos: ${diasDe('reclamos')} · Anulados: ${diasDe('anulados')} · Roturas: ${diasDe('roturas')} · Compras: ${diasDe('compras')} día(s) · Cartera: ${ind.cartera.corte ? 'corte del ' + fc(ind.cartera.corte) : 'sin corte'}<br>
     Separado en Santo Domingo y Punta Cana donde el reporte trae la planta`;
   $('contenido').innerHTML = seccionMetas(metasDelPeriodo(dias, ind))
     + seccionBombeo(ind.bombeo) + seccionCamiones(ind.camiones) + seccionTiempos(ind.tiempos)
-    + seccionDisponibilidad(ind.disponibilidad) + seccionCarga(ind.carga)
-    + seccionServicio(ind.incidencias, ind.reclamos) + seccionDevuelto(ind.devuelto);
+    + seccionDisponibilidad(ind.disponibilidad) + seccionCarga(ind.eficiencia, ind.carga)
+    + seccionServicio(ind.incidencias, ind.reclamos) + seccionDesperdicio(ind.desperdicio)
+    + seccionCartera(ind.cartera) + seccionCubicacion(ind.cubicacion) + seccionResistencia(ind.resistencia) + seccionCompras(ind.compras);
 }
 
 // Contra la meta (2026-11-11): los indicadores de Logistica que la app ya
@@ -330,32 +377,47 @@ function tarjetaMeta(titulo, que, x, fmt, metaTexto, detalle){
 function seccionMetas(m){
   const p = v => v + '%', f = v => v.toFixed(1);
   return `<div class="sec">Contra la meta <span class="fuente">metas de la hoja "Indicadores de Gestión de VMO Concretos 2026" · las fechas elegidas</span></div>
-    <div class="kpis metas seis">
+    <div class="kpis metas doce">
       ${tarjetaMeta('Tiempo de despacho', 'm³ antes de la Hora Fin', m.tiempos, p, `${m.tiempos.meta}% o más`)}
       ${tarjetaMeta('Uso de flota', 'viajes por camión al día', m.flota, f, `${f(m.flota.meta)} o más`)}
       ${tarjetaMeta('Servicio cancelado', 'de los servicios programados', m.cancelados, p, `${m.cancelados.meta}% o menos`, `${n0(m.cancelados.cancelados)} de ${n0(m.cancelados.servicios)} servicios · ${n0(m.cancelados.m3)} m³`)}
-    </div>
-    <div class="kpis metas seis">
+      ${tarjetaMeta('Cumplimiento a cubicación', 'pedidos a ±5% de lo cubicado', m.cubicacion, p, `${m.cubicacion.meta}% o más`,
+        m.cubicacion.pedidos ? `${n0(m.cubicacion.cumplen)} de ${n0(m.cubicacion.pedidos)} pedidos con empleado` : '')}
       ${tarjetaMeta('Disponibilidad · camiones', 'equipo-días disponibles', m.disponibilidadCamiones, p, `${m.disponibilidadCamiones.meta}% o más`,
         m.disponibilidadCamiones.registros ? `contando ${n0(m.disponibilidadCamiones.sinDato)} sin dato: ${pct(m.disponibilidadCamiones.pctTodos)}` : '')}
       ${tarjetaMeta('Disponibilidad · bombas', 'equipo-días disponibles', m.disponibilidadBombas, p, `${m.disponibilidadBombas.meta}% o más`,
         m.disponibilidadBombas.registros ? `contando ${n0(m.disponibilidadBombas.sinDato)} sin dato: ${pct(m.disponibilidadBombas.pctTodos)}` : '')}
-      ${tarjetaMeta('Eficiencia de carga', 'tiempo según capacidad ÷ tiempo real', {...m.eficiencia, vacio: m.eficiencia.ritmo === null ? 'Sin dato' : 'Falta capacidad'}, p,
-        `${m.eficiencia.meta}% o más`, m.eficiencia.ritmo === null ? '' : `ritmo real ${n0(m.eficiencia.ritmo)} m³/h en ${n0(m.eficiencia.cargas)} cargas`)}
+      ${tarjetaMeta('Eficiencia de carga', 'del 1er al último conduce de cada día', m.eficiencia, p, `${m.eficiencia.meta}% o más`,
+        m.eficiencia.plantas ? `de ${m.eficiencia.conCapacidad} de ${m.eficiencia.plantas} plantas${m.eficiencia.sinCapacidad.length ? ` · sin capacidad: ${m.eficiencia.sinCapacidad.map(esc).join(', ')}` : ''}` : '')}
+      ${tarjetaMeta('Eficiencia de pesaje', 'tiempo de cada carga según el PLC', m.pesaje, p, `${m.pesaje.meta}% o más`,
+        m.pesaje.valor === null ? '' : [m.pesaje.fuera.length ? `sin ${m.pesaje.fuera.map(esc).join(', ')} (fuera del total)` : '',
+                                       m.pesaje.sinCapacidad.length ? `sin capacidad: ${m.pesaje.sinCapacidad.map(esc).join(', ')}` : ''].filter(Boolean).join(' · '))}
       ${tarjetaMeta('Control de insumos', 'cargas con cemento y agregados en tolerancia', m.insumos, p, `${m.insumos.meta}% o más`,
         m.insumos.cargas ? `con agua y aditivos: ${pct(m.insumos.todos)}` : '')}
+      ${tarjetaMeta('Resistencia a compresión', 'muestras con rotura a 28 días ≥ f\'c', m.resistencia, p, `${m.resistencia.meta}% o más`,
+        m.resistencia.muestras ? `${n0(m.resistencia.cumplen)} de ${n0(m.resistencia.muestras)} muestras${m.resistencia.pendientes ? ` · ${n0(m.resistencia.pendientes)} esperando los 28 días` : ''}` : '')}
       ${tarjetaMeta('Incidencias de clientes', 'servicios con incidencia', m.incidencias, p, `${m.incidencias.meta}% o menos`,
         m.incidencias.servicios ? `${n0(m.incidencias.conIncidencia)} de ${n0(m.incidencias.servicios)} servicios` : '')}
       ${tarjetaMeta('Reclamos solucionados', 'de los reclamos', m.reclamos, p, `${m.reclamos.meta}% o más`,
         m.reclamos.total ? `${m.reclamos.solucionados} de ${m.reclamos.total} reclamos` : '')}
+      ${tarjetaMeta('Entregas de compras en el plazo', 'de la solicitud a la llegada, contra el objetivo de CBS', m.compras, p, `${m.compras.meta}% o más`,
+        m.compras.lineas ? `${n0(m.compras.cumplen)} de ${n0(m.compras.lineas)} líneas de solicitud` : '')}
+      ${['carteraSD', 'carteraPC'].map(c => tarjetaMeta(`Rotación de cartera · ${c === 'carteraSD' ? 'SD' : 'PC'}`,
+        `días promedio de la deuda, ${c === 'carteraSD' ? 'Santo Domingo' : 'Punta Cana'}`, m[c], v => v.toFixed(1) + ' días', `${m[c].meta} días o menos`,
+        m[c].corte ? `corte del ${fc(m[c].corte)} · ${millones(m[c].saldo)}` : '')).join('')}
     </div>
     ${calculo('Contra la meta', 'los mismos cálculos de esta página, del dashboard y del Reporte de cancelados, en las fechas elegidas', [
       ['Tiempo de despacho', `El cumplimiento de la sección 3 (reporte "Cumplimiento de tiempos de despacho"). Meta ${m.tiempos.meta}% o más.`],
       ['Uso de flota', `Los viajes por camión al día de la sección 2: suma de "viajes por día" de cada camión ÷ cantidad de camiones. Meta ${f(m.flota.meta)} o más.`],
+      ['Cumplimiento a cubicación', `La sección 9: pedidos con empleado cuyo despacho quedó a ±5% de lo cubicado (la programación del día) ÷ pedidos evaluados. Meta ${m.cubicacion.meta}% o más.`],
       ['Servicio cancelado', `Renglones del Reporte de cancelados (Macao incluido) ÷ servicios programados. Un servicio es un renglón de la programación con m³: cliente, obra, bomba, elemento y hora. Meta ${m.cancelados.meta}% o menos.`],
       ['Disponibilidad', `La sección 4: equipo-días disponibles ÷ equipo-días con dato, camiones y bombas por separado. Meta ${m.disponibilidadCamiones.meta}% o más.`],
-      ['Eficiencia de carga', `La sección 5: tiempo que debería tardar cada carga según la capacidad de la planta ÷ tiempo real. Falta la capacidad de cada planta; mientras tanto dice el ritmo real. Meta ${m.eficiencia.meta}% o más.`],
+      ['Eficiencia de carga', `La sección 5: por planta y día, lo que debería tardar en cargar los m³ del día según su capacidad ÷ el tiempo del primer al último conduce. Meta ${m.eficiencia.meta}% o más.`],
+      ['Eficiencia de pesaje', `La sección 5: por carga, lo que debería tardar según la capacidad de la planta ÷ el tiempo que da el PLC. SDN no entra al total. Meta ${m.pesaje.meta}% o más.`],
       ['Control de insumos', `La sección 5: cargas con cemento ±1% y agregados ±2% del teórico ÷ cargas. Debajo, la versión que además exige agua ±1% y aditivos ±3%. Meta ${m.insumos.meta}% o más.`],
+      ['Rotación de cartera', `La sección 8: cada tramo de antigüedad de la deuda pesa por sus días (30, 60, 90, 120 y 150), con el último corte de "Solicitudes" en las fechas elegidas. Santo Domingo y Punta Cana por separado. Meta ${m.carteraSD.meta} días o menos.`],
+      ['Resistencia a compresión', `La sección 10: muestras con rotura a 28 días igual o mayor que el f'c ÷ muestras con rotura a 28 días, de lo vaciado en las fechas elegidas. Por zona. Meta ${m.resistencia.meta}% o más.`],
+      ['Entregas de compras', `La sección 11: líneas de solicitud de compra recibidas dentro de su objetivo según CBS ÷ líneas, de las órdenes de compra en las fechas elegidas. Meta ${m.compras.meta}% o más.`],
       ['Incidencias y reclamos', `La sección 6: servicios de la bitácora con alguna incidencia ÷ servicios (meta ${m.incidencias.meta}% o menos), y reclamos solucionados ÷ reclamos (meta ${m.reclamos.meta}% o más).`],
       ['Cumple', 'Se compara el número tal como se muestra, redondeado: 2.6 contra una meta de 2.6 cumple.'],
     ], 'Servicio cancelado cuenta todos los cancelados; la hoja pide solo los que canceló el cliente, y hoy ninguno tiene responsable puesto. La programación no trae zona, por eso no va separado por zona.')}`;
@@ -507,35 +569,60 @@ function seccionDisponibilidad(d){
     ], 'hay días en que un equipo se usó aunque está marcado como no disponible: falta confirmar qué significa "Disponible" en CBS.')}`;
 }
 
-function seccionCarga(k){
-  const ef = k.eficiencia === null ? `<div class="value">${n0(k.ritmo)} <span style="font-size:14px">m³/h</span></div><div class="sub">ritmo real cargando · falta la capacidad de cada planta para el %</div>`
-                                   : `<div class="value">${pct(k.eficiencia)}</div><div class="sub">ritmo real ${n0(k.ritmo)} m³/h</div>`;
-  const kpis = `<div class="kpis">
-      <div class="kpi p"><div class="label">Eficiencia de carga</div>${ef}</div>
-      ${k.zonas.filter(z => z.zona !== 'Sin zona').map(z => `<div class="kpi p"><div class="label">${esc(z.zona)} · ritmo</div><div class="value">${n0(z.ritmo)} <span style="font-size:14px">m³/h</span></div><div class="sub">${n0(z.n)} cargas · ${n1(z.minutosPorCarga)} min por carga</div></div>`).join('')}
-      <div class="kpi p"><div class="label">Control de insumos</div><div class="value">${pct(k.insumos)}</div><div class="sub">cemento y agregados dentro de tolerancia · con agua y aditivos: ${pct(k.insumosTodos)}</div></div>
+function seccionCarga(ef, k){
+  // 5a. Eficiencia de carga: del cargue de cada dia (reunion del 2026-11-18).
+  const zonasEf = ef.zonas.filter(z => z.zona !== 'Sin zona');
+  const kpis = `<div class="kpis metas">
+      <div class="kpi p"><div class="label">Eficiencia de carga</div><div class="value">${pct(ef.eficiencia)}</div>
+        <div class="sub">de ${ef.conCapacidad.length} de ${ef.plantas.length} plantas con capacidad${ef.sinCapacidad.length ? ` · sin capacidad: ${ef.sinCapacidad.map(esc).join(', ')}` : ''}</div></div>
+      ${zonasEf.map(z => `<div class="kpi p"><div class="label">${esc(z.zona)}</div><div class="value">${pct(z.eficiencia)}</div><div class="sub">${n0(z.m3)} m³ en ${n0(z.horas)} horas · ${n1(z.ritmo)} m³/h</div></div>`).join('')}
+      <div class="kpi p"><div class="label">Eficiencia de pesaje</div><div class="value">${k.conTiempo ? pct(k.pesaje) : 'Sin dato'}</div>
+        <div class="sub">tiempo de cada carga según el PLC${k.pesajeFuera.length ? ` · sin ${k.pesajeFuera.map(esc).join(', ')} (fuera del total)` : ''}</div></div>
+      <div class="kpi p"><div class="label">Control de insumos</div><div class="value">${k.n ? pct(k.insumos) : 'Sin dato'}</div><div class="sub">cemento y agregados dentro de tolerancia${k.n ? ` · con agua y aditivos: ${pct(k.insumosTodos)}` : ''}</div></div>
     </div>`;
+  const tablaEf = ef.n ? `<div class="panel"><div class="panel-head"><h2>Eficiencia de carga por planta</h2><span class="sub">del primer al último conduce de cada día, sumando los días</span></div>
+    <div class="tabla"><table><thead><tr><th>Planta</th><th class="num">Capacidad m³/h</th><th class="num">Días</th><th class="num">Conduces</th><th class="num">m³</th><th class="num">Horas</th><th class="num">m³ por hora</th><th class="num">Eficiencia</th></tr></thead>
+    <tbody>${ZONAS.map(zona => { const ps = ef.plantas.filter(p => p.zona === zona); if (!ps.length) return '';
+      const z = ef.zonas.find(x => x.zona === zona) || {};
+      return filaZona(zona, `${n0(z.m3)} m³ · ${n0(z.horas)} horas · eficiencia ${pct(z.eficiencia)}`, 8) + ps.map(p => `<tr>
+        <td><strong>${esc(p.planta)}</strong></td><td class="num">${p.capacidad ? n0(p.capacidad) : '—'}</td><td class="num">${p.dias}</td><td class="num">${n0(p.conduces)}</td>
+        <td class="num">${n0(p.m3)}</td><td class="num">${n0(p.horas)}</td><td class="num">${n1(p.ritmo)}</td>
+        <td class="num" style="font-weight:700;">${p.capacidad ? pct(p.eficiencia) : 'sin capacidad'}</td></tr>`).join(''); }).join('')}
+    </tbody></table></div></div>` : '<div class="panel"><div class="empty-state">No hay días guardados en estas fechas.</div></div>';
+  // 5c. Eficiencia de pesaje: el calculo anterior, con el tiempo del PLC (2026-11-18).
+  const tablaPes = k.conTiempo ? `<div class="panel"><div class="panel-head"><h2>Eficiencia de pesaje por planta</h2><span class="sub">tiempo de cada carga según el PLC (batchadas)</span></div>
+    <div class="tabla"><table><thead><tr><th>Planta</th><th class="num">Capacidad m³/h</th><th class="num">Cargas</th><th class="num">m³</th><th class="num">Min por carga</th><th class="num">Ritmo m³/h</th><th class="num">Eficiencia de pesaje</th></tr></thead>
+    <tbody>${ZONAS.map(zona => { const ps = k.plantas.filter(p => p.zona === zona); if (!ps.length) return '';
+      const z = k.zonas.find(x => x.zona === zona) || {};
+      return filaZona(zona, `${n0(z.conTiempo)} cargas · ${n0(z.ritmo)} m³/h · pesaje ${pct(z.pesaje)}${ps.some(p => p.fueraDelTotal) ? ' (sin ' + ps.filter(p => p.fueraDelTotal).map(p => esc(p.planta)).join(', ') + ')' : ''}`, 7) + ps.map(p => `<tr>
+        <td><strong>${esc(p.planta)}</strong></td><td class="num">${p.capacidad ? n0(p.capacidad) : '—'}</td><td class="num">${n0(p.conTiempo)}</td><td class="num">${n0(p.m3)}</td>
+        <td class="num">${n1(p.minutosPorCarga)}</td><td class="num">${n0(p.ritmo)}</td>
+        <td class="num" style="font-weight:700;">${p.capacidad ? pct(p.pesaje) : 'sin capacidad'}${p.fueraDelTotal ? ' <span class="gris">· fuera del total</span>' : ''}</td></tr>`).join(''); }).join('')}
+    </tbody></table></div></div>` : sinReporte('Batchadas PLC');
+  // 5b. Control de insumos: de las batchadas del PLC.
   const fuera = p => ['cemento', 'agregados', 'agua', 'aditivos'].map(m => n0(p.fallas[m])).join(' · ');
-  const tabla = `<div class="panel"><div class="panel-head"><h2>Por planta</h2><span class="sub">separado por zona</span></div>
-    <div class="tabla"><table><thead><tr><th>Planta</th><th class="num">Cargas</th><th class="num">m³</th><th class="num">Min por carga</th><th class="num">Ritmo m³/h</th><th class="num">Capacidad</th><th class="num">Eficiencia</th>
+  const tablaIns = k.n ? `<div class="panel"><div class="panel-head"><h2>Control de insumos por planta</h2><span class="sub">batchadas del PLC, separado por zona</span></div>
+    <div class="tabla"><table><thead><tr><th>Planta</th><th class="num">Cargas</th><th class="num">m³</th>
       <th class="num">Insumos: cem. y agr.</th><th class="num">Con agua y aditivos</th><th class="num">Fuera: cem · agr · agua · adit</th></tr></thead>
     <tbody>${ZONAS.map(zona => { const ps = k.plantas.filter(p => p.zona === zona); if (!ps.length) return '';
       const z = k.zonas.find(x => x.zona === zona) || {};
-      return filaZona(zona, `${n0(z.n)} cargas · ${n0(z.ritmo)} m³/h · insumos ${pct(z.insumos)}`, 10) + ps.map(p => `<tr>
-        <td><strong>${esc(p.planta)}</strong></td><td class="num">${n0(p.n)}</td><td class="num">${n0(p.m3)}</td><td class="num">${n1(p.minutosPorCarga)}</td>
-        <td class="num">${n0(p.ritmo)}</td><td class="num">${p.capacidad ? n0(p.capacidad) : '—'}</td><td class="num">${pct(p.eficiencia)}</td>
+      return filaZona(zona, `${n0(z.n)} cargas · insumos ${pct(z.insumos)}`, 6) + ps.map(p => `<tr>
+        <td><strong>${esc(p.planta)}</strong></td><td class="num">${n0(p.n)}</td><td class="num">${n0(p.m3)}</td>
         <td class="num" style="color:${colorP(p.insumos)}; font-weight:700;">${pct(p.insumos)}</td><td class="num">${pct(p.insumosTodos)}</td><td class="num gris">${fuera(p)}</td></tr>`).join(''); }).join('')}
     </tbody></table></div>
-    ${k.sinBatchadas.length ? `<div class="panel-body gris">Plantas del cargue sin batchadas en estas fechas: ${k.sinBatchadas.map(esc).join(', ')}.</div>` : ''}</div>`;
-  return `<div class="sec">5 · Carga en planta <span class="fuente">batchadas del PLC de cada planta · eficiencia meta 75% · insumos meta 85%</span></div>
-    ${k.n ? kpis + tabla : sinReporte('Batchadas PLC')}
-    ${calculo('Carga en planta', 'las listas de CBS "Batchadas PLC" (SDN) y "Bachadas PLC Planta Moviles Centralizado" (las móviles y SanIsidro): una fila por carga, con su tiempo y el material teórico y real', [
-      ['Qué entra', 'Las cargas "Realizado" con m³. Las canceladas o en proceso no.'],
-      ['Ritmo', 'm³ cargados ÷ minutos que tardaron las cargas, en m³ por hora. Min por carga: el valor del medio.'],
-      ['Eficiencia de carga', 'Tiempo que debería tardar cada carga según la capacidad de la planta (m³ ÷ m³ por hora) ÷ tiempo real. Sale cuando la planta tiene su capacidad cargada en la app; falta que Producción la mande.'],
-      ['Control de insumos', 'Cargas con cemento dentro de ±1% del teórico y cada agregado dentro de ±2% ÷ cargas. "Con agua y aditivos" además exige agua ±1% y aditivos ±3% (norma ASTM C94). Cuando hay varios agregados o aditivos, cuenta el que más se aleja.'],
+    ${k.sinBatchadas.length ? `<div class="panel-body gris">Plantas del cargue sin batchadas en estas fechas: ${k.sinBatchadas.map(esc).join(', ')}.</div>` : ''}</div>`
+    : sinReporte('Batchadas PLC');
+  return `<div class="sec">5 · Carga en planta <span class="fuente">eficiencia de carga: cargue de cada día · eficiencia de pesaje e insumos: batchadas del PLC · metas 75% y 85%</span></div>
+    ${kpis}${tablaEf}${tablaPes}${tablaIns}
+    ${calculo('Carga en planta', 'la eficiencia, del Excel de cargue de cada día ("Tiempo de Carga por ficha", con Macao); el control de insumos, de las listas de CBS "Batchadas PLC" (SDN) y "Bachadas PLC Planta Moviles Centralizado"', [
+      ['Eficiencia de carga', 'Por planta y por día: lo que debería tardar en cargar los m³ del día según su capacidad (m³ ÷ m³ por hora) ÷ el tiempo total, de la hora del primer conduce a la del último. Se suman todos los días de las fechas elegidas. Definido en la reunión del 18/11/2026.'],
+      ['Capacidad', 'm³ por hora de la reunión del 18/11/2026: SanIsidro, Móvil II, III y VII 60; Móvil IV 52; SDN 49; Móvil V 40; Móvil VIII y Miche 100. Una planta sin capacidad no entra al %.'],
+      ['Qué mide', 'El tiempo total incluye los ratos en que la planta espera entre un pedido y otro: mide cuánto se aprovechó la planta en el día, no qué tan rápido carga. Un día con un solo conduce no tiene tiempo y no entra.'],
+      ['Eficiencia de pesaje', 'Por carga, de las batchadas del PLC: lo que debería tardar según la capacidad de la planta (m³ ÷ m³ por hora) ÷ lo que tardó según el PLC (TiempoCarga en SDN, TimeBatch en las móviles). Mide qué tan rápido carga la planta mientras está cargando. Mismas capacidades que la eficiencia de carga.'],
+      ['SDN en pesaje', 'Se muestra, pero no entra al total ni a la zona: su PLC da 7 m³ en 4.6 minutos (82 m³/h, 167% con 49 m³/h), y el cargue diario da unos 41 m³/h. Su tiempo de PLC parece no ser la carga completa.'],
+      ['Control de insumos', 'Cargas "Realizado" con cemento dentro de ±1% del teórico y cada agregado dentro de ±2% ÷ cargas. "Con agua y aditivos" además exige agua ±1% y aditivos ±3% (norma ASTM C94). Cuando hay varios agregados o aditivos, cuenta el que más se aleja.'],
       ['Fuera', 'Cuántas cargas se salieron de la tolerancia en cada material.'],
-    ], 'el agua casi nunca cuadra con el teórico, posiblemente porque la planta la ajusta por la humedad de la arena; por eso se muestran las dos versiones.')}`;
+    ], 'el agua casi nunca cuadra con el teórico, posiblemente porque la planta la ajusta por la humedad de la arena; por eso se muestran las dos versiones del control de insumos.')}`;
 }
 
 function seccionServicio(inc, rec){
@@ -562,10 +649,10 @@ function seccionServicio(inc, rec){
     ], 'la bitácora no trae todos los servicios del mes (643 en octubre, contra unos 990 pedidos), y los reclamos no traen la planta, por eso no van por zona.')}`;
 }
 
-function seccionDevuelto(dv){
+function seccionDesperdicio(dv){
   const kpis = `<div class="kpis">
-      <div class="kpi d"><div class="label">Concreto devuelto</div><div class="value">${n1(dv.m3)} <span style="font-size:14px">m³</span></div><div class="sub">${dv.conduces} conduces anulados por desperdicio</div></div>
-      <div class="kpi d"><div class="label">Sobre lo transportado</div><div class="value">${dv.pct === null ? '—' : n1(dv.pct) + '%'}</div><div class="sub">de ${n0(dv.m3Despachados)} m³ de la sección 2</div></div>
+      <div class="kpi d"><div class="label">Desperdicio</div><div class="value">${n1(dv.m3)} <span style="font-size:14px">m³</span></div><div class="sub">${dv.conduces} conduces anulados por desperdicio</div></div>
+      <div class="kpi d"><div class="label">% de lo despachado</div><div class="value">${dv.pct === null ? '—' : n1(dv.pct) + '%'}</div><div class="sub">de ${n0(dv.m3Despachados)} m³ despachados (sección 2)</div></div>
       <div class="kpi d"><div class="label">Conduces anulados</div><div class="value">${dv.anulados}</div><div class="sub">${n1(dv.m3Anulados)} m³ por todas las causas</div></div>
     </div>`;
   const tabla = `<div class="dos">
@@ -574,13 +661,224 @@ function seccionDevuelto(dv){
     <div class="panel"><div class="panel-head"><h2>Conduces anulados</h2></div><div class="tabla"><table><thead><tr><th>Fecha</th><th>Planta</th><th class="num">m³</th><th>Causa</th><th>Comentario</th></tr></thead>
       <tbody>${recortar('anulados', dv.lista).map(a => `<tr><td>${fc(a.fecha)}</td><td>${esc(a.planta || '—')}</td><td class="num">${n1(a.m3)}</td><td>${esc(a.causa || '—')}</td>
         <td class="corta" title="${esc(a.comentario || '')}">${esc(a.comentario || '')}</td></tr>`).join('') + botonTodos('anulados', dv.lista.length, 5)}</tbody></table></div></div></div>`;
-  return `<div class="sec">7 · Concreto devuelto <span class="fuente">lista de CBS "Conduce Anulados" · sin meta en la hoja</span></div>
+  return `<div class="sec">7 · Desperdicio <span class="fuente">lista de CBS "Conduce Anulados" (Calidad) · sin meta en la hoja</span></div>
     ${dv.anulados ? kpis + tabla : sinReporte('Conduce Anulados')}
-    ${calculo('Concreto devuelto', 'la lista de CBS "Conduce Anulados": cada conduce anulado con su causa y comentario', [
-      ['Concreto devuelto', 'm³ de los conduces anulados por DESPERDICIO ÷ m³ transportados en las fechas elegidas (sección 2, del cargue de cada día).'],
+    ${calculo('Desperdicio', 'la lista de CBS "Conduce Anulados" (Departamento de Calidad): cada conduce anulado con su causa y comentario', [
+      ['Desperdicio', 'Total: m³ de los conduces anulados por DESPERDICIO en las fechas elegidas.'],
+      ['%', 'Total de desperdicio ÷ total de m³ despachados × 100. Los m³ despachados son los de la sección 2 (cargue de cada día).'],
       ['Las otras causas', 'DESVIO A OTRO CLIENTE e INFORMACION INCORRECTA se muestran aparte: el concreto no se perdió.'],
     ])}`;
 }
+
+// ---- Compras: entregas en el plazo (2026-11-19) ----
+// La cuenta vive en comprasDelPeriodo(), en logistica.logic.js.
+const calculoCompras = () => calculo('Entregas en el plazo', 'la lista de CBS "Tiempos de sol. compra": cada línea de solicitud de compra ya recibida, con los días de cada paso, el tiempo total, el objetivo y si cumple', [
+  ['Cumple', 'Lo que dice CBS en la columna "Cumple": el tiempo total de la línea quedó dentro de su objetivo en días.'],
+  ['Objetivo', 'Lo pone CBS a cada línea: 30, 15, 3 o 1 días.'],
+  ['Entregas en el plazo', `Líneas que cumplen ÷ líneas que aplican, de las órdenes de compra hechas en las fechas elegidas. Meta ${METAS.compras.meta}% o más.`],
+  ['Fechas', 'La lista se filtra por la fecha de la orden de compra y solo trae lo ya recibido: conviene bajarla desde el mes anterior, para que entre lo que llegó después.'],
+]);
+
+function seccionCompras(k){
+  const enc = `<div class="sec">11 · Compras: entregas en el plazo <span class="fuente">lista de CBS "Tiempos de sol. compra" · desde la solicitud hasta que llega · meta ${METAS.compras.meta}%</span></div>`;
+  if (!k.n) return enc + sinReporte('Tiempos de sol. compra') + calculoCompras();
+  const cumpleC = v => v === null ? null : Math.round(v) >= METAS.compras.meta;
+  const kpis = `<div class="kpis">
+      <div class="kpi e"><div class="label">Entregas en el plazo</div><div class="value">${pct(k.pct)}</div>
+        <div class="sub">${estadoMeta(cumpleC(k.pct))} · meta ${METAS.compras.meta}% o más</div>
+        <div class="sub">${n0(k.cumplen)} de ${n0(k.n)} líneas dentro de su objetivo</div></div>
+      <div class="kpi e"><div class="label">Fuera del plazo</div><div class="value">${n0(k.n - k.cumplen)}</div><div class="sub">líneas que llegaron después de su objetivo</div></div>
+      <div class="kpi e"><div class="label">Días de la solicitud a la llegada</div><div class="value">${n0(k.mediana)}</div><div class="sub">valor del medio de las líneas</div></div>
+      <div class="kpi e"><div class="label">Solicitudes</div><div class="value">${n0(k.solicitudes)}</div><div class="sub">${n0(k.n)} líneas recibidas${k.noAplica ? ` · ${n0(k.noAplica)} no aplican` : ''}</div></div>
+    </div>`;
+  const objetivos = `<div class="panel"><div class="panel-head"><h2>Por objetivo</h2><span class="sub">el plazo que pone CBS a cada línea</span></div>
+    <div class="tabla"><table><thead><tr><th>Objetivo</th><th class="num">Líneas</th><th class="num">Cumplen</th><th class="num">%</th><th class="num">Días (valor del medio)</th></tr></thead>
+    <tbody>${k.objetivos.map(o => `<tr><td><strong>${o.objetivo === null ? 'Sin objetivo' : n0(o.objetivo) + ' días'}</strong></td><td class="num">${n0(o.n)}</td><td class="num">${n0(o.cumplen)}</td>
+      <td class="num" style="font-weight:700; color:${cumpleC(o.pct) ? 'var(--ok)' : 'var(--err)'};">${pct(o.pct)}</td><td class="num">${n0(o.mediana)}</td></tr>`).join('')}
+    </tbody></table></div></div>`;
+  const fallas = k.fallas.length ? `<div class="panel"><div class="panel-head"><h2>Líneas fuera del plazo</h2><span class="sub">de la que más tardó a la que menos</span></div>
+    <div class="tabla"><table><thead><tr><th>Solicitud</th><th>Descripción</th><th>Solicitada</th><th>Llegó</th><th class="num">Días</th><th class="num">Objetivo</th></tr></thead>
+    <tbody>${recortar('compras-fallas', k.fallas).map(f => `<tr><td>${esc(f.solicitud)}</td><td class="corta" title="${esc(f.descripcion || '')}">${esc(f.descripcion || '—')}</td>
+      <td>${fc(f.fechaSolicitud)}</td><td>${fc(f.fechaRecepcion)}</td><td class="num" style="color:var(--err); font-weight:700;">${n0(f.dias)}</td><td class="num">${n0(f.objetivo)}</td></tr>`).join('')
+      + botonTodos('compras-fallas', k.fallas.length, 6)}</tbody></table></div></div>` : '';
+  return enc + kpis + objetivos + fallas + calculoCompras();
+}
+
+// ---- Resistencia a compresion (2026-11-19) ----
+// La cuenta vive en resistenciaDelPeriodo(), en logistica.logic.js.
+const calculoResistencia = () => calculo('Resistencia a compresión', 'la lista de CBS "Batchada vs Roturas de Calidad": cada carga de planta con su f\'c y las roturas de sus probetas a 7 y 28 días', [
+  ['Muestra', 'Una carga a la que se le tomó muestra (tiene rotura). Las demás no se usan. Si un conduce sale en dos cargas con la misma rotura, cuenta una vez.'],
+  ['Cumple', 'La rotura a 28 días es igual o mayor que el f\'c pedido (la "Resistencia" de la carga).'],
+  ['Resistencia', `Muestras que cumplen ÷ muestras con rotura a 28 días, de lo vaciado en las fechas elegidas. Por zona, según la planta. Meta ${METAS.resistencia.meta}% o más.`],
+  ['Atraso', 'La rotura a 28 días llega 28 días después del vaciado. Lo más nuevo solo tiene la de 7 días: se cuenta aparte como "esperando los 28 días" y no entra al %. Conviene bajar la lista desde el mes anterior, para traer las roturas que llegaron después.'],
+], 'la lista no trae Móvil VI, y de Móvil II trae muy pocas cargas.');
+
+function seccionResistencia(k){
+  const enc = `<div class="sec">10 · Resistencia a compresión <span class="fuente">lista de CBS "Batchada vs Roturas de Calidad" (Calidad) · rotura a 28 días ≥ f'c · meta ${METAS.resistencia.meta}%</span></div>`;
+  if (!k.n && !k.pendientes) return enc + sinReporte('Batchada vs Roturas de Calidad') + calculoResistencia();
+  const cumpleRes = v => v === null ? null : Math.round(v) >= METAS.resistencia.meta;
+  const zonas = k.zonas.filter(z => z.zona !== 'Sin zona');
+  const kpis = `<div class="kpis">
+      <div class="kpi d"><div class="label">Resistencia a compresión</div><div class="value">${k.n ? pct(k.pct) : 'Sin dato'}</div>
+        <div class="sub">${estadoMeta(k.n ? cumpleRes(k.pct) : null)} · meta ${METAS.resistencia.meta}% o más</div>
+        <div class="sub">${n0(k.cumplen)} de ${n0(k.n)} muestras con rotura a 28 días ≥ f'c${k.ultimoVaciado ? ` · vaciados hasta el ${fc(k.ultimoVaciado)}` : ''}</div></div>
+      ${zonas.map(z => `<div class="kpi d"><div class="label">${esc(z.zona)}</div><div class="value">${pct(z.pct)}</div><div class="sub">${n0(z.cumplen)} de ${n0(z.n)} muestras</div></div>`).join('')}
+      <div class="kpi d"><div class="label">Esperando los 28 días</div><div class="value">${n0(k.pendientes)}</div><div class="sub">muestras que solo tienen la rotura a 7 días: no entran al %</div></div>
+    </div>`;
+  const plantas = k.n ? `<div class="panel"><div class="panel-head"><h2>Por planta</h2><span class="sub">muestras con rotura a 28 días, separado por zona</span></div>
+    <div class="tabla"><table><thead><tr><th>Planta</th><th class="num">Muestras</th><th class="num">Cumplen</th><th class="num">%</th></tr></thead>
+    <tbody>${k.zonas.map(z => filaZona(z.zona, `${n0(z.n)} muestras · ${pct(z.pct)}`, 4) + k.plantas.filter(p => p.zona === z.zona).map(p => `<tr>
+      <td><strong>${esc(p.planta)}</strong></td><td class="num">${n0(p.n)}</td><td class="num">${n0(p.cumplen)}</td>
+      <td class="num" style="font-weight:700; color:${cumpleRes(p.pct) ? 'var(--ok)' : 'var(--err)'};">${pct(p.pct)}</td></tr>`).join('')).join('')}
+    </tbody></table></div></div>` : '';
+  const fallas = !k.n ? '' : k.fallas.length ? `<div class="panel"><div class="panel-head"><h2>Muestras por debajo del f'c</h2><span class="sub">de la más baja a la más alta</span></div>
+    <div class="tabla"><table><thead><tr><th>Vaciado</th><th>Conduce</th><th>Planta</th><th>Cliente</th><th class="num">f'c</th><th class="num">Rotura 28 días</th><th class="num">% del f'c</th></tr></thead>
+    <tbody>${recortar('roturas-fallas', k.fallas).map(m => `<tr><td>${fc(m.fecha)}</td><td>${esc(m.conduce || '—')}</td><td>${esc(m.planta)}</td>
+      <td class="corta" title="${esc(m.cliente || '')}">${esc(m.cliente || '—')}</td><td class="num">${n0(m.fc)}</td><td class="num">${n0(m.r28)}</td>
+      <td class="num" style="color:var(--err); font-weight:700;">${pct(100 * m.r28 / m.fc)}</td></tr>`).join('') + botonTodos('roturas-fallas', k.fallas.length, 7)}</tbody></table></div></div>`
+    : `<div class="panel"><div class="empty-state">Ninguna muestra quedó por debajo del f'c en estas fechas.</div></div>`;
+  return enc + kpis + (k.n ? `<div class="dos">${plantas}${fallas}</div>`
+    : `<div class="panel"><div class="empty-state">Lo vaciado en estas fechas todavía no tiene rotura a 28 días.</div></div>`) + calculoResistencia();
+}
+
+// ---- Cumplimiento a cubicacion (2026-11-19) ----
+// La cuenta vive en cubicacionPorEmpleado(), en logistica.logic.js.
+const calculoCubicacion = () => calculo('Cumplimiento a cubicación', 'lo cubicado, de la programación que se guarda cada día en el dashboard; lo realizado y el empleado, del reporte "Cumplimiento de tiempos de despacho"', [
+  ['Por qué así', 'CBS no guarda lo cubicado: en el reporte de tiempos, la cantidad del pedido ya está ajustada a lo que se despachó. Lo cubicado sale de la programación que la app guarda cada día. Ejemplo: el 17/11 Constructora A E SRL tenía 74 m³ programados y se despacharon 90; en CBS el pedido ya dice 90.'],
+  ['Cada pedido', `Se busca en la programación del día al mismo cliente a las mismas horas que las líneas del pedido. Cubicado = los m³ programados a esas horas. Realizado = todo lo que se despachó en el pedido, también las líneas que se agregaron después. Cumple si lo realizado quedó a ±${Math.round(TOLERANCIA_CUBICACION * 100)}% de lo cubicado.`],
+  ['Faltó / sobró', `Faltó: se despachó más de ${Math.round(TOLERANCIA_CUBICACION * 100)}% por encima de lo cubicado (la cubicación se quedó corta). Sobró: más de ${Math.round(TOLERANCIA_CUBICACION * 100)}% por debajo (cubicación de más, o el cliente paró el vaciado).`],
+  ['Cumplimiento', `Pedidos que cumplen ÷ pedidos evaluados con empleado. Los pedidos sin empleado en CBS se muestran aparte. Meta ${METAS.cubicacion.meta}% o más.`],
+  ['Qué no se evalúa', 'Pedidos de días que no se guardaron en el dashboard, de clientes que no están en la programación de ese día, con todas sus horas distintas a las programadas, o que comparten hora con otro pedido del mismo cliente (no se puede partir lo programado).'],
+  ['Empleado', 'La columna "Empleado" del reporte de CBS: quien cubica la obra.'],
+], 'solo una parte de los pedidos trae el empleado en CBS. El reporte de tiempos subido antes del 19/11/2026 no guarda esa columna: hay que volver a subirlo.');
+
+function seccionCubicacion(k){
+  const enc = `<div class="sec">9 · Cumplimiento a cubicación <span class="fuente">programación del día (lo cubicado) contra el reporte "Cumplimiento de tiempos de despacho" (lo realizado y el empleado) · meta ${METAS.cubicacion.meta}%</span></div>`;
+  if (!k.pedidos) return enc + sinReporte('Cumplimiento de tiempos de despacho') + calculoCubicacion();
+  if (!k.traeEmpleado) return enc + `<div class="panel"><div class="empty-state">El reporte "Cumplimiento de tiempos de despacho" guardado en estas fechas no trae la columna Empleado. Volvé a subirlo arriba.</div></div>` + calculoCubicacion();
+  const t = Math.round(TOLERANCIA_CUBICACION * 100);
+  const kpis = `<div class="kpis">
+      <div class="kpi t"><div class="label">Cumplimiento a cubicación</div><div class="value">${k.n ? pct(k.pct) : 'Sin dato'}</div>
+        <div class="sub">${estadoMeta(k.n ? Math.round(k.pct) >= METAS.cubicacion.meta : null)} · meta ${METAS.cubicacion.meta}% o más</div>
+        <div class="sub">${n0(k.cumplen)} de ${n0(k.n)} pedidos con empleado a ±${t}% de lo cubicado</div></div>
+      <div class="kpi t"><div class="label">Faltó concreto</div><div class="value">${n0(k.falto)}</div><div class="sub">pedidos con más de ${t}% por encima de lo cubicado</div></div>
+      <div class="kpi t"><div class="label">Sobró</div><div class="value">${n0(k.sobro)}</div><div class="sub">pedidos con más de ${t}% por debajo de lo cubicado</div></div>
+      <div class="kpi t"><div class="label">Sin empleado (aparte)</div><div class="value">${k.sinEmpleado.n ? pct(k.sinEmpleado.pct) : '—'}</div><div class="sub">${n0(k.sinEmpleado.cumplen)} de ${n0(k.sinEmpleado.n)} pedidos que no traen empleado en CBS</div></div>
+    </div>`;
+  const f = k.fuera;
+  const cobertura = `De ${n0(k.pedidos)} pedidos despachados se evaluaron ${n0(k.evaluados)}. No se cruzaron: ${n0(f.diaNoGuardado)} de días sin guardar, ${n0(f.sinCliente)} con el cliente fuera de la programación del día, ${n0(f.otraHora)} con otras horas, ${n0(f.compartida)} que comparten hora con otro pedido del mismo cliente.`;
+  const fila = (nombre, e, gris) => `<tr${gris ? ' class="gris"' : ''}><td><strong>${esc(nombre)}</strong></td><td class="num">${n0(e.n)}</td><td class="num">${n0(e.cumplen)}</td>
+      <td class="num" style="font-weight:700;${gris ? '' : ` color:${e.pct === null ? 'var(--muted)' : Math.round(e.pct) >= METAS.cubicacion.meta ? 'var(--ok)' : 'var(--err)'};`}">${pct(e.pct)}</td>
+      <td class="num">${n1(e.cubicado)}</td><td class="num">${n1(e.realizado)}</td><td class="num">${n0(e.falto)}</td><td class="num">${n0(e.sobro)}</td></tr>`;
+  const empleados = `<div class="panel"><div class="panel-head"><h2>Por empleado</h2><span class="sub">quien cubica la obra, del que más pedidos tiene al que menos</span></div>
+    <div class="tabla"><table><thead><tr><th>Empleado</th><th class="num">Pedidos</th><th class="num">Cumplen</th><th class="num">%</th><th class="num">m³ cubicados</th><th class="num">m³ realizados</th><th class="num">Faltó</th><th class="num">Sobró</th></tr></thead>
+    <tbody>${k.empleados.map(e => fila(e.empleado, e)).join('')}${k.sinEmpleado.n ? fila('Sin empleado (no entra al %)', k.sinEmpleado, true) : ''}</tbody></table></div>
+    <div class="panel-body gris">${cobertura}</div></div>`;
+  const fallas = k.fallas.length ? `<div class="panel"><div class="panel-head"><h2>Pedidos fuera de ±${t}%</h2><span class="sub">los de empleado, de la diferencia más grande a la más chica</span></div>
+    <div class="tabla"><table><thead><tr><th>Fecha</th><th>Pedido</th><th>Cliente</th><th>Empleado</th><th class="num">Cubicado</th><th class="num">Realizado</th><th class="num">Diferencia</th></tr></thead>
+    <tbody>${recortar('cubicacion-fallas', k.fallas).map(p => `<tr><td>${fc(p.fecha)}</td><td>${esc(p.ordComp)}</td>
+      <td class="corta" title="${esc(p.cliente)}">${esc(p.cliente)}</td><td>${esc(p.empleado)}</td>
+      <td class="num">${n1(p.cubicado)}</td><td class="num">${n1(p.realizado)}</td>
+      <td class="num" style="color:${p.falto ? 'var(--err)' : 'var(--warn)'}; font-weight:700;">${p.diferencia > 0 ? '+' : ''}${n1(p.diferencia)} m³ · ${p.falto ? 'faltó' : 'sobró'}</td></tr>`).join('')
+      + botonTodos('cubicacion-fallas', k.fallas.length, 7)}</tbody></table></div></div>` : '';
+  return enc + kpis + empleados + fallas + calculoCubicacion();
+}
+
+// ---- Rotacion de cartera (2026-11-19) ----
+// La cuenta vive en carteraDelPeriodo(), en logistica.logic.js. Aca se dibuja
+// y se guarda la zona de cada cliente cuando se cambia en la tabla.
+const millones = v => v === null || v === undefined ? '—' : 'RD$ ' + (v / 1e6).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' M';
+const sumar = (lista, f) => lista.reduce((t, x) => t + (f(x) || 0), 0);
+const diasTexto = v => v === null || v === undefined ? '—' : n1(v);
+const cumpleCartera = v => v === null || v === undefined ? null : Math.round(v * 10) / 10 <= METAS.cartera.meta;
+const OPCIONES_CARTERA = [
+  ['Santo Domingo|normal', 'Santo Domingo'],
+  ['Santo Domingo|especial', 'Santo Domingo · gestión especial'],
+  ['Punta Cana|normal', 'Punta Cana'],
+  ['Punta Cana|especial', 'Punta Cana · gestión especial'],
+  ['|fuera', 'Fuera del indicador'],
+];
+const ORIGEN_CARTERA = {nombre: 'automático: el nombre dice Punta Cana o Macao',
+                        cargue: 'automático: la zona de las plantas que le despacharon'};
+function selectCartera(c){
+  const actual = c.trato ? (c.zona || '') + '|' + c.trato : '';
+  return `<select class="sel-cartera" data-cliente="${esc(c.cliente)}" aria-label="Zona de ${esc(c.cliente)}">
+    ${actual ? '' : '<option value="" selected>— Elegir —</option>'}
+    ${OPCIONES_CARTERA.map(([v, t]) => `<option value="${v}"${v === actual ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
+}
+const calculoCartera = () => calculo('Rotación de cartera', 'la lista de CBS "Solicitudes" (antigüedad de saldos): cada factura con lo que se debe, repartido en tramos de 30 días al día en que se baja', [
+  ['Rotación', `Cada tramo pesa por sus días: 0 a 30 × 30, 31 a 60 × 60, 61 a 90 × 90, 91 a 120 × 120 y 121 o más × 150. Rotación = suma de (saldo del tramo × días) ÷ saldo. Es la cuenta de la hoja "Indicador ISO Rotación de Cartera" de Créditos y Cobros: con el corte del 31/10/2026, Santo Domingo da 51.7 días, igual que la hoja. Meta ${METAS.cartera.meta} días o menos.`],
+  ['Corte', 'La lista se baja de CBS con fecha de corte (el cierre del mes) y se sube con esa fecha y la tasa del dólar de ese día. Si en las fechas elegidas hay más de un corte, se usa el último.'],
+  ['US$', 'Se pasan a RD$ con la tasa del corte.'],
+  ['Zona', 'Cada cliente es de Santo Domingo o de Punta Cana, y las dos zonas se miden por separado. La lista arrancó con la hoja de octubre: sus clientes son Santo Domingo, y los demás con deuda de menos de 121 días son Punta Cana y Macao. Un cliente nuevo sale solo por el nombre (PUNTA CANA, MACAO, DOMICEM) o por las plantas que le despacharon en el cargue; si no, queda sin clasificar y no entra hasta que se le elija zona.'],
+  ['Gestión especial', 'Entra, pero sin el tramo de 121 días o más. Son los 6 clientes del bloque "Gestión especial" de la hoja de octubre.'],
+  ['Fuera del indicador', 'No entra. Son los clientes que no están en la hoja de octubre y solo deben 121 días o más.'],
+  ['Cambiar un cliente', 'El selector de la última columna guarda la zona en el momento y recalcula la página.'],
+], 'la hoja de octubre no dice por qué deja fuera a esos clientes ni qué es la gestión especial: se copió tal cual. Conviene confirmarlo con Créditos y Cobros.');
+
+function seccionCartera(k){
+  const enc = `<div class="sec">8 · Créditos y cobros <span class="fuente">lista de CBS "Solicitudes" (antigüedad de saldos) · rotación de cartera, meta ${METAS.cartera.meta} días o menos</span></div>`;
+  if (!k.corte) return enc + `<div class="panel"><div class="empty-state">No hay un corte de cartera en estas fechas. Subí la lista "Solicitudes" arriba con su fecha de corte, o elegí fechas que la incluyan.</div></div>` + calculoCartera();
+  const total = sumar(k.zonas, z => z.saldo);
+  const kpis = `<div class="kpis">
+      ${k.zonas.map(z => `<div class="kpi f"><div class="label">Rotación · ${esc(z.zona)}</div>
+        <div class="value">${z.rotacion === null ? 'Sin dato' : n1(z.rotacion) + ' <span style="font-size:14px">días</span>'}</div>
+        <div class="sub">${estadoMeta(cumpleCartera(z.rotacion))} · meta ${METAS.cartera.meta} días o menos</div>
+        <div class="sub">${millones(z.saldo)} de ${z.clientes} clientes</div></div>`).join('')}
+      <div class="kpi f"><div class="label">Cartera que entra</div><div class="value">${millones(total)}</div>
+        <div class="sub">corte del ${fc(k.corte)}${k.tasa ? ` · US$ a ${k.tasa}` : ''}</div></div>
+      <div class="kpi f"><div class="label">Fuera del indicador</div><div class="value">${millones(k.fuera.saldo)}</div>
+        <div class="sub">${k.fuera.n} clientes que solo deben 121 días o más</div>
+        <div class="sub">gestión especial: ${k.especial.n} clientes, ${millones(k.especial.quitado)} de 121 o más sin contar</div></div>
+    </div>`;
+  const avisos = [
+    k.sinClasificar.n ? `⚠ ${k.sinClasificar.n} cliente(s) nuevos sin clasificar (${millones(k.sinClasificar.saldo)}) no entran a la rotación. Elegí su zona en la tabla de abajo.` : '',
+    k.automaticos ? `${k.automaticos} cliente(s) nuevos clasificados solos por el nombre o por el cargue: revisalos en la tabla.` : '',
+    k.cortes.length > 1 ? `Hay ${k.cortes.length} cortes en estas fechas (${k.cortes.map(fc).join(', ')}): se usa el último.` : '',
+    k.sinTasa ? '⚠ Este corte no tiene tasa del dólar: los US$ no entran. Subilo de nuevo con la tasa.' : '',
+  ].filter(Boolean);
+  const pctDe = (v, t) => t ? Math.round(100 * v / t) + '%' : '—';
+  const tramos = `<div class="panel"><div class="panel-head"><h2>Por tramo de antigüedad</h2><span class="sub">en RD$, lo que entra a la rotación · debajo, cuánto pesa cada tramo</span></div>
+    <div class="tabla"><table><thead><tr><th>Zona</th>${TRAMOS_CARTERA.map(t => `<th class="num">${t.nombre} días<br><span class="gris">× ${t.dias}</span></th>`).join('')}<th class="num">Total</th><th class="num">Rotación</th></tr></thead>
+    <tbody>${k.zonas.map(z => `<tr><td><strong>${esc(z.zona)}</strong></td>
+      ${z.tramos.map(v => `<td class="num">${n0(v)}<div class="gris">${pctDe(v, z.saldo)}</div></td>`).join('')}
+      <td class="num"><strong>${n0(z.saldo)}</strong></td><td class="num"><strong>${diasTexto(z.rotacion)} días</strong></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+  const ultimo = TRAMOS_CARTERA.length - 1;
+  const grupos = [
+    ['Sin clasificar', k.clientes.filter(c => !c.trato)],
+    ...ZONAS.map(z => [z, k.clientes.filter(c => c.zona === z && c.trato !== 'fuera')]),
+    ['Fuera del indicador', k.clientes.filter(c => c.trato === 'fuera')],
+  ].filter(([, cs]) => cs.length);
+  const filaCliente = c => `<tr>
+      <td class="corta" title="${esc(c.cliente)}"><strong>${esc(c.cliente)}</strong>${ORIGEN_CARTERA[c.origen] ? `<div class="gris">${ORIGEN_CARTERA[c.origen]}</div>` : ''}${c.trato === 'especial' ? '<div class="gris">gestión especial: el tramo de 121 o más no entra</div>' : ''}</td>
+      <td class="gris">${esc(c.monedas)}</td>
+      ${c.tramos.map((v, i) => `<td class="num${c.trato === 'especial' && i === ultimo && v ? ' tachado' : ''}">${v ? n0(v) : '—'}</td>`).join('')}
+      <td class="num"><strong>${n0(c.saldo)}</strong></td><td class="num">${diasTexto(c.dias)}</td><td>${selectCartera(c)}</td></tr>`;
+  const clientes = `<div class="panel"><div class="panel-head"><h2>Por cliente</h2><span class="sub">en RD$ (US$ × tasa del corte), del que más debe al que menos · la última columna cambia la zona</span></div>
+    <div class="tabla"><table><thead><tr><th>Cliente</th><th>Moneda</th>${TRAMOS_CARTERA.map(t => `<th class="num">${t.nombre}</th>`).join('')}<th class="num">Total</th><th class="num">Días</th><th>Zona</th></tr></thead>
+    <tbody>${grupos.map(([g, cs]) => { const z = k.zonas.find(x => x.zona === g);
+      return filaZona(g, z ? `${cs.length} clientes · entran ${millones(z.saldo)} · rotación ${diasTexto(z.rotacion)} días`
+                           : `${cs.length} clientes · ${millones(sumar(cs, c => c.saldo))}`, 10)
+        + recortar('cartera-' + g, cs).map(filaCliente).join('') + botonTodos('cartera-' + g, cs.length, 10); }).join('')}
+    </tbody></table></div></div>`;
+  return enc + kpis + (avisos.length ? `<div class="panel"><div class="panel-body aviso">${avisos.join('<br>')}</div></div>` : '')
+    + tramos + clientes + calculoCartera();
+}
+$('contenido').addEventListener('change', async ev => {
+  const s = ev.target.closest('.sel-cartera'); if (!s || !s.value) return;
+  const [zona, trato] = s.value.split('|');
+  s.disabled = true;
+  try {
+    const r = await apiLogistica('/api/logistica/cartera/clientes', {method: 'PUT',
+      body: JSON.stringify({cliente: s.dataset.cliente, zona: zona || null, trato})});
+    reportes.cartera_clientes = [...(reportes.cartera_clientes || []).filter(c => normalize(c.cliente) !== normalize(r.cliente)), r];
+    render();
+  } catch (err) {
+    s.disabled = false;
+    alert('No se pudo guardar la zona: ' + err.message);
+  }
+});
 
 // ---- Carga ----
 async function cargarReportes(recalcularFechas){

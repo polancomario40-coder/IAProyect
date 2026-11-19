@@ -399,3 +399,24 @@ test('dentro de un dia el detalle ordena por hora programada, y las sin hora al 
   dias[0].results[2].horaProg = 480;
   assert.deepEqual(entregasDePlanta(dias, 'Movil II').map(f => f.horaProg), [480, 600, null]);
 });
+
+// ---- Filtro por mes (2026-11-18) ----
+const L = require('../../static/logistica.logic.js');
+test('mesesDelHistorial: los meses que tiene el historial, en orden', () => {
+  const dias = [{fecha: '2026-11-02'}, {fecha: '2026-10-01'}, {fecha: '2026-10-31'}, {fecha: 'sin-fecha'}];
+  assert.deepEqual(L.mesesDelHistorial(dias), ['2026-10', '2026-11']);
+  assert.deepEqual(L.mesesDelHistorial([]), []);
+});
+
+test('filtrarDiasPorMes: solo los dias de ese mes; sin mes, todos', () => {
+  const dias = [{fecha: '2026-10-01'}, {fecha: '2026-10-31'}, {fecha: '2026-11-01'}];
+  assert.deepEqual(L.filtrarDiasPorMes(dias, '2026-10').map(d => d.fecha), ['2026-10-01', '2026-10-31']);
+  assert.equal(L.filtrarDiasPorMes(dias, null), dias);
+  assert.equal(L.filtrarDiasPorMes(dias, ''), dias);
+  assert.deepEqual(L.filtrarDiasPorMes(dias, '2026-12'), []);
+});
+
+test('nombreDeMes: el nombre en castellano con el ano', () => {
+  assert.equal(L.nombreDeMes('2026-10'), 'Octubre 2026');
+  assert.equal(L.nombreDeMes('2027-01'), 'Enero 2027');
+});

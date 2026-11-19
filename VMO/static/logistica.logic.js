@@ -1362,6 +1362,16 @@ function computeResumen(state, assumptions = {}){
     return dias.map(d => ({...d, results: (d.results || []).filter(r => filaDelFiltro(r, planta))}));
   }
 
+  // Filtro por mes de Estadisticas (pedido del usuario, 2026-11-18): los
+  // meses que tiene el historial ('2026-10', ...) y los dias de uno. `mes`
+  // null o vacio = todo el historial.
+  const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio',
+                       'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const mesesDelHistorial = dias => [...new Set(dias.map(d => String(d.fecha).slice(0, 7)))]
+    .filter(m => /^\d{4}-\d{2}$/.test(m)).sort();
+  const filtrarDiasPorMes = (dias, mes) => mes ? dias.filter(d => String(d.fecha).startsWith(mes + '-')) : dias;
+  const nombreDeMes = mes => `${NOMBRES_MES[Number(mes.slice(5, 7)) - 1]} ${mes.slice(0, 4)}`;
+
   // ================= COMPARACION POR DIA (2026-10-12) =================
   //
   // La pestana Comparacion: un renglon por dia guardado, para ponerlos uno al
@@ -1962,7 +1972,9 @@ function computeResumen(state, assumptions = {}){
       const i = {ord: c(['OrdComp']), planta: c(['Planta']), cliente: c(['Cliente']), fecha: c(['Fecha']),
                  hora: c(['Hora']), fin: c(['HoraFin']), cant: c(['Cantidad']), tin: c(['Total In']),
                  logro: c(['Logro']), desp: c(['TotalDespachado']), vprog: c(['ViajesProgramados']),
-                 vef: c(['ViajesEfectuados']), bomba: c(['Bomba'])};
+                 vef: c(['ViajesEfectuados']), bomba: c(['Bomba']),
+                 // quien cubica la obra (2026-11-19), para el cumplimiento a cubicacion
+                 emp: c(['Empleado'])};
       if ([i.fecha, i.cant, i.tin, i.desp, i.vef].some(x => x < 0)) continue;
       const filas = [];
       for (let r = h + 1; r < rows.length; r++){
@@ -1974,7 +1986,7 @@ function computeResumen(state, assumptions = {}){
                     cantidad: numeroDe(row[i.cant]) || 0, totalIn: numeroDe(row[i.tin]) || 0,
                     logro: i.logro >= 0 ? textoDe(row[i.logro]) : null, totalDespachado: numeroDe(row[i.desp]) || 0,
                     viajesProgramados: i.vprog >= 0 ? numeroDe(row[i.vprog]) : null, viajesEfectuados: numeroDe(row[i.vef]) || 0,
-                    bomba: i.bomba >= 0 ? textoDe(row[i.bomba]) : null});
+                    bomba: i.bomba >= 0 ? textoDe(row[i.bomba]) : null, empleado: i.emp >= 0 ? textoDe(row[i.emp]) : null});
       }
       return {...rangoDe(filas.map(f => f.fecha)), filas};
     }
@@ -1986,7 +1998,7 @@ function computeResumen(state, assumptions = {}){
   const tiempoDeServidor = f => ({fecha: f.fecha, ordComp: f.ord_comp, planta: f.planta, cliente: f.cliente,
     horaIni: f.hora_ini, horaFin: f.hora_fin, cantidad: f.cantidad, totalIn: f.total_in, logro: f.logro,
     totalDespachado: f.total_despachado, viajesProgramados: f.viajes_programados,
-    viajesEfectuados: f.viajes_efectuados, bomba: f.bomba});
+    viajesEfectuados: f.viajes_efectuados, bomba: f.bomba, empleado: f.empleado ?? null});
 
   function medianaDe(valores){
     if (!valores.length) return null;
@@ -2074,9 +2086,15 @@ function computeResumen(state, assumptions = {}){
             zonas: porZona(camiones, c => c.zona, resumen)};
   }
 
+  // Las filas de logistica_compra como las devuelve el servidor, a la forma de parseComprasSheets.
+  const compraDeServidor = f => ({fecha: f.fecha, solicitud: f.solicitud, descripcion: f.descripcion,
+    fechaSolicitud: f.fecha_solicitud, fechaRecepcion: f.fecha_recepcion, dias: f.dias, objetivo: f.objetivo,
+    aplica: !!f.aplica, cumple: !!f.cumple});
   // `dias`: [{fecha, state, assumptions}] de restaurarDia(), ya del rango.
   // `reportes`: {bombeo, tiempos} con las filas del servidor en el rango.
-  function indicadoresDelPeriodo(dias, reportes = {}){
+  // `historial`: todos los dias guardados, para la zona de los clientes de
+  // la cartera que no estan clasificados (por defecto, los del rango).
+  function indicadoresDelPeriodo(dias, reportes = {}, historial = dias){
     const tiempos = (reportes.tiempos || []).map(f => 'ord_comp' in f ? tiempoDeServidor(f) : f);
     const camiones = transportePorCamion(dias);
     return {bombeo: bombeoPorEquipo(reportes.bombeo || [], tiempos),
@@ -2087,7 +2105,12 @@ function computeResumen(state, assumptions = {}){
             carga: cargaEnPlanta(reportes.batchadas || [], plantasDelCargue(dias)),
             incidencias: incidenciasDeClientes(reportes.incidencias || []),
             reclamos: reclamosDelPeriodo(reportes.reclamos || []),
-            devuelto: concretoDevuelto(reportes.anulados || [], camiones.m3)};
+            eficiencia: eficienciaDeCarga(dias),
+            desperdicio: desperdicioDelPeriodo(reportes.anulados || [], camiones.m3),
+            cartera: carteraDelPeriodo(reportes.cartera || [], reportes.cartera_clientes || [], zonasDeClientesDelCargue(historial)),
+            cubicacion: cubicacionPorEmpleado(dias, tiempos),
+            resistencia: resistenciaDelPeriodo(reportes.roturas || []),
+            compras: comprasDelPeriodo((reportes.compras || []).map(f => 'fecha_solicitud' in f ? compraDeServidor(f) : f))};
   }
 
   // ================= MAS REPORTES DE CBS (2026-11-17) =================
@@ -2276,44 +2299,93 @@ function computeResumen(state, assumptions = {}){
             })};
   }
 
-  // 5. Carga en planta, de las batchadas (solo las "Realizado").
-  // Eficiencia de carga (meta 75%): tiempo que deberia tardar segun la
-  // capacidad de la planta (m3 / m3 por hora) / tiempo real de la carga.
-  // Falta que Produccion mande la capacidad de cada planta: mientras tanto
-  // se muestra el ritmo real (m3 por hora cargando).
-  // Control de insumos (meta 85%): cargas con todos los materiales dentro de
-  // la tolerancia de la norma ASTM C94 / cargas. Se muestran dos: cemento y
-  // agregados, y todos (con agua y aditivos), porque el agua casi nunca
-  // cuadra (la planta la ajusta por la humedad de la arena): octubre 2026,
-  // 51% contra 24%.
-  const CAPACIDAD_PLANTA = {};
+  // 5a. Eficiencia de carga (meta 75%), definida en la reunion del
+  // 2026-11-18: por planta y por dia, el tiempo que deberia tardar en cargar
+  // los m3 del dia segun su capacidad (m3 / m3 por hora) / el tiempo total,
+  // de la hora del primer conduce a la del ultimo. Sale del cargue de cada
+  // dia (Tiempo de Carga por ficha, con Macao), no del PLC. El tiempo total
+  // incluye los ratos en que la planta espera entre pedidos: mide cuanto se
+  // aprovecho la planta en el dia. Octubre 2026: 35%. Un dia con un solo
+  // conduce no tiene tiempo y no entra.
+  // Capacidades en m3/hora (la clave, el nombre en mayusculas sin espacios),
+  // de la reunion del 2026-11-18. Movil VI no la tiene.
+  const CAPACIDAD_PLANTA = {SANISIDRO: 60, MOVILII: 60, MOVILIII: 60, MOVILIV: 52, MOVILV: 40, MOVILVII: 60,
+                            MOVILVIII: 100, SDN: 49, MICHE: 100};
+  const capacidadDe = planta => CAPACIDAD_PLANTA[normalize(planta).replace(/ /g, '')] ?? null;
+  function eficienciaDeCarga(dias){
+    const plantaDias = [];
+    dias.forEach(d => {
+      const zonaPlanta = (d.assumptions && d.assumptions.zonaPlanta) || {};
+      for (const [planta, vs] of groupBy([...(d.state.cargue || []), ...(d.state.cargueMacao || [])].filter(c => textoDe(c.planta)), c => textoDe(c.planta))){
+        const horas = vs.map(c => c.horaMin).filter(h => h !== null && h !== undefined);
+        plantaDias.push({fecha: d.fecha, planta, zona: zonaPlanta[planta] || zonaDePlanta(planta) || ZONA_SIN,
+                         conduces: vs.length, m3: sumaDe(vs, c => c.cantidad),
+                         minutos: horas.length > 1 ? Math.max(...horas) - Math.min(...horas) : 0});
+      }
+    });
+    const resumen = pds => {
+      const conTiempo = pds.filter(p => p.minutos > 0), conCap = conTiempo.filter(p => capacidadDe(p.planta));
+      const min = sumaDe(conTiempo, p => p.minutos), minCap = sumaDe(conCap, p => p.minutos);
+      return {n: pds.length, dias: new Set(pds.map(p => p.fecha)).size, conduces: sumaDe(pds, p => p.conduces), m3: sumaDe(pds, p => p.m3),
+              horas: min / 60, ritmo: min ? 60 * sumaDe(conTiempo, p => p.m3) / min : null,
+              eficiencia: minCap ? 100 * sumaDe(conCap, p => 60 * p.m3 / capacidadDe(p.planta)) / minCap : null};
+    };
+    const plantas = [...groupBy(plantaDias, p => p.planta)].map(([planta, pds]) => ({planta, zona: pds[0].zona, capacidad: capacidadDe(planta), ...resumen(pds)}))
+      .sort((a, b) => a.zona.localeCompare(b.zona) || b.m3 - a.m3 || a.planta.localeCompare(b.planta));
+    return {...resumen(plantaDias), plantas, zonas: porZona(plantaDias, p => p.zona, resumen),
+            conCapacidad: plantas.filter(p => p.capacidad).map(p => p.planta),
+            sinCapacidad: plantas.filter(p => !p.capacidad).map(p => p.planta)};
+  }
+
+  // 5b. Control de insumos (meta 85%), de las batchadas del PLC (solo las
+  // "Realizado"): cargas con todos los materiales dentro de la tolerancia de
+  // la norma ASTM C94 / cargas. Se muestran dos: cemento y agregados, y todos
+  // (con agua y aditivos), porque el agua casi nunca cuadra (la planta la
+  // ajusta por la humedad de la arena): octubre 2026, 51% contra 24%.
   const TOLERANCIA_INSUMOS = {cemento: 1, agregados: 2, agua: 1, aditivos: 3};
   const MATERIALES = ['cemento', 'agregados', 'agua', 'aditivos'];
   const fueraDe = (b, m) => b['dev_' + m] !== null && b['dev_' + m] !== undefined && Math.abs(b['dev_' + m]) > TOLERANCIA_INSUMOS[m];
-  const capacidadDe = planta => CAPACIDAD_PLANTA[normalize(planta).replace(/ /g, '')] ?? null;
   const plantasDelCargue = dias => [...new Set(dias.flatMap(d => [...(d.state.cargue || []), ...(d.state.cargueMacao || [])]
     .map(c => textoDe(c.planta)).filter(Boolean)))].sort();
+
+  // 5c. Eficiencia de pesaje (meta 75%, pedido del usuario el 2026-11-18):
+  // el calculo anterior de la eficiencia de carga, con el tiempo de cada
+  // carga que da el PLC. Por carga: lo que deberia tardar segun la capacidad
+  // de la planta (m3 / m3 por hora) / lo que tardo (TiempoCarga o TimeBatch).
+  // Octubre 2026: 87% sin SDN. SDN se muestra pero no entra al total ni a la
+  // zona: su PLC da 7 m3 en 4.6 min (82 m3/h, 167% con 49 m3/h), y el cargue
+  // diario da unos 41 m3/h, asi que su tiempo parece no ser la carga completa.
+  const PESAJE_FUERA_DEL_TOTAL = ['SDN'];
+  const pesajeFueraDelTotal = planta => PESAJE_FUERA_DEL_TOTAL.includes(normalize(planta).replace(/ /g, ''));
+  const pesajeDe = bs => {
+    const conCap = bs.filter(b => b.minutos > 0 && capacidadDe(b.planta)), min = sumaDe(conCap, b => b.minutos);
+    return min ? 100 * sumaDe(conCap, b => 60 * b.m3 / capacidadDe(b.planta)) / min : null;
+  };
+
   function cargaEnPlanta(filas, plantasCargue = []){
     const hechas = filas.filter(b => normalize(b.estado) === 'REALIZADO' && b.m3 > 0);
-    const resumen = bs => {
-      const conTiempo = bs.filter(b => b.minutos > 0), min = sumaDe(conTiempo, b => b.minutos);
-      const conCap = conTiempo.filter(b => capacidadDe(b.planta)), minCap = sumaDe(conCap, b => b.minutos);
+    // `paraElTotal`: el pesaje de un total o una zona deja afuera PESAJE_FUERA_DEL_TOTAL.
+    const resumen = (bs, paraElTotal = true) => {
       const conMaterial = bs.filter(b => b.dev_cemento !== null && b.dev_cemento !== undefined
                                       || b.dev_agregados !== null && b.dev_agregados !== undefined);
       const ok = ms => conMaterial.length ? 100 * conMaterial.filter(b => !ms.some(m => fueraDe(b, m))).length / conMaterial.length : null;
-      return {n: bs.length, m3: sumaDe(bs, b => b.m3), conTiempo: conTiempo.length,
-              minutosPorCarga: conTiempo.length ? medianaDe(conTiempo.map(b => b.minutos)) : null,
-              ritmo: min ? 60 * sumaDe(conTiempo, b => b.m3) / min : null,
-              eficiencia: minCap ? 100 * sumaDe(conCap, b => 60 * b.m3 / capacidadDe(b.planta)) / minCap : null,
+      const conTiempo = bs.filter(b => b.minutos > 0), min = sumaDe(conTiempo, b => b.minutos);
+      return {n: bs.length, m3: sumaDe(bs, b => b.m3),
               conMaterial: conMaterial.length, insumos: ok(['cemento', 'agregados']), insumosTodos: ok(MATERIALES),
-              fallas: Object.fromEntries(MATERIALES.map(m => [m, conMaterial.filter(b => fueraDe(b, m)).length]))};
+              fallas: Object.fromEntries(MATERIALES.map(m => [m, conMaterial.filter(b => fueraDe(b, m)).length])),
+              conTiempo: conTiempo.length, minutosPorCarga: conTiempo.length ? medianaDe(conTiempo.map(b => b.minutos)) : null,
+              ritmo: min ? 60 * sumaDe(conTiempo, b => b.m3) / min : null,
+              pesaje: pesajeDe(paraElTotal ? bs.filter(b => !pesajeFueraDelTotal(b.planta)) : bs)};
     };
     const zonaB = b => zonaDePlanta(b.planta) || ZONA_SIN;
-    const plantas = [...groupBy(hechas, b => b.planta)].map(([planta, bs]) => ({planta, zona: zonaB(bs[0]), capacidad: capacidadDe(planta), ...resumen(bs)}))
+    const plantas = [...groupBy(hechas, b => b.planta)].map(([planta, bs]) => ({planta, zona: zonaB(bs[0]),
+        capacidad: capacidadDe(planta), fueraDelTotal: pesajeFueraDelTotal(planta), ...resumen(bs, false)}))
       .sort((a, b) => a.zona.localeCompare(b.zona) || b.m3 - a.m3 || a.planta.localeCompare(b.planta));
     const conBatchadas = new Set(plantas.map(p => normalize(p.planta).replace(/ /g, '')));
     return {...resumen(hechas), plantas, sinBatchadas: plantasCargue.filter(p => !conBatchadas.has(normalize(p).replace(/ /g, ''))),
-            zonas: porZona(hechas, zonaB, resumen)};
+            pesajeFuera: plantas.filter(p => p.fueraDelTotal).map(p => p.planta),
+            pesajeSinCapacidad: plantas.filter(p => !p.capacidad).map(p => p.planta),
+            zonas: porZona(hechas, zonaB, bs => resumen(bs))};
   }
 
   // 6. Servicio al cliente. Incidencias (meta 20% o menos): servicios de la
@@ -2342,18 +2414,318 @@ function computeResumen(state, assumptions = {}){
             lista: [...filas].sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.reclamo).localeCompare(String(b.reclamo)))};
   }
 
-  // 7. Concreto devuelto (sin meta en la hoja): m3 de los conduces anulados
-  // por DESPERDICIO / m3 transportados en el rango (la seccion 2, del cargue
-  // de cada dia). Los desviados a otro cliente o anulados por informacion
+  // 7. Desperdicio (sin meta en la hoja; nombre de la reunion del
+  // 2026-11-18, antes "Concreto devuelto"): m3 de los conduces anulados por
+  // DESPERDICIO / m3 despachados en el rango (la seccion 2, del cargue de
+  // cada dia) x 100. Los desviados a otro cliente o anulados por informacion
   // incorrecta se muestran aparte: el concreto no se perdio. Octubre 2026:
   // 53.5 m3, lo mismo que "Desperdicio de concreto" de Indicadores diarios.
-  function concretoDevuelto(filas, m3Despachados){
+  function desperdicioDelPeriodo(filas, m3Despachados){
     const devueltos = filas.filter(f => normalize(f.causa) === 'DESPERDICIO'), m3 = sumaDe(devueltos, f => f.m3);
     return {anulados: filas.length, m3Anulados: sumaDe(filas, f => f.m3), conduces: devueltos.length, m3, m3Despachados,
             pct: m3Despachados ? 100 * m3 / m3Despachados : null,
             causas: [...groupBy(filas, f => textoDe(f.causa) || 'Sin causa')].map(([causa, fs]) => ({causa, n: fs.length, m3: sumaDe(fs, f => f.m3)}))
               .sort((a, b) => b.m3 - a.m3 || a.causa.localeCompare(b.causa)),
             lista: [...filas].sort((a, b) => a.fecha.localeCompare(b.fecha) || String(a.conduce).localeCompare(String(b.conduce)))};
+  }
+
+  // ================= COMPRAS: ENTREGAS EN EL PLAZO (2026-11-19) =================
+  //
+  // Compras, meta 80% ("Cumplimiento de las entregas en el plazo acordado").
+  // La reunion del 2026-11-18 lo cambio a medir desde la solicitud de compra.
+  // La lista de CBS "Tiempos de sol. compra" trae cada linea de solicitud ya
+  // recibida con los dias de cada paso, el TiempoTotal, el Objetivo en dias
+  // (30, 15, 3 o 1, puesto por CBS) y si Cumple (TiempoTotal <= Objetivo). Se
+  // copia tal cual: entran las lineas con Aplica = SI y cumple la que CBS
+  // marca SI. La lista se filtra por la fecha de la orden de compra, y esa
+  // es la fecha de cada linea aca. Del 1/10 al 16/11/2026: 1,076 de 1,224 = 88%.
+  const siDe = v => normalize(v) === 'SI';
+  function parseComprasSheets(hojas){
+    for (const {rows} of hojas){
+      const h = findHeaderRowIndex(rows, ['SOLICITUD', 'FECHASOLICITUD', 'OBJETIVO', 'CUMPLE']);
+      if (h === -1) continue;
+      const H = rows[h], c = n => colIndex(H, [n]);
+      const i = {sol: c('Solicitud'), desc: c('Descripcion'), fsol: c('FechaSolicitud'), oc: c('Fecha O/C'),
+                 rec: c('UltimaRecepcion'), dias: c('TiempoTotal'), aplica: c('Aplica'), obj: c('Objetivo'), cumple: c('Cumple')};
+      if ([i.sol, i.oc, i.dias, i.obj, i.cumple].some(x => x < 0)) continue;
+      const filas = [];
+      for (let r = h + 1; r < rows.length; r++){
+        const row = rows[r] || [], solicitud = textoDe(row[i.sol]), fecha = fechaDeCelda(row[i.oc]);
+        if (!solicitud || !fecha) continue;   // la fila de totales viene sin solicitud
+        filas.push({fecha, solicitud, descripcion: i.desc >= 0 ? textoDe(row[i.desc]) : null,
+                    fechaSolicitud: i.fsol >= 0 ? fechaDeCelda(row[i.fsol]) : null, fechaRecepcion: i.rec >= 0 ? fechaDeCelda(row[i.rec]) : null,
+                    dias: numeroDe(row[i.dias]), objetivo: numeroDe(row[i.obj]),
+                    aplica: i.aplica >= 0 ? siDe(row[i.aplica]) : true, cumple: siDe(row[i.cumple])});
+      }
+      return {...rangoDe(filas.map(f => f.fecha)), filas};
+    }
+    return null;
+  }
+
+  function comprasDelPeriodo(filas){
+    const entran = filas.filter(f => f.aplica);
+    const resumen = fs => { const cumplen = fs.filter(f => f.cumple).length;
+      return {n: fs.length, cumplen, pct: fs.length ? 100 * cumplen / fs.length : null,
+              mediana: medianaDe(fs.map(f => f.dias).filter(d => d !== null && d !== undefined))}; };
+    return {...resumen(entran), noAplica: filas.length - entran.length,
+            solicitudes: new Set(entran.map(f => String(f.solicitud).split('-')[0])).size,
+            objetivos: [...groupBy(entran, f => f.objetivo)].map(([objetivo, fs]) => ({objetivo, ...resumen(fs)}))
+              .sort((a, b) => b.n - a.n || (b.objetivo || 0) - (a.objetivo || 0)),
+            fallas: entran.filter(f => !f.cumple).sort((a, b) => (b.dias || 0) - (a.dias || 0) || a.fecha.localeCompare(b.fecha))};
+  }
+
+  // ================= RESISTENCIA A COMPRESION (2026-11-19) =================
+  //
+  // Control de Calidad, meta 99%, por zona. La lista de CBS "Batchada vs
+  // Roturas de Calidad" trae cada carga de planta con su f'c (Resistencia) y
+  // las roturas de sus probetas a 7 y a 28 dias (0 = no se ensayo). Solo se
+  // usan las cargas a las que se les tomo muestra (decision del usuario).
+  // Una muestra cumple si la rotura a 28 dias es igual o mayor que el f'c
+  // (decision del usuario, entre eso, f'c - 35 de la norma ACI y 85% del f'c).
+  // Va con un mes de atraso: lo vaciado hoy tiene rotura a 28 dias dentro de
+  // 28 dias. Octubre 2026 (vaciados hasta el 22/10): 622 de 622, 100%.
+  function parseRoturasSheets(hojas){
+    for (const {rows} of hojas){
+      const h = findHeaderRowIndex(rows, ['ROTURAS28', 'RESISTENCIA', 'CONDUCE']);
+      if (h === -1) continue;
+      const H = rows[h], c = n => colIndex(H, [n]);
+      const i = {planta: c('Planta'), fecha: c('Fecha'), conduce: c('Conduce'), cliente: c('Cliente'), producto: c('Producto'),
+                 fc: c('Resistencia'), r7: c('Roturas7'), r28: c('Roturas28')};
+      if ([i.planta, i.fecha, i.fc, i.r28].some(x => x < 0)) continue;
+      const fechas = [], filas = [];
+      for (let r = h + 1; r < rows.length; r++){
+        const row = rows[r] || [], fecha = fechaDeCelda(row[i.fecha]), planta = nombreDePlanta(row[i.planta]);
+        if (!fecha || !planta) continue;   // la fila de totales viene sin planta
+        fechas.push(fecha);
+        const r7 = i.r7 >= 0 ? numeroDe(row[i.r7]) || 0 : 0, r28 = numeroDe(row[i.r28]) || 0;
+        if (!(r7 > 0) && !(r28 > 0)) continue;   // a esta carga no se le tomo muestra
+        filas.push({fecha, planta, conduce: i.conduce >= 0 ? textoDe(row[i.conduce]) : null,
+                    cliente: i.cliente >= 0 ? textoDe(row[i.cliente]) : null, producto: i.producto >= 0 ? textoDe(row[i.producto]) : null,
+                    fc: numeroDe(row[i.fc]) || 0, r7: r7 > 0 ? r7 : null, r28: r28 > 0 ? r28 : null});
+      }
+      // El rango es el de todas las cargas del archivo, con muestra o sin
+      // ella: subirlo de nuevo reemplaza esas fechas enteras.
+      return {...rangoDe(fechas), filas, cargas: fechas.length};
+    }
+    return null;
+  }
+
+  function resistenciaDelPeriodo(filas){
+    // Una muestra por conduce: hay conduces que salen en dos cargas con la
+    // misma rotura (21 en octubre). Sin f'c no hay contra que comparar.
+    const vistas = new Map();
+    filas.forEach((f, k) => {
+      if (!(f.fc > 0)) return;
+      const clave = textoDe(f.conduce) ? f.fecha + '||' + normalize(f.conduce) : 'fila ' + k;
+      const v = vistas.get(clave);
+      if (!v || (f.r28 || 0) > (v.r28 || 0)) vistas.set(clave, f);
+    });
+    const muestras = [...vistas.values()].map(f => ({...f, zona: zonaDePlanta(f.planta) || ZONA_SIN}));
+    const con28 = muestras.filter(m => m.r28 > 0).map(m => ({...m, cumple: m.r28 >= m.fc}));
+    const resumen = ms => { const cumplen = ms.filter(m => m.cumple).length;
+      return {n: ms.length, cumplen, pct: ms.length ? 100 * cumplen / ms.length : null}; };
+    const orden = z => ZONAS_INDICADORES.indexOf(z);
+    return {...resumen(con28), zonas: porZona(con28, m => m.zona, resumen),
+            plantas: [...groupBy(con28, m => m.planta)].map(([planta, ms]) => ({planta, zona: ms[0].zona, ...resumen(ms)}))
+              .sort((a, b) => orden(a.zona) - orden(b.zona) || b.n - a.n || a.planta.localeCompare(b.planta)),
+            // Muestras que todavia no tienen rotura a 28 dias (solo la de 7).
+            pendientes: muestras.length - con28.length,
+            ultimoVaciado: con28.reduce((a, m) => !a || m.fecha > a ? m.fecha : a, null),
+            fallas: con28.filter(m => !m.cumple).sort((a, b) => a.r28 / a.fc - b.r28 / b.fc || a.fecha.localeCompare(b.fecha))};
+  }
+
+  // ================= CUMPLIMIENTO A CUBICACION (2026-11-19) =================
+  //
+  // Por empleado (reunion del 2026-11-18): lo cubicado contra lo realizado,
+  // pedido por pedido. CBS no guarda lo cubicado: en el reporte "Cumplimiento
+  // de tiempos de despacho" la Cantidad del pedido ya esta ajustada a lo que se
+  // despacho (nunca despacha mas de lo pedido). Lo cubicado sale de la
+  // programacion que la app guarda cada dia: los m3 de ese cliente a esa hora.
+  // El 17/11 CONSTRUCTORA A E SRL tenia 74 m3 programados a las 09:00 y se
+  // despacharon 90; en CBS el pedido ya dice 90. El empleado —quien cubica la
+  // obra— viene en ese reporte. La hora de CBS va una hora atras, igual que la
+  // de la programacion antes de su ajuste.
+  // Un pedido de CBS trae una linea por hora (WTD DOMINICANA el 16/11: losa a
+  // las 08:00, zapata a las 10:00 y una linea agregada a las 18:00). Lo
+  // cubicado es la programacion de ese cliente a las horas del pedido; lo
+  // realizado, todo lo que se despacho en el pedido, tambien las lineas que no
+  // estaban programadas: si se agregaron, es lo que falto cubicar.
+  // Cumple si lo realizado quedo a ±5% de lo cubicado (decision del usuario,
+  // entre "cubicado / realizado" de la hoja, donde lo que sobra tapa lo que
+  // falta, y contar solo lo que falto). Meta 93%. Del 1/10 al 18/11/2026: 58%
+  // de los pedidos con empleado que se cruzan con la programacion.
+  const TOLERANCIA_CUBICACION = 0.05;
+  function cubicacionPorEmpleado(dias, tiempos){
+    const guardados = new Set(dias.map(d => d.fecha));
+    const prog = new Map();   // fecha||cliente -> Map(hora -> m3 programados)
+    dias.forEach(d => [...(d.state.programacion || []), ...(d.state.programacionMacao || [])].forEach(p => {
+      if (p.horaMin === null || p.horaMin === undefined || !(p.cantidad > 0)) return;
+      const k = d.fecha + '||' + normalize(p.cliente);
+      if (!prog.has(k)) prog.set(k, new Map());
+      sumarEn(prog.get(k), Math.round(p.horaMin), p.cantidad);
+    }));
+    // Las lineas de un mismo pedido se juntan.
+    const pedidos = [...groupBy(tiempos.filter(t => textoDe(t.ordComp)), t => t.ordComp)].map(([ordComp, ts]) => ({
+      ordComp, fecha: ts[0].fecha, cliente: ts[0].cliente, planta: ts[0].planta,
+      horas: [...new Set(ts.filter(t => t.horaIni !== null && t.horaIni !== undefined)
+                           .map(t => Math.round(t.horaIni) + AJUSTE_HORA_PROGRAMADA_MIN))].sort((a, b) => a - b),
+      empleado: textoDe(ts.map(t => t.empleado).find(e => textoDe(e))) || null,
+      realizado: sumaDe(ts, t => t.totalDespachado)})).filter(p => p.realizado > 0);
+    const fuera = {diaNoGuardado: 0, sinCliente: 0, otraHora: 0, compartida: 0};
+    const cruzados = [];
+    pedidos.forEach(p => {
+      if (!guardados.has(p.fecha)) { fuera.diaNoGuardado++; return; }
+      const horas = prog.get(p.fecha + '||' + normalize(p.cliente));
+      if (!horas) { fuera.sinCliente++; return; }
+      const horasProg = p.horas.filter(h => horas.has(h));
+      if (!horasProg.length) { fuera.otraHora++; return; }
+      cruzados.push({...p, horasProg, cubicado: sumaDe(horasProg, h => horas.get(h))});
+    });
+    // Dos pedidos del mismo cliente a la misma hora comparten lo programado y
+    // no se puede saber que parte es de cada uno: van aparte.
+    const clave = (p, h) => p.fecha + '||' + normalize(p.cliente) + '||' + h;
+    const veces = new Map(); cruzados.forEach(p => p.horasProg.forEach(h => sumarEn(veces, clave(p, h), 1)));
+    const evaluados = cruzados.filter(p => p.horasProg.every(h => veces.get(clave(p, h)) === 1)).map(p => {
+      const diferencia = p.realizado - p.cubicado, cumple = Math.abs(diferencia) <= TOLERANCIA_CUBICACION * p.cubicado + 1e-9;
+      return {...p, diferencia, cumple, falto: !cumple && diferencia > 0, sobro: !cumple && diferencia < 0};
+    });
+    fuera.compartida = cruzados.length - evaluados.length;
+    const resumen = ps => { const cumplen = ps.filter(p => p.cumple).length;
+      return {n: ps.length, cumplen, falto: ps.filter(p => p.falto).length, sobro: ps.filter(p => p.sobro).length,
+              cubicado: sumaDe(ps, p => p.cubicado), realizado: sumaDe(ps, p => p.realizado), pct: ps.length ? 100 * cumplen / ps.length : null}; };
+    const conEmpleado = evaluados.filter(p => p.empleado);
+    return {...resumen(conEmpleado), sinEmpleado: resumen(evaluados.filter(p => !p.empleado)),
+            empleados: [...groupBy(conEmpleado, p => p.empleado)].map(([empleado, ps]) => ({empleado, ...resumen(ps)}))
+              .sort((a, b) => b.n - a.n || a.empleado.localeCompare(b.empleado)),
+            pedidos: pedidos.length, evaluados: evaluados.length, fuera,
+            // El reporte guardado antes del 2026-11-19 no trae la columna Empleado.
+            traeEmpleado: tiempos.some(t => textoDe(t.empleado)),
+            fallas: conEmpleado.filter(p => !p.cumple)
+              .sort((a, b) => Math.abs(b.diferencia) - Math.abs(a.diferencia) || a.fecha.localeCompare(b.fecha))};
+  }
+
+  // ================= ROTACION DE CARTERA (2026-11-19) =================
+  //
+  // Creditos y Cobros, meta 55 dias (menos es mejor). La cuenta es la de la
+  // hoja de Jose Antonio ("Indicador ISO Rotacion de Cartera"): cada tramo de
+  // antiguedad pesa por sus dias —0 a 30 = 30, 31 a 60 = 60, 61 a 90 = 90,
+  // 91 a 120 = 120, 121 o mas = 150— y la rotacion es suma(saldo x dias) ÷
+  // saldo. Los US$ pasan a RD$ con la tasa del corte. Su hoja trae otro bloque
+  // con 15/45/60/75/90 (33.1 dias en octubre); el usuario eligio este.
+  // Corte 31/10/2026 (tasa 60.5689): Santo Domingo 51.7 dias, el numero de su
+  // hoja; Punta Cana 67.0, que el no calcula (decision del usuario: las dos
+  // zonas por separado).
+  const TRAMOS_CARTERA = [
+    {clave: 'no_venc', columna: 'No venc.', nombre: '0 a 30', dias: 30},
+    {clave: 'd30', columna: '30 dias', nombre: '31 a 60', dias: 60},
+    {clave: 'd60', columna: '60 dias', nombre: '61 a 90', dias: 90},
+    {clave: 'd90', columna: '90 dias', nombre: '91 a 120', dias: 120},
+    {clave: 'd120', columna: '120 dias+', nombre: '121 o más', dias: 150},
+  ];
+  const TRATOS_CARTERA = ['normal', 'especial', 'fuera'];
+  // Un cliente que no esta clasificado y lleva esto en el nombre es de Punta Cana.
+  const PUNTA_CANA_EN_EL_NOMBRE = /PUNTA CANA|MACAO|DOMICEM/;
+
+  // "Solicitudes": la antiguedad de saldos de CBS, una factura por renglon,
+  // con los tramos ya calculados por el sistema al corte en que se bajo. El
+  // renglon de totales del final no trae moneda y queda afuera (suma RD$ con
+  // US$). `desde`/`hasta` son las fechas de las facturas: la fecha de corte la
+  // elige quien sube el archivo.
+  function parseCarteraSheets(hojas){
+    for (const {rows} of hojas){
+      const h = findHeaderRowIndex(rows, ['MONEDA', 'NOMBRE', 'FACTURA', 'BALANCE FINAL']);
+      if (h === -1) continue;
+      const H = rows[h], c = n => colIndex(H, [n]);
+      const i = {moneda: c('Moneda'), cliente: c('Nombre'), factura: c('Factura'), fecha: c('Fecha'), balance: c('Balance Final'),
+                 ...Object.fromEntries(TRAMOS_CARTERA.map(t => [t.clave, c(t.columna)]))};
+      if (Object.values(i).some(x => x < 0)) continue;
+      const filas = [];
+      for (let r = h + 1; r < rows.length; r++){
+        const row = rows[r] || [], m = normalize(row[i.moneda]), cliente = textoDe(row[i.cliente]);
+        const moneda = m === 'RD' ? 'RD$' : m === 'US' ? 'US$' : null;
+        if (!moneda || !cliente) continue;
+        filas.push({moneda, cliente, factura: textoDe(row[i.factura]), fechaFactura: fechaDeCelda(row[i.fecha]),
+                    ...Object.fromEntries(TRAMOS_CARTERA.map(t => [t.clave, numeroDe(row[i[t.clave]]) || 0])),
+                    balance: numeroDe(row[i.balance]) || 0});
+      }
+      if (!filas.length) continue;
+      return {...rangoDe(filas.map(f => f.fechaFactura).filter(Boolean)), filas,
+              clientes: new Set(filas.map(f => normalize(f.cliente))).size, conDolares: filas.some(f => f.moneda === 'US$')};
+    }
+    return null;
+  }
+
+  // La zona de cada cliente segun el cargue de Logistica: la de las plantas
+  // que le despacharon, la que suma mas m3 (con Macao).
+  function zonasDeClientesDelCargue(dias){
+    const por = new Map();
+    dias.forEach(d => [...(d.state.cargue || []), ...(d.state.cargueMacao || [])].forEach(c => {
+      const zona = (d.assumptions.zonaPlanta || {})[c.planta], k = normalize(c.cliente);
+      if (!zona || !k) return;
+      if (!por.has(k)) por.set(k, new Map());
+      sumarEn(por.get(k), zona, c.cantidad || 0);
+    }));
+    return new Map([...por].map(([k, m]) => [k, masPesado(m)]));
+  }
+
+  // De que zona es un cliente y como entra ('normal'; 'especial' = gestion
+  // especial, sin el tramo de 121 o mas; 'fuera' = no entra):
+  // 1. lo guardado: la clasificacion de octubre (logistica_cartera_semilla.py)
+  //    y lo que se cambio en la pagina;
+  // 2. si no esta, el nombre: PUNTA CANA, MACAO o DOMICEM es Punta Cana;
+  // 3. si no, la zona de las plantas que le despacharon en el cargue;
+  // 4. si no, sin clasificar: no entra hasta que se elija en la pagina.
+  function clasificacionDeCartera(cliente, guardados, zonasCargue){
+    const k = normalize(cliente), g = guardados.get(k);
+    if (g) return {zona: g.trato === 'fuera' ? null : g.zona, trato: g.trato, origen: 'guardado'};
+    if (PUNTA_CANA_EN_EL_NOMBRE.test(k)) return {zona: 'Punta Cana', trato: 'normal', origen: 'nombre'};
+    const z = zonasCargue && zonasCargue.get(k);
+    if (ZONAS.includes(z)) return {zona: z, trato: 'normal', origen: 'cargue'};
+    return {zona: null, trato: null, origen: null};
+  }
+
+  const rotacionDe = tramos => { const s = tramos.reduce((a, v) => a + v, 0);
+    return s > 0 ? tramos.reduce((a, v, i) => a + v * TRAMOS_CARTERA[i].dias, 0) / s : null; };
+
+  // `filas`: las del servidor en las fechas elegidas. Si hay mas de un corte
+  // se usa el ultimo: la cartera al cierre del periodo. `clientes`: la
+  // clasificacion guardada [{cliente, zona, trato}]. `zonasCargue`: de
+  // zonasDeClientesDelCargue(). Todo en RD$.
+  function carteraDelPeriodo(filas, clientes = [], zonasCargue = new Map()){
+    const cortes = [...new Set(filas.map(f => f.fecha))].sort();
+    const corte = cortes[cortes.length - 1] || null;
+    const delCorte = filas.filter(f => f.fecha === corte);
+    const tasa = (delCorte.find(f => f.tasa) || {}).tasa || null;
+    const guardados = new Map(clientes.map(c => [normalize(c.cliente), c]));
+    const por = new Map();
+    delCorte.forEach(f => {
+      const k = normalize(f.cliente), x = f.moneda === 'US$' ? (tasa || 0) : 1;
+      if (!por.has(k)) por.set(k, {cliente: f.cliente, monedas: new Set(), facturas: 0, tramos: TRAMOS_CARTERA.map(() => 0)});
+      const c = por.get(k);
+      c.monedas.add(f.moneda); c.facturas++;
+      TRAMOS_CARTERA.forEach((t, i) => { c.tramos[i] += (f[t.clave] || 0) * x; });
+    });
+    const ultimo = TRAMOS_CARTERA.length - 1;
+    const lista = [...por.values()].map(c => {
+      const cl = clasificacionDeCartera(c.cliente, guardados, zonasCargue);
+      // Lo que entra al indicador: gestion especial, sin el ultimo tramo.
+      const entra = cl.trato === 'normal' || cl.trato === 'especial'
+        ? c.tramos.map((v, i) => cl.trato === 'especial' && i === ultimo ? 0 : v) : TRAMOS_CARTERA.map(() => 0);
+      return {cliente: c.cliente, monedas: [...c.monedas].sort().join(' y '), facturas: c.facturas, tramos: c.tramos,
+              saldo: c.tramos.reduce((a, v) => a + v, 0), dias: rotacionDe(c.tramos), entra,
+              quitado: cl.trato === 'especial' ? c.tramos[ultimo] : 0, ...cl};
+    }).sort((a, b) => b.saldo - a.saldo || a.cliente.localeCompare(b.cliente));
+    const zonas = ZONAS.map(zona => {
+      const cs = lista.filter(c => c.zona === zona && (c.trato === 'normal' || c.trato === 'especial'));
+      const tramos = TRAMOS_CARTERA.map((t, i) => sumaDe(cs, c => c.entra[i]));
+      return {zona, clientes: cs.length, tramos, saldo: tramos.reduce((a, v) => a + v, 0), rotacion: rotacionDe(tramos)};
+    });
+    const resumen = cs => ({n: cs.length, saldo: sumaDe(cs, c => c.saldo)});
+    return {corte, cortes, tasa, sinTasa: delCorte.some(f => f.moneda === 'US$') && !tasa, zonas, clientes: lista,
+            fuera: resumen(lista.filter(c => c.trato === 'fuera')),
+            especial: {n: lista.filter(c => c.trato === 'especial').length, quitado: sumaDe(lista, c => c.quitado)},
+            sinClasificar: resumen(lista.filter(c => !c.trato)),
+            automaticos: lista.filter(c => c.origen === 'nombre' || c.origen === 'cargue').length};
   }
 
   // ================= METAS (2026-11-11) =================
@@ -2376,6 +2748,16 @@ function computeResumen(state, assumptions = {}){
     insumos: {meta: 85, minimo: true},
     incidencias: {meta: 20, minimo: false},
     reclamos: {meta: 80, minimo: true},
+    // 2026-11-18: el calculo anterior de la eficiencia, con el tiempo del PLC
+    pesaje: {meta: 75, minimo: true},
+    // 2026-11-19: rotacion de cartera, en dias (Creditos y Cobros)
+    cartera: {meta: 55, minimo: false},
+    // 2026-11-19: cumplimiento a cubicacion, pedidos a ±5% de lo cubicado
+    cubicacion: {meta: 93, minimo: true},
+    // 2026-11-19: resistencia a compresion, muestras con rotura a 28 dias >= f'c
+    resistencia: {meta: 99, minimo: true},
+    // 2026-11-19: compras, lineas de solicitud recibidas dentro del objetivo de CBS
+    compras: {meta: 80, minimo: true},
   };
   const redondeo = (v, dec) => v === null || v === undefined ? null : Math.round(v * 10 ** dec) / 10 ** dec;
   function contraMeta(clave, valor, dec){
@@ -2417,14 +2799,23 @@ function computeResumen(state, assumptions = {}){
   }
   function metasDeReportesNuevos(ind, zonasDe){
     const d = ind.disponibilidad || {tipos: []}, k = ind.carga || {zonas: []}, inc = ind.incidencias || {zonas: []}, rec = ind.reclamos || {};
+    const ef = ind.eficiencia || {zonas: [], plantas: [], conCapacidad: [], sinCapacidad: []};
+    const car = ind.cartera || {zonas: []}, cub = ind.cubicacion || {}, res = ind.resistencia || {zonas: []}, com = ind.compras || {};
+    const cartera = zona => { const z = car.zonas.find(x => x.zona === zona) || {};
+      return {...contraMeta('cartera', z.rotacion ?? null, 1), meta: METAS.cartera.meta, corte: car.corte || null,
+              saldo: z.saldo || 0, clientes: z.clientes || 0}; };
     const disp = tipo => { const t = d.tipos.find(x => x.tipo === tipo) || {};
       return {...contraMeta('disponibilidad', t.conDato ? t.pct : null, 0), meta: METAS.disponibilidad.meta,
               pctTodos: redondeo(t.registros ? t.pctTodos : null, 0), sinDato: t.sinDato || 0, registros: t.registros || 0}; };
     return {
       disponibilidadCamiones: disp('Camiones'),
       disponibilidadBombas: disp('Bombas'),
-      eficiencia: {...contraMeta('eficiencia', k.eficiencia ?? null, 0), meta: METAS.eficiencia.meta,
-                   ritmo: redondeo(k.ritmo ?? null, 0), cargas: k.n || 0},
+      eficiencia: {...contraMeta('eficiencia', ef.eficiencia ?? null, 0), meta: METAS.eficiencia.meta,
+                   conCapacidad: ef.conCapacidad.length, plantas: ef.plantas.length, sinCapacidad: ef.sinCapacidad,
+                   zonas: zonasDe(ef.zonas, z => contraMeta('eficiencia', z.eficiencia ?? null, 0))},
+      pesaje: {...contraMeta('pesaje', k.conTiempo ? k.pesaje ?? null : null, 0), meta: METAS.pesaje.meta,
+               fuera: k.pesajeFuera || [], sinCapacidad: k.pesajeSinCapacidad || [],
+               zonas: zonasDe(k.zonas, z => contraMeta('pesaje', z.conTiempo ? z.pesaje ?? null : null, 0))},
       insumos: {...contraMeta('insumos', k.conMaterial ? k.insumos : null, 0), meta: METAS.insumos.meta,
                 todos: redondeo(k.conMaterial ? k.insumosTodos : null, 0), cargas: k.conMaterial || 0,
                 zonas: zonasDe(k.zonas, z => contraMeta('insumos', z.conMaterial ? z.insumos : null, 0))},
@@ -2433,6 +2824,19 @@ function computeResumen(state, assumptions = {}){
                     zonas: zonasDe(inc.zonas, z => contraMeta('incidencias', z.n ? z.pct : null, 0))},
       reclamos: {...contraMeta('reclamos', rec.n ? rec.pct : null, 0), meta: METAS.reclamos.meta,
                  total: rec.n || 0, solucionados: rec.solucionados || 0},
+      // Rotacion de cartera (2026-11-19): Santo Domingo y Punta Cana por separado.
+      carteraSD: cartera('Santo Domingo'),
+      carteraPC: cartera('Punta Cana'),
+      // Cumplimiento a cubicacion (2026-11-19): los pedidos con empleado.
+      cubicacion: {...contraMeta('cubicacion', cub.n ? cub.pct : null, 0), meta: METAS.cubicacion.meta,
+                   pedidos: cub.n || 0, cumplen: cub.cumplen || 0},
+      // Resistencia a compresion (2026-11-19), por zona.
+      resistencia: {...contraMeta('resistencia', res.n ? res.pct : null, 0), meta: METAS.resistencia.meta,
+                    muestras: res.n || 0, cumplen: res.cumplen || 0, pendientes: res.pendientes || 0,
+                    zonas: zonasDe(res.zonas, z => contraMeta('resistencia', z.n ? z.pct : null, 0))},
+      // Compras (2026-11-19): entregas dentro del objetivo de CBS.
+      compras: {...contraMeta('compras', com.n ? com.pct : null, 0), meta: METAS.compras.meta,
+                lineas: com.n || 0, cumplen: com.cumplen || 0},
     };
   }
 
@@ -2447,14 +2851,16 @@ function computeResumen(state, assumptions = {}){
     payloadDelDia, restaurarDia, esCumplidoManual, estadoVisible,
     resumenDeCumplimiento, cumplimientoPorPlanta, serieDeCumplimiento,
     acumuladoDeCumplimiento, plantasOatYDelDia,
-    plantasDelHistorial, filtrarDiasPorPlanta, entregasDePlanta, SIN_PLANTA,
+    plantasDelHistorial, filtrarDiasPorPlanta, mesesDelHistorial, filtrarDiasPorMes, nombreDeMes, entregasDePlanta, SIN_PLANTA,
     ZONAS, PREFIJO_ZONA, zonaDePlanta, zonaDeFila, cargueConZona, filaDelFiltro, comparacionPorDia,
     SERVICIOS, NOMBRE_SERVICIO, servicioDeFila, filtrarPorServicio, filtrarDiasPorServicio,
     NOMBRE_PCT, NOMBRE_PCT_PEDIDOS,
     ADELANTO_POR_DEFECTO, ESPACIAMIENTO_POR_DEFECTO, RESPONSABLES, MOTIVOS,
     evaluarEspaciamiento, filasCancelados, reporteCancelados, reporteDelDia, reporteDelPeriodo, indicadoresDelPeriodo, METAS, canceladosDelPeriodo, metasDelPeriodo,
     parseDisponibilidadSheets, parseBatchadasSheets, parseIncidenciasSheets, parseReclamosSheets, parseAnuladosSheets,
-    disponibilidadDeEquipos, cargaEnPlanta, incidenciasDeClientes, reclamosDelPeriodo, concretoDevuelto,
+    cubicacionPorEmpleado, TOLERANCIA_CUBICACION, parseRoturasSheets, resistenciaDelPeriodo, parseComprasSheets, comprasDelPeriodo,
+    parseCarteraSheets, carteraDelPeriodo, clasificacionDeCartera, zonasDeClientesDelCargue, TRAMOS_CARTERA, TRATOS_CARTERA,
+    disponibilidadDeEquipos, eficienciaDeCarga, cargaEnPlanta, incidenciasDeClientes, reclamosDelPeriodo, desperdicioDelPeriodo,
     CAPACIDAD_PLANTA, TOLERANCIA_INSUMOS, duracionEnMinutos, parseBombeoSheets, parseTiemposSheets, medianaDe, filasImagenCumplimiento, paretoDeMotivos, motivosPorResponsable, porcentajesQueSuman100, agruparIncumplidos, conteosDelDia,
   };
 

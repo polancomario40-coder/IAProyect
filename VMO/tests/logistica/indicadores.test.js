@@ -35,7 +35,9 @@ test('tiempos: un renglon por pedido; una hora en 00:00 es que el sistema no la 
   assert.deepEqual([r.desde, r.hasta], ['2026-10-01', '2026-10-05']);
   assert.deepEqual(r.filas[0], {fecha: '2026-10-01', ordComp: '00112596', planta: 'SanIsidro', cliente: 'CIVILTEC',
     horaIni: 480, horaFin: 900, cantidad: 60.5, totalIn: 46, logro: 'NO', totalDespachado: 60.5,
-    viajesProgramados: 9, viajesEfectuados: 7, bomba: '40'});
+    viajesProgramados: 9, viajesEfectuados: 7, bomba: '40',
+    // sin columna Empleado en el archivo (2026-11-19)
+    empleado: null});
   assert.equal(r.filas[1].horaFin, null, 'HoraFin sin hora');
 });
 

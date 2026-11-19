@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="/logistica.logic.js?v=2026-10-28"></script>
+<script src="/logistica.logic.js?v=2026-11-18c"></script>
 <script src="/logistica.api.js?v=2026-10-08b"></script>
 <style>
   :root{
@@ -105,6 +105,13 @@
   .filtro select:focus-visible{outline:2px solid var(--vmo-red); outline-offset:2px;}
   .filtro .zona-de-planta{font-size:12px; color:var(--muted);}
   .filtro .alcance{margin-left:auto; font-size:11.5px; color:var(--muted); text-align:right;}
+  /* Botones por mes (2026-11-18) */
+  .meses{display:flex; gap:6px; flex-wrap:wrap;}
+  .mes-btn{background:var(--elevated); color:var(--muted); border:1px solid var(--line); border-radius:8px;
+           padding:6px 12px; font-size:12.5px; font-weight:600; font-family:inherit; cursor:pointer;}
+  .mes-btn:hover{color:var(--ink);}
+  .mes-btn.activo{background:var(--vmo-red); border-color:var(--vmo-red); color:#fff;}
+  .mes-btn:focus-visible{outline:2px solid var(--vmo-red); outline-offset:2px;}
 
   /* ── Anillos de porcentaje ──
      Dos por ventana: una unidad cada uno. Van juntos a proposito, porque la
@@ -241,10 +248,14 @@ function parDeAnillos(titulo, res){
 // lugares distintos y podrian discrepar.
 let plantaElegida = null;    // null = todas
 let servicioElegido = null;  // null = todos; 'bomba' o 'directo' (2026-10-13)
+let mesElegido = null;       // null = todo el historial; si no '2026-10' (2026-11-18)
+// Lo que cubren el acumulado y las columnas OAT: todo el historial o el mes elegido.
+const ventanaTexto = () => mesElegido ? nombreDeMes(mesElegido).toLowerCase() : 'todo el historial';
+const etiquetaVentana = () => mesElegido ? 'Mes' : 'OAT';
 let diasEnMemoria = [];      // el historial completo, cargado una sola vez
 let fallidosEnMemoria = 0;   // dias que no se pudieron cargar, para repetir el aviso
 
-function renderFiltro(dias){
+function renderFiltro(dias, meses){
   const plantas = plantasDelHistorial(dias);
   // Si la planta elegida dejo de existir en el historial, se vuelve a todas en
   // vez de mostrar una pagina vacia sin explicacion.
@@ -272,9 +283,14 @@ function renderFiltro(dias){
         <option value="">Todos</option>
         ${SERVICIOS.map(s => `<option value="${s}" ${servicioElegido === s ? 'selected' : ''}>${NOMBRE_SERVICIO[s]}</option>`).join('')}
       </select>
+      <label>Mes</label>
+      <div class="meses" role="group" aria-label="Mes">
+        <button type="button" class="mes-btn${mesElegido ? '' : ' activo'}" data-mes="" aria-pressed="${!mesElegido}">Todo</button>
+        ${meses.map(m => `<button type="button" class="mes-btn${mesElegido === m ? ' activo' : ''}" data-mes="${m}" aria-pressed="${mesElegido === m}">${nombreDeMes(m)}</button>`).join('')}
+      </div>
       <span class="alcance">${plantaElegida
         ? (esZona() ? 'Todo lo de abajo es solo de esta zona' : 'Todo lo de abajo es solo de esta planta')
-        : `El acumulado y el gráfico suman las ${plantas.length} plantas del historial`}</span>
+        : `El acumulado y el gráfico suman las ${plantas.length} plantas ${mesElegido ? 'de ' + ventanaTexto() : 'del historial'}`}</span>
     </div>`;
   document.getElementById('selPlanta').addEventListener('change', (ev) => {
     plantaElegida = ev.target.value || null;
@@ -284,6 +300,10 @@ function renderFiltro(dias){
     servicioElegido = ev.target.value || null;
     render(diasEnMemoria, fallidosEnMemoria);
   });
+  document.querySelectorAll('.mes-btn').forEach(b => b.addEventListener('click', () => {
+    mesElegido = b.dataset.mes || null;
+    render(diasEnMemoria, fallidosEnMemoria);
+  }));
 }
 
 // El token y el fetch con token viven en logistica.api.js.
@@ -399,8 +419,8 @@ function renderKpis(dias, ultimo, fallidos){
     </div></div>` : ''}
     <div class="aros">
       ${parDeAnillos(filtrado
-          ? `Acumulado${tituloPlanta().replace(' — ', ' de ')} · ${oat.dias} ${oat.dias === 1 ? 'día' : 'días'}`
-          : `Acumulado · todo el historial · ${oat.dias} ${oat.dias === 1 ? 'día' : 'días'}`, oat)}
+          ? `Acumulado${tituloPlanta().replace(' — ', ' de ')}${mesElegido ? ' · ' + ventanaTexto() : ''} · ${oat.dias} ${oat.dias === 1 ? 'día' : 'días'}`
+          : `Acumulado · ${ventanaTexto()} · ${oat.dias} ${oat.dias === 1 ? 'día' : 'días'}`, oat)}
       ${parDeAnillos(`Último día · ${ultimo.fecha}${delDia.pedidos === 0 ? ' · sin entregas' : ''}`, delDia)}
       <div class="aro-datos">
         <div>
@@ -409,7 +429,7 @@ function renderKpis(dias, ultimo, fallidos){
         </div>
         <div>
           <div class="d-val">${fmtInt(m3)}</div>
-          <div class="d-lbl">${plantaElegida ? (esZona() ? 'm³ de esta zona' : 'm³ de esta planta') : servicioElegido ? 'm³ ' + NOMBRE_SERVICIO[servicioElegido].toLowerCase() : 'm³ del historial'}</div>
+          <div class="d-lbl">${plantaElegida ? (esZona() ? 'm³ de esta zona' : 'm³ de esta planta') : servicioElegido ? 'm³ ' + NOMBRE_SERVICIO[servicioElegido].toLowerCase() : mesElegido ? 'm³ del mes' : 'm³ del historial'}</div>
         </div>
       </div>
     </div>
@@ -502,13 +522,13 @@ function renderPlantas(dias, fechaDelDia){
     <div class="panel">
       <div class="panel-head">
         <h2>Cumplimiento por planta</h2>
-        <span class="sub">OAT = todo el historial · Del día = ${fechaDelDia}</span>
+        <span class="sub">${etiquetaVentana()} = ${ventanaTexto()} · Del día = ${fechaDelDia}</span>
       </div>
       <div class="panel-body" style="padding:0;">
         <table>
           <thead><tr>
             <th>Planta</th><th>Zona</th>
-            <th class="num">OAT · Frec. despacho</th><th style="width:120px;"></th><th class="num">OAT · Inicio carga</th><th class="num">m³ OAT</th>
+            <th class="num">${etiquetaVentana()} · Frec. despacho</th><th style="width:120px;"></th><th class="num">${etiquetaVentana()} · Inicio carga</th><th class="num">m³ ${etiquetaVentana()}</th>
             <th class="num">Día · Frec. despacho</th><th style="width:120px;"></th><th class="num">Día · Inicio carga</th><th class="num">m³ del día</th>
           </tr></thead>
           <tbody>${filas.map(f => `
@@ -587,7 +607,12 @@ function renderDetalle(dias, planta){
 }
 
 function render(dias, fallidos){
-  renderFiltro(dias);
+  // El mes (2026-11-18) filtra TODO lo de abajo: acumulado, ultimo dia,
+  // grafico, motivos y tablas. Los botones salen de todo el historial.
+  const meses = mesesDelHistorial(dias);
+  if (mesElegido && !meses.includes(mesElegido)) mesElegido = null;
+  dias = filtrarDiasPorMes(dias, mesElegido);
+  renderFiltro(dias, meses);
   // El servicio (Bomba / Directo) filtra TODO lo de abajo, motivos incluidos.
   dias = filtrarDiasPorServicio(dias, servicioElegido);
   // Todo lo de abajo ve el historial YA filtrado. Los dias se conservan todos
@@ -629,13 +654,13 @@ function renderElementos(dias, fechaDelDia){
     <div class="panel">
       <div class="panel-head">
         <h2>Cumplimiento por elemento${tituloPlanta()}</h2>
-        <span class="sub">OAT = todo el historial · Del día = ${esc(fechaDelDia)}</span>
+        <span class="sub">${etiquetaVentana()} = ${ventanaTexto()} · Del día = ${esc(fechaDelDia)}</span>
       </div>
       <div class="panel-body" style="padding:0;">
         <table>
           <thead><tr>
             <th>Elemento</th>
-            <th class="num">OAT · Frec. despacho</th><th style="width:120px;"></th><th class="num">OAT · Inicio carga</th><th class="num">m³ OAT</th>
+            <th class="num">${etiquetaVentana()} · Frec. despacho</th><th style="width:120px;"></th><th class="num">${etiquetaVentana()} · Inicio carga</th><th class="num">m³ ${etiquetaVentana()}</th>
             <th class="num">Día · Frec. despacho</th><th style="width:120px;"></th><th class="num">Día · Inicio carga</th><th class="num">m³ del día</th>
           </tr></thead>
           <tbody>${oat.map(e => `
@@ -644,7 +669,7 @@ function renderElementos(dias, fechaDelDia){
         </table>
       </div>
     </div>
-    <div class="nota" style="margin:-8px 0 20px;">Elementos agrupados por tipo: "COLUMNA M1" y "COLUMNA M5" cuentan como COLUMNA. Ordenados por los m³ que movieron en todo el historial.</div>`;
+    <div class="nota" style="margin:-8px 0 20px;">Elementos agrupados por tipo: "COLUMNA M1" y "COLUMNA M5" cuentan como COLUMNA. Ordenados por los m³ que movieron en ${ventanaTexto()}.</div>`;
 }
 
 // ================= MOTIVOS DE INCUMPLIMIENTO =================

@@ -548,7 +548,7 @@ def _hora_indicador(val) -> float | None:
 
 def transformar_tiempos_despacho(rows: list[dict]) -> list[tuple]:
     """Transforma la salida de `dbo.biCumplimientoTiempoDespacho` en tuplas
-    para `logistica_tiempo_pedido`.
+    para `logistica_tiempo_pedido` (incluye la columna empleado para cubicación).
     """
     salida = []
     for row in rows:
@@ -568,6 +568,7 @@ def transformar_tiempos_despacho(rows: list[dict]) -> list[tuple]:
         v_prog = max(0.0, v_prog_raw) if v_prog_raw is not None else None
         v_ef = max(0.0, _float_o_none(row.get("ViajesEfectuados")) or 0.0)
         bomba = _texto_o_none(row.get("Bomba"))
+        empleado = _texto_o_none(row.get("Empleado"))
 
         salida.append((
             fecha_iso,
@@ -584,13 +585,262 @@ def transformar_tiempos_despacho(rows: list[dict]) -> list[tuple]:
             v_prog,
             v_ef,
             bomba[:40] if bomba else None,
+            empleado[:80] if empleado else None,
+        ))
+    return salida
+
+
+def transformar_disponibilidad(rows: list[dict]) -> list[tuple]:
+    """Transforma la salida de `dbo.biDisponibilidadEquiposUtilizado` en tuplas
+    `(fecha, tipo, equipo, utilizado, disponible)` para `logistica_disponibilidad`.
+    """
+    salida = []
+    for row in rows:
+        fecha_iso = _parse_fecha_celda(row.get("Fecha"))
+        if not fecha_iso:
+            continue
+        tipo = _texto_o_none(row.get("Tipo"))
+        equipo = _texto_o_none(row.get("Equipo"))
+        if not equipo or not tipo:
+            continue
+        usado = max(0.0, _float_o_none(row.get("Utilizado")) or 0.0)
+        disp_raw = row.get("Disponible")
+        disp = 1 if disp_raw == 1 else (0 if disp_raw == 0 else None)
+        salida.append((
+            fecha_iso,
+            tipo[:40],
+            equipo[:40],
+            usado,
+            disp,
+        ))
+    return salida
+
+
+def transformar_anulados(rows: list[dict]) -> list[tuple]:
+    """Transforma la salida de `dbo.biConducesAnulados` en tuplas
+    `(fecha, conduce, planta, cliente, m3, causa, comentario)` para `logistica_anulado`.
+    """
+    salida = []
+    for row in rows:
+        fecha_iso = _parse_fecha_celda(row.get("Fecha"))
+        conduce = _texto_o_none(row.get("Conduce"))
+        if not fecha_iso or not conduce:
+            continue
+        planta = _texto_o_none(row.get("idPlanta") or row.get("Planta"))
+        cliente = _texto_o_none(row.get("Cliente"))
+        m3 = max(0.0, _float_o_none(row.get("Cantidad")) or 0.0)
+        causa = _texto_o_none(row.get("CausaAnulacion"))
+        comentario = _texto_o_none(row.get("ComentarioAnulacion"))
+        salida.append((
+            fecha_iso,
+            conduce[:40],
+            planta[:60] if planta else None,
+            cliente[:200] if cliente else None,
+            m3,
+            causa[:100] if causa else None,
+            comentario[:500] if comentario else None,
+        ))
+    return salida
+
+
+def transformar_incidencias(rows: list[dict]) -> list[tuple]:
+    """Transforma la salida de `dbo.biBitacoraSatifacionVaciado` en tuplas
+    `(fecha, orden, planta, cliente, volumen, percepcion)` para `logistica_incidencia`.
+    """
+    salida = []
+    for row in rows:
+        fecha_iso = _parse_fecha_celda(row.get("Fecha"))
+        if not fecha_iso:
+            continue
+        planta = _texto_o_none(row.get("Planta"))
+        cliente = _texto_o_none(row.get("Cliente"))
+        volumen = _float_o_none(row.get("VolumenServido"))
+        percepcion = _texto_o_none(row.get("Percepcion"))
+        salida.append((
+            fecha_iso,
+            len(salida),
+            planta[:60] if planta else None,
+            cliente[:200] if cliente else None,
+            volumen,
+            percepcion[:100] if percepcion else None,
+        ))
+    return salida
+
+
+def transformar_reclamos(rows: list[dict]) -> list[tuple]:
+    """Transforma la salida de `dbo.sacReporteReclamos` en tuplas
+    `(fecha, reclamo, cliente, tipo, estado, procede, costo)` para `logistica_reclamo`.
+    """
+    salida = []
+    for row in rows:
+        fecha_iso = _parse_fecha_celda(row.get("FechaReclamacion") or row.get("Fecha"))
+        reclamo = _texto_o_none(row.get("Reclamo"))
+        if not fecha_iso or not reclamo:
+            continue
+        cliente = _texto_o_none(row.get("Cliente"))
+        tipo = _texto_o_none(row.get("TipoReclamo"))
+        estado = _texto_o_none(row.get("Estado"))
+        procede = _texto_o_none(row.get("Procede"))
+        costo = _float_o_none(row.get("CostoReclamacion"))
+        salida.append((
+            fecha_iso,
+            reclamo[:40],
+            cliente[:200] if cliente else None,
+            tipo[:100] if tipo else None,
+            estado[:60] if estado else "PENDIENTE",
+            procede[:20] if procede else None,
+            costo,
+        ))
+    return salida
+
+
+def transformar_cartera(rows: list[dict], fecha_corte: str, tasa: float | None = 60.0) -> list[tuple]:
+    """Transforma la salida de `dbo.biAgingCtasXCobrar` en tuplas
+    para `logistica_cartera` a la fecha de corte indicada.
+    """
+    salida = []
+    for row in rows:
+        cliente = _texto_o_none(row.get("Nombre") or row.get("Cliente"))
+        if not cliente:
+            continue
+        moneda_raw = _texto_o_none(row.get("Moneda")) or "RD$"
+        moneda = "RD$" if "RD" in moneda_raw.upper() else "US$"
+        factura = _texto_o_none(row.get("Factura"))
+        fecha_factura = _parse_fecha_celda(row.get("Fecha"))
+        no_venc = _float_o_none(row.get("NoVenc")) or 0.0
+        d30 = _float_o_none(row.get("A30")) or 0.0
+        d60 = _float_o_none(row.get("A60")) or 0.0
+        d90 = _float_o_none(row.get("A90")) or 0.0
+        d120 = _float_o_none(row.get("AMas90")) or 0.0
+        balance = _float_o_none(row.get("BalanceDoc")) or 0.0
+        salida.append((
+            fecha_corte,
+            len(salida),
+            moneda,
+            cliente[:200],
+            factura[:40] if factura else None,
+            fecha_factura,
+            no_venc,
+            d30,
+            d60,
+            d90,
+            d120,
+            balance,
+            tasa,
+        ))
+    return salida
+
+
+def transformar_roturas(rows: list[dict]) -> list[tuple]:
+    """Transforma la salida de `dbo.biPesajeVsRoturas` en tuplas
+    `(fecha, orden, planta, conduce, cliente, producto, fc, r7, r28)` para `logistica_rotura`.
+    """
+    salida = []
+    for row in rows:
+        fecha_iso = _parse_fecha_celda(row.get("Fecha"))
+        if not fecha_iso:
+            continue
+        planta = _texto_o_none(row.get("Planta"))
+        conduce = _texto_o_none(row.get("Conduce"))
+        cliente = _texto_o_none(row.get("Cliente"))
+        producto = _texto_o_none(row.get("Producto"))
+        fc = max(0.0, _float_o_none(row.get("Resistencia")) or 0.0)
+        r7 = _float_o_none(row.get("Roturas7"))
+        r28 = _float_o_none(row.get("Roturas28"))
+        if not ((r7 and r7 > 0) or (r28 and r28 > 0)):
+            continue
+        salida.append((
+            fecha_iso,
+            len(salida),
+            planta[:60] if planta else "Sin planta",
+            conduce[:40] if conduce else None,
+            cliente[:200] if cliente else None,
+            producto[:200] if producto else None,
+            fc,
+            r7 if (r7 and r7 > 0) else None,
+            r28 if (r28 and r28 > 0) else None,
+        ))
+    return salida
+
+
+def transformar_compras(rows: list[dict]) -> list[tuple]:
+    """Transforma la salida de `dbo.biTiemposSolicitudCompra` en tuplas
+    para `logistica_compra`.
+    """
+    salida = []
+    for row in rows:
+        solicitud = _texto_o_none(row.get("Solicitud"))
+        fecha_oc = _parse_fecha_celda(row.get("Fecha O/C") or row.get("FechaSolicitud"))
+        if not solicitud or not fecha_oc:
+            continue
+        desc = _texto_o_none(row.get("Motiviacion") or row.get("Motivacion"))
+        f_sol = _parse_fecha_celda(row.get("FechaSolicitud"))
+        f_rec = _parse_fecha_celda(row.get("UltimaRecepcion"))
+        dias = _float_o_none(row.get("TiempoTotal"))
+        obj = _float_o_none(row.get("Objetivo")) or 15.0
+        aplica_raw = row.get("Aplica")
+        aplica = 1 if aplica_raw is None or str(aplica_raw).strip().upper() in ("1", "SI", "TRUE") else 0
+        cumple_raw = row.get("Cumple")
+        if cumple_raw is not None and str(cumple_raw).strip().upper() in ("1", "SI", "TRUE"):
+            cumple = 1
+        elif cumple_raw is not None and str(cumple_raw).strip().upper() in ("0", "NO", "FALSE"):
+            cumple = 0
+        else:
+            cumple = 1 if (dias is not None and dias <= obj) else 0
+
+        salida.append((
+            fecha_oc,
+            len(salida),
+            solicitud[:40],
+            desc[:300] if desc else None,
+            f_sol,
+            f_rec,
+            dias,
+            obj,
+            aplica,
+            cumple,
+        ))
+    return salida
+
+
+def transformar_batchadas(rows: list[dict]) -> list[tuple]:
+    """Transforma la salida de `dbo.sp_BatchPlan_Centralizado` en tuplas
+    para `logistica_batchada`.
+    """
+    salida = []
+    for row in rows:
+        fecha_iso = _parse_fecha_celda(row.get("Fecha"))
+        if not fecha_iso:
+            continue
+        planta = _texto_o_none(row.get("idPlanta") or row.get("Planta"))
+        conduce = _texto_o_none(row.get("Remision") or row.get("Conduce"))
+        m3 = max(0.0, _float_o_none(row.get("MetrosCubicos")) or 0.0)
+        minutos = max(0.0, _float_o_none(row.get("TimeBatch") or row.get("TiempoCarga")) or 0.0)
+        estado = _texto_o_none(row.get("BatchStatus") or row.get("Estado"))
+        dev_cemento = _float_o_none(row.get("dpCemento1") or row.get("VarCemento")) or 0.0
+        dev_agregados = _float_o_none(row.get("dpAgregado1") or row.get("VarArena")) or 0.0
+        dev_agua = _float_o_none(row.get("dpAgua")) or 0.0
+        dev_aditivos = _float_o_none(row.get("dpAditivo1")) or 0.0
+        salida.append((
+            fecha_iso,
+            "centralizado",
+            len(salida),
+            planta[:60] if planta else "Sin planta",
+            conduce[:40] if conduce else None,
+            m3,
+            minutos,
+            estado[:20] if estado else "C",
+            dev_cemento,
+            dev_agregados,
+            dev_agua,
+            dev_aditivos,
         ))
     return salida
 
 
 def sincronizar_logistica_indicadores(desde: str, hasta: str, conn=None, forzar: bool = False) -> dict:
-    """Ejecuta `biCantProdporEquipoPivot` y `biCumplimientoTiempoDespacho` para
-    el rango `[desde, hasta]` y guarda los resultados en `logistica.db`.
+    """Ejecuta los Stored Procedures de CBS SQL Server para el rango `[desde, hasta]`
+    y guarda los resultados en todas las tablas correspondientes de `logistica.db`.
     """
     clave_rango = f"{desde}..{hasta}"
     ahora = time.time()
@@ -602,7 +852,16 @@ def sincronizar_logistica_indicadores(desde: str, hasta: str, conn=None, forzar:
     datos = ejecutar_sps_sqlserver({
         "bombeo": f"EXEC dbo.biCantProdporEquipoPivot @Desde='{f_desde}', @Hasta='{f_hasta}'",
         "tiempos": f"EXEC dbo.biCumplimientoTiempoDespacho @desde='{f_desde}', @hasta='{f_hasta}'",
+        "disponibilidad": f"EXEC dbo.biDisponibilidadEquiposUtilizado @desde='{f_desde}', @hasta='{f_hasta}'",
+        "anulados": f"EXEC dbo.biConducesAnulados @desde='{f_desde}', @hasta='{f_hasta}'",
+        "incidencias": f"EXEC dbo.biBitacoraSatifacionVaciado @desde='{f_desde}', @hasta='{f_hasta}'",
+        "reclamos": f"EXEC dbo.sacReporteReclamos @desde='{f_desde}', @hasta='{f_hasta}'",
+        "cartera": f"EXEC dbo.biAgingCtasXCobrar @desde='{f_desde}', @hasta='{f_hasta}'",
+        "roturas": f"EXEC dbo.biPesajeVsRoturas @desde='{f_desde}', @hasta='{f_hasta}'",
+        "compras": f"EXEC dbo.biTiemposSolicitudCompra @desde='{f_desde}', @hasta='{f_hasta}'",
+        "batchadas": f"EXEC dbo.sp_BatchPlan_Centralizado @desde='{f_desde}', @hasta='{f_hasta}'",
     })
+
     filas_bombeo = [
         f for f in transformar_bombeo_pivot(datos.get("bombeo", []))
         if desde <= f[0] <= hasta
@@ -611,6 +870,35 @@ def sincronizar_logistica_indicadores(desde: str, hasta: str, conn=None, forzar:
         f for f in transformar_tiempos_despacho(datos.get("tiempos", []))
         if desde <= f[0] <= hasta
     ]
+    filas_disp = [
+        f for f in transformar_disponibilidad(datos.get("disponibilidad", []))
+        if desde <= f[0] <= hasta
+    ]
+    filas_anulados = [
+        f for f in transformar_anulados(datos.get("anulados", []))
+        if desde <= f[0] <= hasta
+    ]
+    filas_incidencias = [
+        f for f in transformar_incidencias(datos.get("incidencias", []))
+        if desde <= f[0] <= hasta
+    ]
+    filas_reclamos = [
+        f for f in transformar_reclamos(datos.get("reclamos", []))
+        if desde <= f[0] <= hasta
+    ]
+    filas_roturas = [
+        f for f in transformar_roturas(datos.get("roturas", []))
+        if desde <= f[0] <= hasta
+    ]
+    filas_compras = [
+        f for f in transformar_compras(datos.get("compras", []))
+        if desde <= f[0] <= hasta
+    ]
+    filas_batchadas = [
+        f for f in transformar_batchadas(datos.get("batchadas", []))
+        if desde <= f[0] <= hasta
+    ]
+    filas_cartera = transformar_cartera(datos.get("cartera", []), fecha_corte=hasta)
 
     propia = conn is None
     if propia:
@@ -619,12 +907,30 @@ def sincronizar_logistica_indicadores(desde: str, hasta: str, conn=None, forzar:
     try:
         r_b = core._log_ind_reemplazar(conn, "logistica_bombeo", desde, hasta, filas_bombeo)
         r_t = core._log_ind_reemplazar(conn, "logistica_tiempo_pedido", desde, hasta, filas_tiempos)
+        r_d = core._log_ind_reemplazar(conn, "logistica_disponibilidad", desde, hasta, filas_disp)
+        r_a = core._log_ind_reemplazar(conn, "logistica_anulado", desde, hasta, filas_anulados)
+        r_i = core._log_ind_reemplazar(conn, "logistica_incidencia", desde, hasta, filas_incidencias)
+        r_r = core._log_ind_reemplazar(conn, "logistica_reclamo", desde, hasta, filas_reclamos)
+        r_rot = core._log_ind_reemplazar(conn, "logistica_rotura", desde, hasta, filas_roturas)
+        r_com = core._log_ind_reemplazar(conn, "logistica_compra", desde, hasta, filas_compras)
+        r_bat = core._log_ind_reemplazar(conn, "logistica_batchada", desde, hasta, filas_batchadas, fuente="centralizado")
+        if filas_cartera:
+            core._log_ind_reemplazar(conn, "logistica_cartera", hasta, hasta, filas_cartera)
+
         _SYNC_TS_IND[clave_rango] = ahora
         return {
             "desde": desde,
             "hasta": hasta,
             "bombeo_filas": r_b["filas"],
             "tiempos_filas": r_t["filas"],
+            "disponibilidad_filas": r_d["filas"],
+            "anulados_filas": r_a["filas"],
+            "incidencias_filas": r_i["filas"],
+            "reclamos_filas": r_r["filas"],
+            "roturas_filas": r_rot["filas"],
+            "compras_filas": r_com["filas"],
+            "batchadas_filas": r_bat["filas"],
+            "cartera_filas": len(filas_cartera),
         }
     finally:
         if propia:

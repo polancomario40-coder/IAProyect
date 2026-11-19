@@ -265,6 +265,8 @@ class LogFilaTiempo(BaseModel):
     viajesProgramados: float | None = Field(default=None, ge=0)
     viajesEfectuados: float = Field(ge=0)
     bomba: str | None = Field(default=None, max_length=40)
+    # quien cubica la obra (2026-11-19); los archivos viejos no lo traen
+    empleado: str | None = Field(default=None, max_length=80)
 
 
 class LogBombeoRequest(BaseModel):
@@ -317,7 +319,7 @@ async def logistica_subir_tiempos(req: LogTiemposRequest, authorization: str = H
     _ind_validar_rango(req.desde, req.hasta, [f.fecha for f in req.filas])
     return _ind_guardar("logistica_tiempo_pedido", req.desde, req.hasta, [
         (f.fecha, i, f.ordComp, f.planta, f.cliente, f.horaIni, f.horaFin, f.cantidad, f.totalIn,
-         f.logro, f.totalDespachado, f.viajesProgramados, f.viajesEfectuados, f.bomba)
+         f.logro, f.totalDespachado, f.viajesProgramados, f.viajesEfectuados, f.bomba, f.empleado)
         for i, f in enumerate(req.filas)])
 
 
@@ -464,6 +466,124 @@ async def logistica_subir_anulados(req: LogAnuladosRequest, authorization: str =
     _ind_sin_repetidos([(f.fecha, f.conduce) for f in req.filas], "conduce_repetido")
     return _ind_guardar("logistica_anulado", req.desde, req.hasta, [
         (f.fecha, f.conduce, f.planta, f.cliente, f.m3, f.causa, f.comentario) for f in req.filas])
+
+
+# "Batchada vs Roturas de Calidad" (2026-11-19): las cargas con muestra, con
+# su f'c y las roturas a 7 y 28 dias. Se sube por rango de fechas de vaciado.
+class LogFilaRotura(BaseModel):
+    fecha: str = Field(pattern=RE_FECHA)
+    planta: str = Field(min_length=1, max_length=60)
+    conduce: str | None = Txt(40)
+    cliente: str | None = Txt(200)
+    producto: str | None = Txt(200)
+    fc: float = Field(ge=0)
+    r7: float | None = Field(default=None, gt=0)
+    r28: float | None = Field(default=None, gt=0)
+
+
+class LogRoturasRequest(BaseModel):
+    desde: str = Field(pattern=RE_FECHA)
+    hasta: str = Field(pattern=RE_FECHA)
+    filas: list[LogFilaRotura] = Field(max_length=core.LOG_MAX_FILAS)
+
+
+@router.post("/api/logistica/indicadores/roturas")
+async def logistica_subir_roturas(req: LogRoturasRequest, authorization: str = Header(None)):
+    """"Batchada vs Roturas de Calidad": reemplaza las fechas del rango."""
+    verificar_token(authorization)
+    _ind_validar_rango(req.desde, req.hasta, [f.fecha for f in req.filas])
+    return _ind_guardar("logistica_rotura", req.desde, req.hasta, [
+        (f.fecha, i, f.planta, f.conduce, f.cliente, f.producto, f.fc, f.r7, f.r28) for i, f in enumerate(req.filas)])
+
+
+# "Tiempos de sol. compra" (2026-11-19): las lineas de solicitud de compra
+# recibidas, con lo que calcula CBS. Se sube por rango de fechas de la O/C.
+class LogFilaCompra(BaseModel):
+    fecha: str = Field(pattern=RE_FECHA)
+    solicitud: str = Field(min_length=1, max_length=40)
+    descripcion: str | None = Txt(300)
+    fechaSolicitud: str | None = Field(default=None, pattern=RE_FECHA)
+    fechaRecepcion: str | None = Field(default=None, pattern=RE_FECHA)
+    dias: float | None = None
+    objetivo: float | None = Field(default=None, ge=0)
+    aplica: bool = True
+    cumple: bool
+
+
+class LogComprasRequest(BaseModel):
+    desde: str = Field(pattern=RE_FECHA)
+    hasta: str = Field(pattern=RE_FECHA)
+    filas: list[LogFilaCompra] = Field(max_length=core.LOG_MAX_FILAS)
+
+
+@router.post("/api/logistica/indicadores/compras")
+async def logistica_subir_compras(req: LogComprasRequest, authorization: str = Header(None)):
+    """"Tiempos de sol. compra": reemplaza las fechas del rango."""
+    verificar_token(authorization)
+    _ind_validar_rango(req.desde, req.hasta, [f.fecha for f in req.filas])
+    return _ind_guardar("logistica_compra", req.desde, req.hasta, [
+        (f.fecha, i, f.solicitud, f.descripcion, f.fechaSolicitud, f.fechaRecepcion, f.dias, f.objetivo,
+         int(f.aplica), int(f.cumple)) for i, f in enumerate(req.filas)])
+
+
+# "Solicitudes" (antiguedad de saldos, 2026-11-19): la cartera a una fecha de
+# corte, para la rotacion de cartera. Se sube un corte por vez: desde = hasta
+# = la fecha de corte, y todas las filas llevan esa fecha.
+class LogFilaCartera(BaseModel):
+    fecha: str = Field(pattern=RE_FECHA)
+    moneda: str = Field(pattern=r"^(RD\$|US\$)$")
+    cliente: str = Field(min_length=1, max_length=200)
+    factura: str | None = Txt(40)
+    fechaFactura: str | None = Field(default=None, pattern=RE_FECHA)
+    no_venc: float = 0
+    d30: float = 0
+    d60: float = 0
+    d90: float = 0
+    d120: float = 0
+    balance: float = 0
+
+
+class LogCarteraRequest(BaseModel):
+    desde: str = Field(pattern=RE_FECHA)
+    hasta: str = Field(pattern=RE_FECHA)
+    tasa: float | None = Field(default=None, gt=0, lt=1000)
+    filas: list[LogFilaCartera] = Field(max_length=core.LOG_MAX_FILAS)
+
+
+@router.post("/api/logistica/indicadores/cartera")
+async def logistica_subir_cartera(req: LogCarteraRequest, authorization: str = Header(None)):
+    """"Solicitudes" (antiguedad de saldos): reemplaza el corte de esa fecha."""
+    verificar_token(authorization)
+    if req.desde != req.hasta:
+        raise HTTPException(status_code=422, detail="un_solo_corte")
+    _ind_validar_rango(req.desde, req.hasta, [f.fecha for f in req.filas])
+    if req.tasa is None and any(f.moneda == "US$" for f in req.filas):
+        raise HTTPException(status_code=422, detail="falta_tasa")
+    return _ind_guardar("logistica_cartera", req.desde, req.hasta, [
+        (f.fecha, i, f.moneda, f.cliente.strip(), f.factura, f.fechaFactura, f.no_venc, f.d30, f.d60,
+         f.d90, f.d120, f.balance, req.tasa) for i, f in enumerate(req.filas)])
+
+
+class LogCarteraClienteRequest(BaseModel):
+    cliente: str = Field(min_length=1, max_length=200)
+    zona: str | None = Field(default=None, pattern=r"^(Santo Domingo|Punta Cana)$")
+    trato: str = Field(pattern=r"^(normal|especial|fuera)$")
+
+
+@router.put("/api/logistica/cartera/clientes")
+async def logistica_clasificar_cliente_cartera(req: LogCarteraClienteRequest, authorization: str = Header(None)):
+    """De que zona es un cliente de la cartera y como entra. 'fuera' va sin zona;
+    los otros dos la necesitan."""
+    verificar_token(authorization)
+    if req.trato != "fuera" and req.zona is None:
+        raise HTTPException(status_code=422, detail="falta_zona")
+    core.setup_logistica_db()
+    conn = core._log_conn()
+    try:
+        return core._log_cartera_clasificar(conn, req.cliente.strip(), None if req.trato == "fuera" else req.zona,
+                                            req.trato)
+    finally:
+        conn.close()
 
 
 @router.get("/api/logistica/indicadores")

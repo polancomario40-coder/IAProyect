@@ -5828,6 +5828,70 @@ def setup_logistica_db(conn=None):
             comentario TEXT,
             PRIMARY KEY (fecha, conduce)
         );
+        -- "Solicitudes" (antiguedad de saldos, 2026-11-19): la cartera a una
+        -- fecha de corte, factura por factura, para la rotacion de cartera.
+        -- `fecha` es la fecha de corte: subir otra vez ese corte lo reemplaza.
+        -- Los tramos vienen calculados por el sistema (no_venc = 0 a 30 dias,
+        -- d30 = 31 a 60 ... d120 = 121 o mas), en la moneda de la factura.
+        -- `tasa`: RD$ por US$ de ese corte, la misma en todas sus filas.
+        CREATE TABLE IF NOT EXISTS logistica_cartera (
+            fecha         TEXT NOT NULL,
+            orden         INTEGER NOT NULL,
+            moneda        TEXT NOT NULL CHECK (moneda IN ('RD$', 'US$')),
+            cliente       TEXT NOT NULL,
+            factura       TEXT,
+            fecha_factura TEXT,
+            no_venc       REAL NOT NULL,
+            d30           REAL NOT NULL,
+            d60           REAL NOT NULL,
+            d90           REAL NOT NULL,
+            d120          REAL NOT NULL,
+            balance       REAL NOT NULL,
+            tasa          REAL,
+            PRIMARY KEY (fecha, orden)
+        );
+        -- "Batchada vs Roturas de Calidad" (2026-11-19): las cargas a las que
+        -- se les tomo muestra, con su f'c y las roturas a 7 y 28 dias (NULL:
+        -- todavia no hay). `fecha` es la del vaciado; se sube por rango.
+        CREATE TABLE IF NOT EXISTS logistica_rotura (
+            fecha    TEXT NOT NULL,
+            orden    INTEGER NOT NULL,
+            planta   TEXT NOT NULL,
+            conduce  TEXT,
+            cliente  TEXT,
+            producto TEXT,
+            fc       REAL NOT NULL,
+            r7       REAL,
+            r28      REAL,
+            PRIMARY KEY (fecha, orden)
+        );
+        -- "Tiempos de sol. compra" (2026-11-19): cada linea de solicitud de
+        -- compra ya recibida, con el tiempo total, el objetivo en dias y si
+        -- cumple, tal cual los calcula CBS. `fecha` es la de la orden de compra,
+        -- que es por la que se filtra la lista.
+        CREATE TABLE IF NOT EXISTS logistica_compra (
+            fecha           TEXT NOT NULL,
+            orden           INTEGER NOT NULL,
+            solicitud       TEXT NOT NULL,
+            descripcion     TEXT,
+            fecha_solicitud TEXT,
+            fecha_recepcion TEXT,
+            dias            REAL,
+            objetivo        REAL,
+            aplica          INTEGER NOT NULL CHECK (aplica IN (0, 1)),
+            cumple          INTEGER NOT NULL CHECK (cumple IN (0, 1)),
+            PRIMARY KEY (fecha, orden)
+        );
+        -- De que zona es cada cliente en la rotacion de cartera y como entra:
+        -- 'normal', 'especial' (gestion especial: sin el tramo de 121 o mas) o
+        -- 'fuera' (no entra; sin zona). Arranca con logistica_cartera_semilla.py
+        -- y se cambia desde la pagina Indicadores.
+        CREATE TABLE IF NOT EXISTS logistica_cartera_cliente (
+            cliente TEXT PRIMARY KEY,
+            zona    TEXT CHECK (zona IN ('Santo Domingo', 'Punta Cana')),
+            trato   TEXT NOT NULL CHECK (trato IN ('normal', 'especial', 'fuera')),
+            CHECK ((trato = 'fuera') = (zona IS NULL))
+        );
         CREATE TABLE IF NOT EXISTS logistica_responsable (
             fecha TEXT NOT NULL,
             clave TEXT NOT NULL,
@@ -5848,6 +5912,10 @@ def setup_logistica_db(conn=None):
         for columna in ("bomba", "vendedor", "zona_prog"):
             if columna not in cols:
                 conn.execute(f"ALTER TABLE logistica_programacion ADD COLUMN {columna} TEXT")
+        # `empleado` del reporte de tiempos (2026-11-19): quien cubica la obra,
+        # para el cumplimiento a cubicacion. Lo subido antes queda en NULL.
+        if "empleado" not in [c[1] for c in conn.execute("PRAGMA table_info(logistica_tiempo_pedido)")]:
+            conn.execute("ALTER TABLE logistica_tiempo_pedido ADD COLUMN empleado TEXT")
         # `tolerancia_adelanto_min` (2026-10-02) entra igual: los dias guardados
         # antes quedan en NULL y el navegador cae al default al abrirlos. Es
         # NULL y no un numero escrito porque un dia viejo NO tenia ese supuesto,
@@ -5858,6 +5926,17 @@ def setup_logistica_db(conn=None):
         # `espaciamiento_min` (2026-10-06), mismo criterio: NULL es "no habia"
         if "espaciamiento_min" not in cols_dia:
             conn.execute("ALTER TABLE logistica_dia ADD COLUMN espaciamiento_min REAL")
+        # La clasificacion de octubre de los clientes de la cartera (2026-11-19),
+        # solo en una base que no tiene ninguno: despues manda lo que se cambie
+        # desde la pagina.
+        if conn.execute("SELECT COUNT(*) FROM logistica_cartera_cliente").fetchone()[0] == 0:
+            import logistica_cartera_semilla as semilla
+            conn.executemany(
+                "INSERT OR IGNORE INTO logistica_cartera_cliente (cliente, zona, trato) VALUES (?, ?, ?)",
+                [(c, "Santo Domingo", "normal") for c in semilla.SANTO_DOMINGO]
+                + [(c, "Santo Domingo", "especial") for c in semilla.GESTION_ESPECIAL]
+                + [(c, "Punta Cana", "normal") for c in semilla.PUNTA_CANA]
+                + [(c, None, "fuera") for c in semilla.FUERA])
     finally:
         if propia:
             conn.close()
@@ -5961,13 +6040,18 @@ LOG_IND_COLUMNAS = {
     "logistica_bombeo": ("fecha", "equipo", "nombre", "m3"),
     "logistica_tiempo_pedido": ("fecha", "orden", "ord_comp", "planta", "cliente", "hora_ini",
                                 "hora_fin", "cantidad", "total_in", "logro", "total_despachado",
-                                "viajes_programados", "viajes_efectuados", "bomba"),
+                                "viajes_programados", "viajes_efectuados", "bomba", "empleado"),
     "logistica_disponibilidad": ("fecha", "tipo", "equipo", "utilizado", "disponible"),
     "logistica_batchada": ("fecha", "fuente", "orden", "planta", "conduce", "m3", "minutos", "estado",
                            "dev_cemento", "dev_agregados", "dev_agua", "dev_aditivos"),
     "logistica_incidencia": ("fecha", "orden", "planta", "cliente", "volumen", "percepcion"),
     "logistica_reclamo": ("fecha", "reclamo", "cliente", "tipo", "estado", "procede", "costo"),
     "logistica_anulado": ("fecha", "conduce", "planta", "cliente", "m3", "causa", "comentario"),
+    "logistica_cartera": ("fecha", "orden", "moneda", "cliente", "factura", "fecha_factura", "no_venc",
+                          "d30", "d60", "d90", "d120", "balance", "tasa"),
+    "logistica_rotura": ("fecha", "orden", "planta", "conduce", "cliente", "producto", "fc", "r7", "r28"),
+    "logistica_compra": ("fecha", "orden", "solicitud", "descripcion", "fecha_solicitud", "fecha_recepcion",
+                         "dias", "objetivo", "aplica", "cumple"),
 }
 # El nombre de cada reporte en la API y la pagina, y su tabla.
 LOG_IND_REPORTES = {
@@ -5978,6 +6062,9 @@ LOG_IND_REPORTES = {
     "incidencias": "logistica_incidencia",
     "reclamos": "logistica_reclamo",
     "anulados": "logistica_anulado",
+    "cartera": "logistica_cartera",
+    "roturas": "logistica_rotura",
+    "compras": "logistica_compra",
 }
 
 
@@ -6015,7 +6102,18 @@ def _log_ind_leer(conn, desde: str, hasta: str) -> dict:
         return [f[0] for f in conn.execute(f"SELECT DISTINCT fecha FROM {tabla} ORDER BY fecha")]
 
     return {**{nombre: filas(tabla) for nombre, tabla in LOG_IND_REPORTES.items()},
-            "fechas": {nombre: fechas(tabla) for nombre, tabla in LOG_IND_REPORTES.items()}}
+            "fechas": {nombre: fechas(tabla) for nombre, tabla in LOG_IND_REPORTES.items()},
+            # La zona y el trato de cada cliente de la cartera (2026-11-19).
+            "cartera_clientes": [dict(zip(("cliente", "zona", "trato"), f)) for f in conn.execute(
+                "SELECT cliente, zona, trato FROM logistica_cartera_cliente ORDER BY cliente")]}
+
+
+def _log_cartera_clasificar(conn, cliente: str, zona: str | None, trato: str) -> dict:
+    """Guarda de que zona es un cliente de la cartera y como entra."""
+    conn.execute("INSERT INTO logistica_cartera_cliente (cliente, zona, trato) VALUES (?, ?, ?) "
+                 "ON CONFLICT(cliente) DO UPDATE SET zona = excluded.zona, trato = excluded.trato",
+                 (cliente, zona, trato))
+    return {"cliente": cliente, "zona": zona, "trato": trato}
 
 
 def _log_listar_dias(conn) -> list[dict]:

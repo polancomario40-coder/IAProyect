@@ -92,7 +92,7 @@ test('disponibilidad: sobre los registros con dato y, aparte, contando los vacio
   assert.equal(cam.equipos[0].equipo, 'C', 'primero el que mas dias no estuvo disponible');
 });
 
-test('carga en planta: ritmo real, las dos versiones de insumos y solo las cargas realizadas', () => {
+test('control de insumos: las dos versiones y solo las cargas realizadas', () => {
   const b = (planta, m3, minutos, dev = {}, estado = 'Realizado') => ({fecha: '2026-10-01', planta, m3, minutos, estado,
     dev_cemento: 0, dev_agregados: 0, dev_agua: 0, dev_aditivos: null, ...dev});
   const k = L.cargaEnPlanta([
@@ -101,24 +101,48 @@ test('carga en planta: ritmo real, las dos versiones de insumos y solo las carga
     b('Movil VIII', 7, 6, {}, 'Cancelado'),                         // no entra
   ], ['SDN', 'Movil VIII', 'Movil VI']);
   assert.equal(k.n, 3);
-  assert.equal(k.ritmo, 60 * 21 / 14);
   assert.equal(k.insumos.toFixed(1), '66.7');
   assert.equal(k.insumosTodos.toFixed(1), '33.3');
   assert.deepEqual(k.fallas, {cemento: 0, agregados: 1, agua: 1, aditivos: 0});
   assert.deepEqual(k.sinBatchadas, ['Movil VI']);
-  assert.equal(k.eficiencia, null, 'sin la capacidad de la planta no hay eficiencia');
+  assert.ok(!('eficiencia' in k), 'la eficiencia ya no sale del PLC (2026-11-18)');
   const sdn = k.plantas.find(p => p.planta === 'SDN');
-  assert.deepEqual([sdn.zona, sdn.n, sdn.ritmo, sdn.minutosPorCarga], ['Santo Domingo', 2, 105, 4]);
+  assert.deepEqual([sdn.zona, sdn.n, sdn.m3], ['Santo Domingo', 2, 14]);
   assert.deepEqual(k.zonas.map(z => [z.zona, z.n]), [['Santo Domingo', 2], ['Punta Cana', 1]]);
 });
 
-test('eficiencia de carga: tiempo segun la capacidad / tiempo real, cuando la planta tiene capacidad', () => {
-  L.CAPACIDAD_PLANTA.SDN = 120;   // 120 m3/h: 8 m3 en 4 minutos
-  try {
-    const k = L.cargaEnPlanta([{fecha: '2026-10-01', planta: 'SDN', m3: 8, minutos: 5 + 1 / 3, estado: 'Realizado'}]);
-    assert.equal(Math.round(k.eficiencia), 75);
-    assert.equal(k.plantas[0].capacidad, 120);
-  } finally { delete L.CAPACIDAD_PLANTA.SDN; }
+// Eficiencia de carga (reunion del 2026-11-18): del cargue de cada dia, del
+// primer al ultimo conduce de cada planta.
+const viaje = (planta, horaMin, cantidad) => ({ficha: 'F-1', planta, horaMin, cantidad, cliente: 'ACME', obra: 'TORRE'});
+const diaCargue = (fecha, cargue, cargueMacao = []) => ({fecha, assumptions: {zonaPlanta: {}}, state: {fecha, cargue, cargueMacao}});
+
+test('las capacidades de la reunion del 18/11/2026', () => {
+  assert.deepEqual(L.CAPACIDAD_PLANTA, {SANISIDRO: 60, MOVILII: 60, MOVILIII: 60, MOVILIV: 52, MOVILV: 40, MOVILVII: 60,
+                                        MOVILVIII: 100, SDN: 49, MICHE: 100});
+});
+
+test('eficiencia de carga: m3 del dia segun la capacidad / tiempo del primer al ultimo conduce', () => {
+  // SanIsidro (60 m3/h): 30 m3 deberian tardar 30 min; del primer al ultimo conduce pasaron 60 -> 50%.
+  // Macao entra. Un dia con un solo conduce no tiene tiempo y no entra.
+  const e = L.eficienciaDeCarga([
+    diaCargue('2026-10-01', [viaje('SanIsidro', 480, 10), viaje('SanIsidro', 510, 10)], [viaje('SanIsidro', 540, 10)]),
+    diaCargue('2026-10-02', [viaje('SanIsidro', 600, 8)]),
+  ]);
+  const si = e.plantas.find(p => p.planta === 'SanIsidro');
+  assert.deepEqual([si.dias, si.conduces, si.m3, si.horas, si.capacidad], [2, 4, 38, 1, 60]);
+  assert.equal(Math.round(e.eficiencia), 50);
+  assert.equal(si.ritmo, 30, 'm3 por hora solo de los dias con tiempo');
+});
+
+test('eficiencia de carga: una planta sin capacidad no entra al total y se nombra', () => {
+  const e = L.eficienciaDeCarga([diaCargue('2026-10-01', [
+    viaje('Movil VIII', 480, 50), viaje('Movil VIII', 540, 50),     // 100 m3/h: 100 m3 en 60 min = 100%
+    viaje('Movil VI', 480, 7), viaje('Movil VI', 720, 7),           // sin capacidad
+  ])]);
+  assert.equal(Math.round(e.eficiencia), 100);
+  assert.deepEqual([e.conCapacidad, e.sinCapacidad], [['Movil VIII'], ['Movil VI']]);
+  assert.equal(e.plantas.find(p => p.planta === 'Movil VI').eficiencia, null);
+  assert.deepEqual(e.zonas.map(z => [z.zona, z.eficiencia === null ? null : Math.round(z.eficiencia)]), [['Santo Domingo', null], ['Punta Cana', 100]]);
 });
 
 test('incidencias: lo que no es "sin novedad" / servicios; la zona puede venir escrita', () => {
@@ -137,9 +161,9 @@ test('reclamos solucionados: solucionados o cerrados / reclamos', () => {
   assert.deepEqual(r.estados[0], {estado: 'PENDIENTE', n: 2});
 });
 
-test('concreto devuelto: solo los anulados por DESPERDICIO, sobre los m3 transportados', () => {
+test('desperdicio: solo los anulados por DESPERDICIO, sobre los m3 despachados x 100', () => {
   const a = (causa, m3) => ({fecha: '2026-10-01', conduce: causa + m3, causa, m3});
-  const r = L.concretoDevuelto([a('DESPERDICIO', 8), a('DESPERDICIO', 2), a('DESVIO A OTRO CLIENTE', 11)], 1000);
+  const r = L.desperdicioDelPeriodo([a('DESPERDICIO', 8), a('DESPERDICIO', 2), a('DESVIO A OTRO CLIENTE', 11)], 1000);
   assert.deepEqual([r.anulados, r.m3Anulados, r.conduces, r.m3, r.pct], [3, 21, 2, 10, 1]);
   assert.equal(r.causas[0].causa, 'DESVIO A OTRO CLIENTE');
 });
@@ -148,7 +172,7 @@ test('contra la meta: los reportes nuevos con su meta, y "Sin dato" si no se sub
   const vacio = L.metasDelPeriodo([], {tiempos: {n: 0, zonas: []}, camiones: {zonas: []}});
   for (const k of ['disponibilidadCamiones', 'disponibilidadBombas', 'eficiencia', 'insumos', 'incidencias', 'reclamos'])
     assert.deepEqual([vacio[k].valor, vacio[k].cumple], [null, null], k);
-  const ind = L.indicadoresDelPeriodo([], {
+  const ind = L.indicadoresDelPeriodo([diaCargue('2026-10-01', [viaje('SDN', 480, 49), viaje('SDN', 600, 49)])], {
     disponibilidad: [{fecha: '2026-10-01', tipo: 'TROMPOS', equipo: 'A', utilizado: 1, disponible: 1}],
     batchadas: [{fecha: '2026-10-01', planta: 'SDN', m3: 6, minutos: 6, estado: 'Realizado', dev_cemento: 0, dev_agregados: 0, dev_agua: 5}],
     incidencias: [{fecha: '2026-10-01', planta: 'SDN', percepcion: 'Tardanza Bomba'}],
@@ -156,8 +180,29 @@ test('contra la meta: los reportes nuevos con su meta, y "Sin dato" si no se sub
   });
   const m = L.metasDelPeriodo([], ind);
   assert.deepEqual([m.disponibilidadCamiones.valor, m.disponibilidadCamiones.cumple, m.disponibilidadBombas.valor], [100, true, null]);
-  assert.deepEqual([m.eficiencia.valor, m.eficiencia.ritmo], [null, 60]);
+  // SDN 49 m3/h: 98 m3 deberian tardar 120 min y pasaron 120 -> 100%.
+  assert.deepEqual([m.eficiencia.valor, m.eficiencia.cumple, m.eficiencia.conCapacidad, m.eficiencia.plantas], [100, true, 1, 1]);
   assert.deepEqual([m.insumos.valor, m.insumos.cumple, m.insumos.todos], [100, true, 0]);
   assert.deepEqual([m.incidencias.valor, m.incidencias.cumple], [100, false]);
   assert.deepEqual([m.reclamos.valor, m.reclamos.cumple, m.reclamos.total], [0, false, 1]);
+});
+
+test('eficiencia de pesaje: por carga, segun la capacidad / el tiempo del PLC; SDN se ve pero no entra al total', () => {
+  const b = (planta, m3, minutos, estado = 'Realizado') => ({fecha: '2026-10-01', planta, m3, minutos, estado, dev_cemento: 0, dev_agregados: 0});
+  const k = L.cargaEnPlanta([
+    b('SanIsidro', 10, 12.5),        // 60 m3/h: 10 m3 en 10 min; tardo 12.5 -> 80%
+    b('Movil VIII', 10, 6),          // 100 m3/h: 10 m3 en 6 min -> 100%
+    b('SDN', 7, 4.6),                // 49 m3/h: 7 m3 en 8.6 min -> 186%, fuera del total
+    b('Movil VI', 7, 10),            // sin capacidad
+    b('SanIsidro', 10, 1, 'Cancelado'),
+  ]);
+  const pes = p => Math.round(k.plantas.find(x => x.planta === p).pesaje);
+  assert.deepEqual([pes('SanIsidro'), pes('Movil VIII'), pes('SDN')], [80, 100, 186]);
+  assert.equal(k.plantas.find(x => x.planta === 'Movil VI').pesaje, null);
+  // total: (10 + 6) min teoricos / (12.5 + 6) min reales = 86%; SDN y Movil VI no entran
+  assert.equal(Math.round(k.pesaje), 86);
+  assert.deepEqual([k.pesajeFuera, k.pesajeSinCapacidad], [['SDN'], ['Movil VI']]);
+  assert.deepEqual(k.zonas.map(z => [z.zona, Math.round(z.pesaje)]), [['Santo Domingo', 80], ['Punta Cana', 100]]);
+  const m = L.metasDelPeriodo([], {tiempos: {n: 0, zonas: []}, camiones: {zonas: []}, carga: k});
+  assert.deepEqual([m.pesaje.valor, m.pesaje.cumple, m.pesaje.meta, m.pesaje.fuera], [86, true, 75, ['SDN']]);
 });
