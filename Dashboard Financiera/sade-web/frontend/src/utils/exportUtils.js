@@ -1448,3 +1448,144 @@ export function exportarTopEmpresasPDF(porEmpresa = [], titulo = 'DISTRIBUCIÓN 
   doc.save(`Top_Empresas_SADE_${new Date().toISOString().slice(0, 10)}.pdf`)
 }
 
+// ─── Informe de Proyección de Cobro para Próxima Quincena ────────────────────
+export function exportarReporteProyeccionCobroExcel({
+  filas = [],
+  totales = {},
+  nombreArchivo = 'Proyeccion_Cobro_Proxima_Quincena',
+  titulo = 'INFORME DE PROYECCIÓN DE COBRO PARA LA PRÓXIMA QUINCENA',
+  fechaDesde = null,
+  fechaHasta = null,
+}) {
+  const wb = XLSX.utils.book_new()
+  const fechaStr = fechaDesde && fechaHasta
+    ? `${fmtDate(fechaDesde)} al ${fmtDate(fechaHasta)}`
+    : fmtDate(new Date())
+
+  const rows = filas.map((r, idx) => ({
+    '#': idx + 1,
+    'Nombre cliente': r.nombreCliente,
+    'Empresa': r.empresa,
+    'Préstamo': r.numeroPrestamo || '',
+    'Capital actual (RD$)': Number(r.capitalActual) || 0,
+    'Interés a cobrar (RD$)': Number(r.interesACobrar) || 0,
+    'Capital a cobrar (RD$)': Number(r.capitalACobrar) || 0,
+    'Total a cobrar próxima quincena (RD$)': Number(r.totalACobrar) || 0,
+    'Cuotas en Atraso': r.cuotasAtrasadas || 0,
+    'Días Atraso': r.diasAtraso || 0,
+  }))
+
+  rows.push({
+    '#': 'TOTAL',
+    'Nombre cliente': `${totales.totalClientes || filas.length} Clientes (${totales.totalPrestamos || filas.length} Préstamos)`,
+    'Empresa': '',
+    'Préstamo': '',
+    'Capital actual (RD$)': Number(totales.totalCapitalActual) || 0,
+    'Interés a cobrar (RD$)': Number(totales.totalInteresACobrar) || 0,
+    'Capital a cobrar (RD$)': Number(totales.totalCapitalACobrar) || 0,
+    'Total a cobrar próxima quincena (RD$)': Number(totales.totalACobrar) || 0,
+    'Cuotas en Atraso': '',
+    'Días Atraso': '',
+  })
+
+  const ws = crearHojaConTitulo(
+    rows,
+    titulo,
+    `Período Quincenal Proyectado: ${fechaStr}  |  Total a Cobrar: ${fmtMoney(totales.totalACobrar)}`
+  )
+  XLSX.utils.book_append_sheet(wb, ws, 'Proyección Cobro Quincenal')
+  XLSX.writeFile(wb, `${nombreArchivo}_${new Date().toISOString().slice(0, 10)}.xlsx`)
+}
+
+export function exportarReporteProyeccionCobroPDF({
+  filas = [],
+  totales = {},
+  titulo = 'INFORME DE PROYECCIÓN DE COBRO PARA LA PRÓXIMA QUINCENA',
+  nombreArchivo = 'Proyeccion_Cobro_Proxima_Quincena',
+  fechaDesde = null,
+  fechaHasta = null,
+}) {
+  const doc = new jsPDF('landscape', 'pt', 'letter')
+  const fechaStr = fechaDesde && fechaHasta
+    ? `${fmtDate(fechaDesde)} al ${fmtDate(fechaHasta)}`
+    : fmtDate(new Date())
+
+  doc.setFontSize(14)
+  doc.setTextColor(30, 58, 95)
+  doc.text('SADE WEB — SISTEMA DE GESTIÓN FINANCIERA', 40, 36)
+
+  doc.setFontSize(11)
+  doc.setTextColor(30, 100, 180)
+  doc.text(titulo.toUpperCase(), 40, 52)
+
+  doc.setFontSize(9)
+  doc.setTextColor(80)
+  doc.text(
+    `Período Quincena: ${fechaStr}  |  Clientes: ${totales.totalClientes || filas.length}  |  Total a Cobrar: ${fmtMoney(totales.totalACobrar)}  |  Capital Actual: ${fmtMoney(totales.totalCapitalActual)}`,
+    40,
+    66
+  )
+
+  const cols = [
+    '#',
+    'NOMBRE CLIENTE',
+    'EMPRESA',
+    'PRÉST.',
+    'CAPITAL ACTUAL',
+    'INTERÉS A COBRAR',
+    'CAPITAL A COBRAR',
+    'TOTAL A COBRAR',
+    'ATRASO',
+  ]
+
+  const rows = filas.map((r, idx) => [
+    String(idx + 1),
+    r.nombreCliente,
+    r.empresa,
+    String(r.numeroPrestamo || ''),
+    fmtMoney(r.capitalActual),
+    fmtMoney(r.interesACobrar),
+    fmtMoney(r.capitalACobrar),
+    fmtMoney(r.totalACobrar),
+    r.cuotasAtrasadas > 0 ? `${r.cuotasAtrasadas} cta (${r.diasAtraso}d)` : 'Al día',
+  ])
+
+  const foot = [
+    'TOT',
+    `${totales.totalClientes || filas.length} Clientes`,
+    '',
+    `${totales.totalPrestamos || filas.length} Prést.`,
+    fmtMoney(totales.totalCapitalActual),
+    fmtMoney(totales.totalInteresACobrar),
+    fmtMoney(totales.totalCapitalACobrar),
+    fmtMoney(totales.totalACobrar),
+    totales.clientesConAtraso ? `${totales.clientesConAtraso} en atraso` : '',
+  ]
+
+  autoTable(doc, {
+    head: [cols],
+    body: rows,
+    foot: [foot],
+    startY: 80,
+    theme: 'grid',
+    styles: { fontSize: 7.5, cellPadding: 3.5 },
+    headStyles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold' },
+    footStyles: { fillColor: [30, 58, 95], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 25 },
+      1: { fontStyle: 'bold', cellWidth: 140 },
+      2: { cellWidth: 100 },
+      3: { halign: 'center', cellWidth: 45 },
+      4: { halign: 'right' },
+      5: { halign: 'right' },
+      6: { halign: 'right' },
+      7: { halign: 'right', fontStyle: 'bold', textColor: [22, 101, 52] },
+      8: { halign: 'center', cellWidth: 65 },
+    },
+  })
+
+  doc.save(`${nombreArchivo}_${new Date().toISOString().slice(0, 10)}.pdf`)
+}
+
+

@@ -24,6 +24,9 @@ import {
   AlertTriangle,
   Clock,
   ExternalLink,
+  CalendarCheck,
+  TrendingUp,
+  DollarSign,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Link } from 'react-router-dom'
@@ -31,6 +34,7 @@ import {
   useReporteDetalleClientes,
   useReporteConsolidadoCartera,
   useReporteClientesAtrasados,
+  useReporteProyeccionCobro,
 } from '../hooks/useApi'
 import {
   exportarReporteDetalleExcel,
@@ -40,6 +44,8 @@ import {
   exportarReporteCompletoLibroExcel,
   exportarReporteClientesAtrasadosExcel,
   exportarReporteClientesAtrasadosPDF,
+  exportarReporteProyeccionCobroExcel,
+  exportarReporteProyeccionCobroPDF,
 } from '../utils/exportUtils'
 
 const fmt = (n) =>
@@ -77,6 +83,7 @@ const PESTANAS = [
   { id: 'REENGANCHES', label: '4. Reenganchados',            icon: RefreshCw, desc: 'Préstamos reenganchados del período' },
   { id: 'CANCELADOS',  label: '5. Cancelados',               icon: Ban, desc: 'Préstamos cancelados / saldados del período' },
   { id: 'ATRASADOS',   label: '6. Clientes Atrasados (Mora)', icon: AlertTriangle, desc: 'Mora por compañía y tramos (30d, Legal 60d, 90+d)' },
+  { id: 'PROYECCION',  label: '7. Proyección de Cobro',       icon: CalendarCheck, desc: 'Cuánto debe pagar cada cliente en la próxima quincena' },
 ]
 
 export default function Reportes() {
@@ -155,18 +162,26 @@ export default function Reportes() {
   // Queries TanStack (Carga bajo demanda según pestaña activa para máxima velocidad)
   const esConsolidado = pestañaActiva === 'CONSOLIDADO'
   const esAtrasados = pestañaActiva === 'ATRASADOS'
+  const esProyeccion = pestañaActiva === 'PROYECCION'
 
   const { data: dataCartera, isLoading: loadingCartera } = useReporteConsolidadoCartera(filtrosCartera, {
     enabled: esConsolidado,
   })
   const { data: dataDetalle, isLoading: loadingDetalle } = useReporteDetalleClientes(filtrosDetalle, {
-    enabled: !esConsolidado && !esAtrasados,
+    enabled: !esConsolidado && !esAtrasados && !esProyeccion,
   })
   const { data: dataAtrasados, isLoading: loadingAtrasados } = useReporteClientesAtrasados({
     fechaCorte: fechaHasta,
     empresa: filtroEmpresa || undefined,
   }, {
     enabled: esAtrasados,
+  })
+  const { data: dataProyeccion, isLoading: loadingProyeccion } = useReporteProyeccionCobro({
+    fechaDesde,
+    fechaHasta,
+    empresa: filtroEmpresa || undefined,
+  }, {
+    enabled: esProyeccion,
   })
 
   const filasCartera = dataCartera?.filas ?? []
@@ -178,6 +193,9 @@ export default function Reportes() {
   const carterasMora = dataAtrasados?.carteras ?? []
   const clientesMora = dataAtrasados?.clientes ?? []
   const totalesMora = dataAtrasados?.totales ?? {}
+
+  const filasProyeccion = dataProyeccion?.filas ?? []
+  const totalesProyeccion = dataProyeccion?.totales ?? {}
 
   // Filtrado interactivo de Clasificación para la Pestaña Detalle
   const filasDetalleFiltradas = useMemo(() => {
@@ -250,6 +268,15 @@ export default function Reportes() {
           titulo: `Informe Oficial de Cartera en Mora por Tramos y Compañía${sufijoTituloEmpresa}`,
           fechaCorte: fechaHasta,
         })
+      } else if (pestañaActiva === 'PROYECCION') {
+        exportarReporteProyeccionCobroExcel({
+          filas: filasProyeccion,
+          totales: totalesProyeccion,
+          nombreArchivo: `Proyeccion_Cobro${sufijoArchivoEmpresa}_${fechaDesde}_al_${fechaHasta}`,
+          titulo: `Informe de Proyección de Cobro para la Próxima Quincena${sufijoTituloEmpresa}`,
+          fechaDesde,
+          fechaHasta,
+        })
       } else {
         const titulos = {
           DETALLE: `Informe Detalle de Préstamos${sufijoTituloEmpresa}`,
@@ -292,6 +319,15 @@ export default function Reportes() {
           titulo: `Informe Oficial de Cartera en Mora por Tramos y Compañía${sufijoTituloEmpresa}`,
           nombreArchivo: `Cartera_En_Mora${sufijoArchivoEmpresa}_${fechaHasta}`,
           fechaCorte: fechaHasta,
+        })
+      } else if (pestañaActiva === 'PROYECCION') {
+        exportarReporteProyeccionCobroPDF({
+          filas: filasProyeccion,
+          totales: totalesProyeccion,
+          nombreArchivo: `Proyeccion_Cobro${sufijoArchivoEmpresa}_${fechaDesde}_al_${fechaHasta}`,
+          titulo: `Informe de Proyección de Cobro para la Próxima Quincena${sufijoTituloEmpresa}`,
+          fechaDesde,
+          fechaHasta,
         })
       } else {
         const titulos = {
@@ -360,6 +396,8 @@ export default function Reportes() {
     ? loadingCartera 
     : pestañaActiva === 'ATRASADOS'
     ? loadingAtrasados
+    : pestañaActiva === 'PROYECCION'
+    ? loadingProyeccion
     : loadingDetalle
 
   return (
@@ -645,7 +683,7 @@ export default function Reportes() {
       )}
 
       {/* ── CONTENIDO: DETALLE DE CLIENTES / NUEVOS / REENGANCHADOS / CANCELADOS (Plantilla Imagen 1) ── */}
-      {pestañaActiva !== 'CONSOLIDADO' && pestañaActiva !== 'ATRASADOS' && (
+      {pestañaActiva !== 'CONSOLIDADO' && pestañaActiva !== 'ATRASADOS' && pestañaActiva !== 'PROYECCION' && (
         <section className="space-y-4">
           <div className="bg-amber-100/90 border border-amber-300/80 rounded-xl p-3.5 flex items-center justify-between text-xs text-amber-950 font-medium">
             <div>
@@ -1191,6 +1229,199 @@ export default function Reportes() {
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {/* ── CONTENIDO: INFORME DE PROYECCIÓN DE COBRO PRÓXIMA QUINCENA ── */}
+      {pestañaActiva === 'PROYECCION' && (
+        <section className="space-y-4">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between text-xs text-emerald-950 font-medium flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <CalendarCheck size={18} className="text-emerald-600 flex-shrink-0" />
+              <div>
+                <span className="font-bold uppercase tracking-wide">
+                  Informe Oficial de Proyección de Cobro para la Próxima Quincena
+                </span>
+                <span className="ml-2 text-emerald-800">
+                  (Período: {fechaDesde || '—'} al {fechaHasta || '—'})
+                </span>
+                {sufijoTituloEmpresa && (
+                  <span className="block text-emerald-900 font-semibold pt-0.5">{sufijoTituloEmpresa}</span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-emerald-700">Total a Cobrar:</span>
+              <span className="font-extrabold text-emerald-900 bg-emerald-100/90 px-3 py-1 rounded-lg border border-emerald-300 font-mono text-sm">
+                {fmt(totalesProyeccion.totalACobrar)}
+              </span>
+            </div>
+          </div>
+
+          {/* Tarjetas KPI de Resumen */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="bg-white rounded-xl p-3.5 border border-emerald-200 shadow-sm bg-gradient-to-br from-emerald-50/50 to-white">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-800">Total Próxima Quincena</p>
+              <p className="text-lg font-extrabold text-emerald-700 font-mono mt-1">
+                {fmt(totalesProyeccion.totalACobrar)}
+              </p>
+              <p className="text-[10px] text-emerald-600 mt-0.5">Capital + Interés total</p>
+            </div>
+
+            <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Capital Actual Cartera</p>
+              <p className="text-lg font-extrabold text-slate-900 font-mono mt-1">
+                {fmt(totalesProyeccion.totalCapitalActual)}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Balance saldo capital</p>
+            </div>
+
+            <div className="bg-white rounded-xl p-3.5 border border-blue-200 shadow-sm bg-gradient-to-br from-blue-50/40 to-white">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-800">Capital a Cobrar</p>
+              <p className="text-lg font-extrabold text-blue-700 font-mono mt-1">
+                {fmt(totalesProyeccion.totalCapitalACobrar)}
+              </p>
+              <p className="text-[10px] text-blue-600 mt-0.5">
+                Quincena {fmtCompact(totalesProyeccion.totalCapitalQuincena)} + Atraso {fmtCompact(totalesProyeccion.totalCapitalAtraso)}
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl p-3.5 border border-amber-200 shadow-sm bg-gradient-to-br from-amber-50/40 to-white">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-800">Interés a Cobrar</p>
+              <p className="text-lg font-extrabold text-amber-700 font-mono mt-1">
+                {fmt(totalesProyeccion.totalInteresACobrar)}
+              </p>
+              <p className="text-[10px] text-amber-700 font-medium mt-0.5">
+                ★ Incluye atraso ({fmtCompact(totalesProyeccion.totalInteresAtraso)})
+              </p>
+            </div>
+
+            <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-sm col-span-2 md:col-span-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Clientes Proyectados</p>
+              <p className="text-lg font-extrabold text-slate-900 font-mono mt-1">
+                {totalesProyeccion.totalClientes || filasProyeccion.length}
+              </p>
+              <p className="text-[10px] text-amber-600 font-semibold mt-0.5">
+                {totalesProyeccion.clientesConAtraso || 0} con atraso
+              </p>
+            </div>
+          </div>
+
+          {/* Tabla de Proyección con las columnas exactas solicitadas */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-800 border-b border-slate-900 text-white select-none">
+                    <th className="px-3 py-3 text-center font-bold uppercase tracking-wider w-12">#</th>
+                    <th className="px-3.5 py-3 text-left font-bold uppercase tracking-wider min-w-[200px]">Nombre cliente</th>
+                    <th className="px-3.5 py-3 text-left font-bold uppercase tracking-wider min-w-[150px]">Empresa</th>
+                    <th className="px-3 py-3 text-right font-bold uppercase tracking-wider min-w-[120px]">Capital actual</th>
+                    <th className="px-3 py-3 text-right font-bold uppercase tracking-wider min-w-[140px] bg-amber-900/40 text-amber-200">
+                      Interés a cobrar <span className="text-[10px] block font-normal text-amber-300/80">(incluye atraso)</span>
+                    </th>
+                    <th className="px-3 py-3 text-right font-bold uppercase tracking-wider min-w-[130px] bg-blue-900/40 text-blue-200">Capital a cobrar</th>
+                    <th className="px-3.5 py-3 text-right font-bold uppercase tracking-wider min-w-[150px] bg-emerald-900/60 text-emerald-200">
+                      Total a cobrar próxima quincena
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {loadingProyeccion ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                        Cargando proyección de cobro de la próxima quincena...
+                      </td>
+                    </tr>
+                  ) : filasProyeccion.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                        No se encontraron cobros proyectados para el período seleccionado.
+                      </td>
+                    </tr>
+                  ) : (
+                    filasProyeccion.map((row, idx) => {
+                      const tieneAtraso = (Number(row.interesAtraso) > 0 || Number(row.capitalAtraso) > 0)
+                      return (
+                        <tr
+                          key={row.idCliente ? `${row.idCliente}-${idx}` : idx}
+                          className={clsx(
+                            'hover:bg-slate-50/80 transition-colors',
+                            tieneAtraso ? 'bg-amber-50/20' : ''
+                          )}
+                        >
+                          <td className="px-3 py-2.5 text-center text-slate-400 font-mono">
+                            {idx + 1}
+                          </td>
+                          <td className="px-3.5 py-2.5 font-medium text-slate-900">
+                            {row.idCliente ? (
+                              <Link
+                                to={`/clientes/${row.idCliente}`}
+                                className="hover:text-blue-600 hover:underline inline-flex items-center gap-1 group"
+                              >
+                                <span>{row.nombreCliente}</span>
+                                <ExternalLink size={11} className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-500" />
+                              </Link>
+                            ) : (
+                              <span>{row.nombreCliente}</span>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-slate-600 uppercase">
+                            {row.empresa}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono font-medium text-slate-700">
+                            {fmt(row.capitalActual)}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono font-semibold text-amber-800 bg-amber-50/30">
+                            <div>{fmt(row.interesACobrar)}</div>
+                            {Number(row.interesAtraso) > 0 && (
+                              <div className="text-[10px] text-amber-600 font-normal">
+                                (Atraso: {fmt(row.interesAtraso)})
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono font-semibold text-blue-800 bg-blue-50/20">
+                            <div>{fmt(row.capitalACobrar)}</div>
+                            {Number(row.capitalAtraso) > 0 && (
+                              <div className="text-[10px] text-blue-600 font-normal">
+                                (Atraso: {fmt(row.capitalAtraso)})
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right font-mono font-bold text-emerald-800 bg-emerald-50/60 text-xs">
+                            {fmt(row.totalACobrar)}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+
+                {!loadingProyeccion && filasProyeccion.length > 0 && (
+                  <tfoot>
+                    <tr className="bg-slate-900 text-white font-bold border-t-2 border-slate-950 text-xs">
+                      <td colSpan={3} className="px-3.5 py-3 uppercase tracking-wider">
+                        TOTAL GENERAL ({filasProyeccion.length} Clientes)
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-200">
+                        {fmt(totalesProyeccion.totalCapitalActual)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-amber-300">
+                        {fmt(totalesProyeccion.totalInteresACobrar)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-blue-300">
+                        {fmt(totalesProyeccion.totalCapitalACobrar)}
+                      </td>
+                      <td className="px-3.5 py-3 text-right font-mono text-emerald-300 font-extrabold text-sm bg-emerald-950/50">
+                        {fmt(totalesProyeccion.totalACobrar)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
         </section>
       )}
 

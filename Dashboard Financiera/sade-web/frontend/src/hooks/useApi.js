@@ -143,4 +143,19 @@ export function useReporteClientesAtrasados(filtros = {}, options = {}) {
   })
 }
 
+export function useReporteProyeccionCobro(filtros = {}, options = {}) {
+  const params = new URLSearchParams()
+  Object.entries(filtros).forEach(([k, v]) => {
+    if (v !== null && v !== undefined && v !== '') params.set(k, v)
+  })
+  const queryString = params.toString()
+  return useQuery({
+    queryKey: ['reportes', 'proyeccion-cobro', filtros],
+    queryFn: () => fetchJson(`${API_BASE}/reportes/proyeccion-cobro${queryString ? '?' + queryString : ''}`),
+    staleTime: 60 * 1000,
+    ...options,
+  })
+}
+
+
 

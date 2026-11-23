@@ -399,3 +399,46 @@ class ReporteClientesAtrasadosResponse(BaseModel):
     clientes: List[ReporteMoraClienteItem]
 
 
+# ─── Reporte de Proyección de Cobro para Próxima Quincena ────────────────────
+class ReporteProyeccionCobroItem(BaseModel):
+    idCliente: Optional[int] = None
+    idOficina: Optional[int] = None
+    nombreCliente: str
+    empresa: str
+    numeroPrestamo: Optional[str] = None
+    capitalActual: Decimal = Decimal('0.00')
+    interesCuota: Decimal = Decimal('0.00')
+    interesAtraso: Decimal = Decimal('0.00')
+    interesACobrar: Decimal = Decimal('0.00')  # Debe incluir interés en atraso
+    capitalCuota: Decimal = Decimal('0.00')
+    capitalAtraso: Decimal = Decimal('0.00')
+    capitalACobrar: Decimal = Decimal('0.00')
+    totalACobrar: Decimal = Decimal('0.00')    # Total a cobrar próxima quincena
+    cuotasAtrasadas: Optional[int] = 0
+    diasAtraso: Optional[int] = 0
+    tasa: Optional[float] = 0.0
+    fechaProximoVenc: Optional[date] = None
+
+
+class ReporteProyeccionCobroTotales(BaseModel):
+    totalClientes: int = 0
+    totalPrestamos: int = 0
+    totalCapitalActual: Decimal = Decimal('0.00')
+    totalInteresACobrar: Decimal = Decimal('0.00')
+    totalCapitalACobrar: Decimal = Decimal('0.00')
+    totalACobrar: Decimal = Decimal('0.00')
+    totalInteresQuincena: Decimal = Decimal('0.00')
+    totalInteresAtraso: Decimal = Decimal('0.00')
+    totalCapitalQuincena: Decimal = Decimal('0.00')
+    totalCapitalAtraso: Decimal = Decimal('0.00')
+    clientesConAtraso: int = 0
+    fechaDesde: Optional[date] = None
+    fechaHasta: Optional[date] = None
+
+
+class ReporteProyeccionCobroResponse(BaseModel):
+    totales: ReporteProyeccionCobroTotales
+    filas: List[ReporteProyeccionCobroItem]
+
+
+

@@ -22,6 +22,9 @@ from models.schemas import (
     ReporteMoraTotales,
     ReporteMoraCarteraItem,
     ReporteMoraClienteItem,
+    ReporteProyeccionCobroResponse,
+    ReporteProyeccionCobroTotales,
+    ReporteProyeccionCobroItem,
 )
 
 router = APIRouter(prefix="/api/reportes", tags=["Reportes"])
@@ -205,4 +208,57 @@ def get_reporte_clientes_atrasados(
     totales = ReporteMoraTotales(**totales_dict)
 
     return ReporteClientesAtrasadosResponse(totales=totales, carteras=carteras, clientes=clientes)
+
+
+@router.get(
+    "/proyeccion-cobro",
+    response_model=ReporteProyeccionCobroResponse,
+    summary="Informe 4: Proyección de Cobro para Saber Cuánto Debe Pagar Cada Cliente en la Próxima Quincena",
+)
+def get_reporte_proyeccion_cobro(
+    fechaDesde: Optional[date] = Query(None, description="Fecha de inicio de la quincena a proyectar"),
+    fechaHasta: Optional[date] = Query(None, description="Fecha de corte / fin de la quincena a proyectar"),
+    empresa:    Optional[str]  = Query(None, description="Filtrar por Cartera / Empresa específica"),
+):
+    try:
+        empresa_param = empresa.strip() if empresa and empresa.strip() else None
+
+        result_sets = execute_sp_multi(
+            "cxcReporteProyeccionCobro",
+            fechaDesde,
+            fechaHasta,
+            empresa_param,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error al ejecutar cxcReporteProyeccionCobro: {exc}") from exc
+
+    if len(result_sets) < 2:
+        raise HTTPException(
+            status_code=500,
+            detail=f"El procedimiento devolvió {len(result_sets)} result sets; se esperaban 2.",
+        )
+
+    rs_filas, rs_totales = result_sets[0], result_sets[1]
+
+    totales_dict = rs_totales[0] if rs_totales else {
+        "totalClientes": 0,
+        "totalPrestamos": 0,
+        "totalCapitalActual": 0,
+        "totalInteresACobrar": 0,
+        "totalCapitalACobrar": 0,
+        "totalACobrar": 0,
+        "totalInteresQuincena": 0,
+        "totalInteresAtraso": 0,
+        "totalCapitalQuincena": 0,
+        "totalCapitalAtraso": 0,
+        "clientesConAtraso": 0,
+        "fechaDesde": fechaDesde,
+        "fechaHasta": fechaHasta,
+    }
+
+    filas = [ReporteProyeccionCobroItem(**r) for r in rs_filas]
+    totales = ReporteProyeccionCobroTotales(**totales_dict)
+
+    return ReporteProyeccionCobroResponse(totales=totales, filas=filas)
+
 
