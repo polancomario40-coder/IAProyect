@@ -22,15 +22,22 @@ function getAuthHeaders() {
 async function fetchJson(url, options = {}) {
   const headers = { ...getAuthHeaders(), ...(options.headers || {}) }
   const res = await fetch(url, { ...options, headers })
+
+  const contentType = res.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    if (res.status === 502 || res.status === 503) {
+      throw new Error('El servicio Backend de API (puerto 8000) no está disponible o no está respondiendo.')
+    }
+    throw new Error(`El servidor retornó una respuesta inesperada (HTTP ${res.status}). Verifique que el Backend esté activo.`)
+  }
+
   if (!res.ok) {
     if (res.status === 401) {
       localStorage.removeItem('jwt_token')
       localStorage.removeItem('empresa')
-      if (window.location.pathname !== '/auth-callback') {
-        const callbackUrl = encodeURIComponent(window.location.origin + '/auth-callback')
-        const authUrl = import.meta.env.VITE_AUTH_CENTER_URL || 'https://auth.sade.com.do'
-        window.location.href = `${authUrl}/?client_id=sade-financiera&redirect_uri=${callbackUrl}`
-      }
+      localStorage.removeItem('usuario')
+      window.location.href = '/'
+      return
     }
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(err.detail || `Error ${res.status}`)

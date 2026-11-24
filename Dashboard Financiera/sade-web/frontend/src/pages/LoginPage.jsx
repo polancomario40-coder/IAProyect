@@ -32,6 +32,17 @@ export default function LoginPage() {
         body: JSON.stringify({ usuario: usuario.trim(), clave: clave.trim() }),
       })
 
+      const contentType = res.headers.get('content-type') || ''
+      if (!contentType.includes('application/json')) {
+        if (res.status === 502 || res.status === 503) {
+          throw new Error('El servicio Backend de API (puerto 8000) no está disponible o no está ejecutándose.')
+        } else if (res.status === 404) {
+          throw new Error('La ruta de autenticación no fue encontrada. Verifique que el Reverse Proxy de IIS o el Backend estén activos.')
+        } else {
+          throw new Error(`El servidor devolvió una respuesta no válida (HTTP ${res.status}). Verifique la conexión con el Backend.`)
+        }
+      }
+
       const data = await res.json()
 
       if (!res.ok || !data.success) {
