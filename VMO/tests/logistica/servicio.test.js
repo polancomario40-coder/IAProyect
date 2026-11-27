@@ -8,12 +8,15 @@ const fila = (bomba, estado, cantReal, extra = {}) =>
   ({cliente: 'C' + cantReal, bomba, estado, cantReal, cargues: 1, planta: 'Movil II',
     matchRows: [{ficha: 'F' + cantReal, cliente: 'C' + cantReal, cantidad: cantReal, planta: 'Movil II'}], ...extra});
 
+// `frecuencia` como la devuelve computeCumplimiento (2026-11-24): con bomba va
+// por el ritmo; un directo no tiene ritmo que medir y cumple siempre, este
+// incumplido o no el inicio.
 const rows = [
-  fila('310', 'Cumplido', 100),
-  fila('45', 'Incumplido', 20),
-  fila('Directo', 'Incumplido', 8),
-  fila('Directo', 'Cumplido', 6),
-  fila(undefined, 'Sin programación', 7),
+  fila('310', 'Cumplido', 100, {frecuencia: 'Cumple'}),
+  fila('45', 'Incumplido', 20, {frecuencia: 'No cumple'}),
+  fila('Directo', 'Incumplido', 8, {frecuencia: 'Cumple'}),
+  fila('Directo', 'Cumplido', 6, {frecuencia: 'Cumple'}),
+  fila(undefined, 'Sin programación', 7, {frecuencia: null}),
 ];
 
 test('cada fila es con bomba o directa; sin programacion no tiene servicio', () => {
@@ -33,8 +36,9 @@ test('bomba y directo suman exactamente lo evaluado del total', () => {
   const d = L.resumenDeCumplimiento(L.filtrarPorServicio(rows, 'directo'));
   assert.equal(b.pedidos + d.pedidos, tot.pedidos);
   assert.equal(b.m3 + d.m3, tot.m3);
-  assert.equal(b.pct, 83);           // 100 de 120 m3
-  assert.equal(d.pctPedidos, 50);    // 1 de 2 entregas
+  assert.equal(b.pct, 83);           // 100 de 120 m3 al ritmo
+  assert.equal(d.pctPedidos, 50);    // 1 de 2 entregas a tiempo
+  assert.equal(d.pct, 100, 'los directos cumplen la frecuencia: no tienen ritmo que medir');
 });
 
 test('los dias se conservan aunque queden vacios con el filtro', () => {

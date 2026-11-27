@@ -160,7 +160,7 @@ async function render(){
         </table>
       </div>
     </div>
-    <div class="nota">El porcentaje de cumplimiento no está en esta lista a propósito: no se guarda, se recalcula al abrir el día con los supuestos de ese día. Así un día viejo muestra lo que mostró, y si mañana se corrige un trayecto equivocado, se puede corregir hacia atrás.</div>`;
+    <div class="nota">El porcentaje de cumplimiento no está en esta lista a propósito: no se guarda, se recalcula al abrir el día con los supuestos de ese día. Así un día viejo muestra lo que mostró, y si mañana se corrige un dato equivocado, se puede corregir hacia atrás.</div>`;
 
   cont().querySelectorAll('.btnAbrir').forEach(b =>
     b.addEventListener('click', () => pedirAbrirDia(b.dataset.fecha)));
@@ -204,7 +204,7 @@ function sinDias(){
         <ol style="margin:0 0 22px; padding-left:20px; font-size:13.5px; line-height:1.9;">
           <li>En <strong>Cumplimiento del día</strong>, subí los dos Excel: la
               <strong>Programación</strong> y el <strong>Tiempo de Cargue</strong>.</li>
-          <li>Revisá los trayectos y los cruces marcados, poné la fecha, y apretá
+          <li>Revisá los cruces marcados, poné la fecha, y apretá
               <strong>&ldquo;Guardar día&rdquo;</strong>.</li>
         </ol>
         ${estaEmbebido() ? '' : '<a class="volver" href="/logistica.html" style="display:inline-block;">Ir al dashboard del día →</a>'}

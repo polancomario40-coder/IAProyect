@@ -13,13 +13,16 @@ const dias = [
      {ficha: 'A1', cliente: 'Zeta', planta: 'Movil II', cantidad: 8},
      {ficha: 'B2', cliente: 'alfa', planta: 'Movil VIII', cantidad: 10},
    ],
+   // `frecuencia` (2026-11-24): `pct` pesa los m3 por el ritmo y `pctPedidos`
+   // cuenta por el estado. Aca van juntas para que el % sea el de siempre.
    results: [
      {rowKey: 'k1', cliente: 'Zeta', obraReal: 'Torre', planta: 'Movil II', zona: 'Santo Domingo',
-      estado: 'Incumplido', cantReal: 16, cargues: 2, horaProg: 600, diff: 40, observacion: 'tapon'},
+      estado: 'Incumplido', frecuencia: 'No cumple', cantReal: 16, cargues: 2, horaProg: 600,
+      horaCargue: 640, diff: 40, observacion: 'tapon'},
      {rowKey: 'k2', cliente: 'alfa', obraReal: 'Hotel', planta: 'Movil VIII', zona: 'Punta Cana',
-      estado: 'Cumplido', cantReal: 10, cargues: 1, horaProg: 480, diff: -5},
+      estado: 'Cumplido', frecuencia: 'Cumple', cantReal: 10, cargues: 1, horaProg: 480, diff: -35},
      {rowKey: 'k3', cliente: 'Beta', obraProg: 'Casa', planta: null, zona: 'Punta Cana',
-      estado: 'Sin despachar', cantReal: 0, cargues: 0, horaProg: 700, diff: null},
+      estado: 'Sin despachar', frecuencia: null, cantReal: 0, cargues: 0, horaProg: 700, diff: null},
    ]},
   {fecha: '2026-10-01', motivos: new Map(), responsables: new Map(), cargue: [], results: []},
 ];
@@ -32,8 +35,8 @@ test('el despacho sale del cargue y el porcentaje del mismo resumen que el resto
   const d = L.comparacionPorDia(dias, null)[1];
   assert.deepEqual(d.despacho, {m3: 26, cargues: 3, camiones: 2, clientes: 2});
   assert.deepEqual(d.cumplimiento, L.resumenDeCumplimiento(dias[0].results));
-  assert.equal(d.cumplimiento.pct, 38);          // 10 de 26 m3
-  assert.equal(d.cumplimiento.pctPedidos, 50);   // 1 de 2 entregas
+  assert.equal(d.cumplimiento.pct, 38);          // 10 de 26 m3 al ritmo
+  assert.equal(d.cumplimiento.pctPedidos, 50);   // 1 de 2 entregas a tiempo
   assert.equal(d.incumplidas, 1);
   assert.equal(d.sinDespachar, 1);
 });
@@ -54,6 +57,7 @@ test('los incumplidos traen responsable, motivo y observacion del dia', () => {
   assert.equal(inc.motivo, 'TRAFICO');
   assert.equal(inc.observacion, 'tapon');
   assert.equal(inc.m3, 16);
+  assert.equal(inc.primerConduce, 640, 'la hora del 1er conduce, que es la que decide desde el 2026-11-24');
 });
 
 test('por zona: el cargue y las entregas se filtran juntos, y las dos zonas suman el General', () => {

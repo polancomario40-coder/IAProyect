@@ -284,8 +284,8 @@ function render(){
       <div class="tabla-scroll">${tablaHtml(filas)}</div>
     </div>
     <div class="nota">Una entrega entra al porcentaje solo si quedó <strong>Cumplida</strong> o <strong>Incumplida</strong>;
-      llegar antes cuenta como cumplido y Macao no entra. <strong>${NOMBRE_PCT}</strong> pesa cada entrega por su volumen;
-      <strong>${NOMBRE_PCT_PEDIDOS.toLowerCase()}</strong> cuenta las entregas que arrancaron a tiempo, todas iguales. El acumulado suma todos los días elegidos
+      Macao no entra. <strong>${NOMBRE_PCT}</strong> son los m³ de los servicios que despacharon al ritmo programado (m³ por hora);
+      <strong>${NOMBRE_PCT_PEDIDOS.toLowerCase()}</strong> cuenta las entregas con el primer conduce hecho al menos 30 min antes de la hora, todas iguales. El acumulado suma todos los días elegidos
       y divide una sola vez: no es el promedio de los porcentajes.</div>`;
   document.querySelectorAll('.btn-expandir').forEach(b => b.addEventListener('click', () => {
     const f = b.dataset.fecha;
@@ -421,7 +421,7 @@ function detalleHtml(incs, mostrarZona){
   return `<table class="sub">
     <thead><tr>
       <th>Cliente</th><th>Obra</th>${mostrarZona ? '<th>Zona</th>' : ''}<th>Planta</th>
-      <th class="num">Hora prog.</th><th class="num">Llegada est.</th><th class="num">Diferencia</th><th class="num">m³</th>
+      <th class="num">Hora prog.</th><th class="num">1er conduce</th><th class="num">Diferencia</th><th class="num">m³</th>
       <th>Responsable</th><th>Motivo</th><th>Observación</th>
     </tr></thead>
     <tbody>${incs.map(i => `<tr>
@@ -430,7 +430,7 @@ function detalleHtml(incs, mostrarZona){
       ${mostrarZona ? `<td><span class="badge">${esc(i.zona || '—')}</span></td>` : ''}
       <td>${esc(i.planta || '—')}</td>
       <td class="num">${minToStr(i.horaProg)}</td>
-      <td class="num">${minToStr(i.llegada)}</td>
+      <td class="num">${minToStr(i.primerConduce)}</td>
       <td class="num">${fmtDiff(i.diff)}</td>
       <td class="num">${fmtInt(i.m3)}</td>
       ${celda(i.responsable)}${celda(i.motivo)}

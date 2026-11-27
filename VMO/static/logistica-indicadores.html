@@ -102,6 +102,19 @@
   .em{font-weight:700;} .em.si{color:var(--ok);} .em.no{color:var(--err);}
   .zonas-meta{display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11.5px; margin-top:8px; color:var(--muted);}
   .zonas-meta strong{color:var(--ink); font-variant-numeric:tabular-nums;}
+  /* Contra la meta alineada (2026-11-20): cada tarjeta toma las filas de la grilla
+     (subgrid), asi el titulo, el numero, el "Cumple" y el detalle quedan a la misma
+     altura en toda la fila aunque un titulo o su explicacion ocupen dos renglones. */
+  .kpi .sub{text-wrap:pretty;}
+  .kpi.m .pie{margin-top:8px;}
+  .kpi.m .pie:empty{display:none;}
+  .kpi.m .pie .zonas-meta{margin-top:0;}
+  .kpi.m .pie .zonas-meta + .sub{margin-top:6px;}
+  @supports (grid-template-rows:subgrid){
+    .kpis.metas.doce{row-gap:0;}
+    .kpis.metas.doce > .kpi.m{display:grid; grid-template-rows:subgrid; grid-row:span 4; row-gap:0;
+      align-content:start; margin-bottom:12px;}
+  }
 
   table{width:100%; border-collapse:collapse; font-size:13px;}
   thead th{text-align:left; padding:9px 10px; background:rgba(0,0,0,.3);
@@ -367,12 +380,11 @@ const estadoMeta = c => c === null ? '<span class="em">— Sin dato</span>'
 function tarjetaMeta(titulo, que, x, fmt, metaTexto, detalle){
   const valor = v => v === null ? (x.vacio || 'Sin dato') : fmt(v);
   return `<div class="kpi m ${x.cumple === null ? 'sd' : x.cumple ? 'si' : 'no'}">
-    <div class="label">${titulo}</div>
-    <div class="sub">${que}</div>
+    <div class="cab"><div class="label">${titulo}</div>
+    <div class="sub">${que}</div></div>
     <div class="value">${valor(x.valor)}</div>
     <div class="sub">${estadoMeta(x.cumple)}<br>meta: ${metaTexto}</div>
-    ${x.zonas ? `<div class="zonas-meta">${x.zonas.map(z => `<span>${esc(z.zona)}: <strong>${valor(z.valor)}</strong>${z.cumple === null ? '' : z.cumple ? ' ✓' : ' ✗'}</span>`).join('')}</div>` : ''}
-    ${detalle ? `<div class="sub">${detalle}</div>` : ''}</div>`;
+    <div class="pie">${x.zonas ? `<div class="zonas-meta">${x.zonas.map(z => `<span>${esc(z.zona)}: <strong>${valor(z.valor)}</strong>${z.cumple === null ? '' : z.cumple ? ' ✓' : ' ✗'}</span>`).join('')}</div>` : ''}${detalle ? `<div class="sub">${detalle}</div>` : ''}</div></div>`;
 }
 function seccionMetas(m){
   const p = v => v + '%', f = v => v.toFixed(1);

@@ -173,6 +173,44 @@ test('sin hora no se inventa una, tampoco con el ajuste', () => {
   assert.equal(f.horaMin, null);
 });
 
+// ── 2026-11-24: la Hora Final, para la frecuencia por ritmo ──────────────────
+
+// La planilla real con la Hora Final en la ultima columna.
+const conFin = (hora, fin) => { const f = filaReal('45', hora); f[f.length - 1] = fin; return f; };
+const leerFin = (fila, encabezado = ENCABEZADO_REAL) =>
+  parseProgramacionSheets([hoja('Punta Cana', [encabezado, fila])])[0].horaFinMin;
+
+test('la Hora Final se lee con el mismo +60 que la Hora Inicio', () => {
+  assert.equal(leerFin(conFin(17/24, 21/24)), 22 * 60, 'en el Excel dice 21:00');
+  assert.equal(leerFin(conFin(17/24, '21:30')), 22 * 60 + 30, 'tambien escrita como texto');
+});
+
+test('una Hora Final en 00:00 es que el renglon no la tiene: null', () => {
+  // Los directos y Macao vienen siempre asi.
+  assert.equal(leerFin(conFin(17/24, 0)), null);
+});
+
+test('una Hora Final que no es posterior a la inicial no sirve: null', () => {
+  assert.equal(leerFin(conFin(17/24, 16/24)), null, 'antes de la inicial');
+  assert.equal(leerFin(conFin(17/24, 17/24)), null, 'igual a la inicial: cero horas');
+});
+
+test('sin Hora Inicio la Hora Final sola no sirve: null', () => {
+  assert.equal(leerFin(conFin(null, 21/24)), null);
+});
+
+test('sin columna Hora Final queda null; un "Hora" suelto no es la final', () => {
+  assert.equal(leerFin(filaReal('45', 17/24).slice(0, -1), ENCABEZADO_REAL.slice(0, -1)), null);
+  const [f] = parseProgramacionSheets([hoja('H', [['Cliente', 'Obra', 'Hora', 'Cantidad'], ['ACME', 'X', 0.5, 7]])]);
+  assert.equal(f.horaMin, 13 * 60);
+  assert.equal(f.horaFinMin, null);
+});
+
+test('"Hora Fin" tambien se reconoce como la Hora Final', () => {
+  const encabezado = [...ENCABEZADO_REAL.slice(0, -1), 'Hora Fin'];
+  assert.equal(leerFin(conFin(8/24, 12/24), encabezado), 13 * 60);
+});
+
 test('la bomba se lee por encabezado, y vacia es Directo', () => {
   const filas = parseProgramacionSheets([hoja('Punta Cana', [
     ENCABEZADO_REAL, filaReal('45', 0.5), filaReal(null, 0.5), filaReal('NO', 0.5), filaReal(0, 0.5),

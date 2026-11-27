@@ -3,24 +3,32 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  resumenDeCumplimiento, cumplimientoPorPlanta, serieDeCumplimiento,
+  resumenDeCumplimiento, cumplimientoPorPlanta, cumplimientoPorElemento, serieDeCumplimiento,
   acumuladoDeCumplimiento,
 } = require('../../static/logistica.logic.js');
 
 // Una fila de resultado, en la forma que la devuelve computeCumplimiento.
 const M3_POR_CARGUE = 7;   // la mediana real de los tres primeros dias
 
+// La frecuencia que acompana a cada estado por defecto: la que hace que `pct`
+// siga midiendo lo mismo que median estos tests antes del 2026-11-24, cuando
+// `pct` pesaba los m3 de las entregas cumplidas. Desde ese dia `pct` pesa los
+// m3 de las que tienen `frecuencia` 'Cumple' (el ritmo) y `pctPedidos` sigue
+// contando por `estado`. Un caso que quiere separarlas pasa `frecuencia`.
+const FRECUENCIA_DE = {'Cumplido': 'Cumple', 'Incumplido': 'No cumple'};
+
 const fila = (estado, opts = {}) => ({
   estado,
+  frecuencia: opts.frecuencia !== undefined ? opts.frecuencia : (FRECUENCIA_DE[estado] ?? null),
   // `cargues` = cuantos VIAJES movio ese pedido. Ya no manda en el porcentaje
   // —desde el 2026-10-02 pesa `cantReal`, los m3— pero se sigue devolviendo
   // como cuenta y hay tests que lo miran.
   cargues: opts.cargues !== undefined ? opts.cargues : 1,
-  // `cantReal` = los m3 que movio ese pedido, y es lo que PESA en `pct`.
-  // Por defecto son cargues x 7 —la mediana real— para que un caso que no se
-  // interesa por el tamano del camion siga dando el mismo porcentaje que
-  // cuando la unidad era el cargue. Un caso que SI quiere probar la diferencia
-  // pasa `cantReal` a mano.
+  // `cantReal` = los m3 que movio ese pedido, y es lo que PESA en `pct` (si
+  // tiene frecuencia). Por defecto son cargues x 7 —la mediana real— para que
+  // un caso que no se interesa por el tamano del camion siga dando el mismo
+  // porcentaje que cuando la unidad era el cargue. Un caso que SI quiere
+  // probar la diferencia pasa `cantReal` a mano.
   cantReal: opts.cantReal !== undefined
     ? opts.cantReal
     : (opts.cargues !== undefined ? opts.cargues : 1) * M3_POR_CARGUE,
@@ -35,7 +43,7 @@ const fila = (estado, opts = {}) => ({
 test('el porcentaje cuenta solo los evaluables', () => {
   const r = resumenDeCumplimiento([
     fila('Cumplido'), fila('Cumplido'), fila('Incumplido'),
-    fila('Sin programación'), fila('Sin hora programada'), fila('Sin dato de planta'),
+    fila('Sin programación'), fila('Sin hora programada'), fila('Sin despachar'),
   ]);
   assert.equal(r.pedidos, 3);
   assert.equal(r.pedidosCumplidos, 2);
@@ -168,13 +176,69 @@ test('por planta agrupa solo evaluables y ordena por volumen', () => {
   assert.deepEqual(porPlanta[0], {planta: 'Movil II', zona: 'Santo Domingo',
                                   pedidos: 3, pedidosCumplidos: 2,
                                   camiones: 3, camionesCumplidos: 2,
-                                  m3: 21, m3Cumplidos: 14,
+                                  m3: 21, m3Cumplidos: 14, m3Despachado: 21,
                                   pct: 67, pctPedidos: 67});
   assert.deepEqual(porPlanta[1], {planta: 'Movil III', zona: 'Punta Cana',
                                   pedidos: 1, pedidosCumplidos: 1,
                                   camiones: 1, camionesCumplidos: 1,
-                                  m3: 7, m3Cumplidos: 7,
+                                  m3: 7, m3Cumplidos: 7, m3Despachado: 7,
                                   pct: 100, pctPedidos: 100});
+});
+
+test('pct pesa los m3 por frecuencia y pctPedidos cuenta por estado (2026-11-24)', () => {
+  // Inicio a tiempo pero lento (70 m3), inicio tarde pero al ritmo (30 m3), y
+  // uno a tiempo sin frecuencia evaluada (un dia o servicio sin dato, 50 m3).
+  const rows = [
+    {...fila('Cumplido',   {cantReal: 70, frecuencia: 'No cumple'}), ritmoProg: 10, ritmoReal: 6},
+    {...fila('Incumplido', {cantReal: 30, frecuencia: 'Cumple'}), ritmoProg: 10, ritmoReal: 12},
+    fila('Cumplido',   {cantReal: 50, frecuencia: null}),
+    fila('Sin despachar', {cantReal: 0}),
+  ];
+  const r = resumenDeCumplimiento(rows);
+  assert.equal(r.pctPedidos, 67, 'Inicio de carga: 2 de 3 entregas evaluables');
+  assert.equal(r.pct, 30, 'Frecuencia: 30 de 100 m3, sin los 50 que no tienen frecuencia');
+  assert.deepEqual([r.m3, r.m3Cumplidos], [100, 30]);
+  assert.deepEqual([r.servicios, r.conRitmo, r.conRitmoCumple], [2, 2, 1]);
+  assert.equal(r.noEvaluables, 1);
+
+  // Por planta y por elemento: m3/m3Cumplidos son de frecuencia, y
+  // m3Despachado es todo lo evaluable.
+  const [planta] = cumplimientoPorPlanta(rows);
+  assert.deepEqual([planta.m3, planta.m3Cumplidos, planta.m3Despachado, planta.pct, planta.pctPedidos],
+                   [100, 30, 150, 30, 67]);
+  const [tipo] = cumplimientoPorElemento(rows);
+  assert.deepEqual([tipo.m3, tipo.m3Cumplidos, tipo.m3Despachado, tipo.pct, tipo.pctPedidos],
+                   [100, 30, 150, 30, 67]);
+});
+
+test('un directo o un servicio de un camion cumple la frecuencia sin ritmo y no cuenta en conRitmo', () => {
+  // Asi los devuelve computeCumplimiento: frecuencia 'Cumple' con los dos
+  // ritmos en null. Entran al pct, pero no a la cuenta de los medidos por ritmo.
+  const r = resumenDeCumplimiento([
+    {...fila('Incumplido', {cantReal: 8, frecuencia: 'Cumple'}), ritmoProg: null, ritmoReal: null},
+    {...fila('Cumplido',   {cantReal: 7, frecuencia: 'Cumple'}), ritmoProg: null, ritmoReal: null},
+    {...fila('Cumplido',   {cantReal: 40, frecuencia: 'No cumple'}), ritmoProg: 10, ritmoReal: 5},
+  ]);
+  assert.equal(r.pct, 27, '15 de 55 m3');
+  assert.deepEqual([r.servicios, r.conRitmo, r.conRitmoCumple], [3, 1, 0]);
+});
+
+test('sin ninguna frecuencia evaluada pct es null, y planta y elemento se ordenan por m3 despachados', () => {
+  // Un dia guardado antes del 2026-11-24: ninguna fila trae Hora Final.
+  const rows = [
+    {...fila('Cumplido',   {planta: 'Movil II', cantReal: 10, frecuencia: null}), elemento: 'LOSA'},
+    {...fila('Incumplido', {planta: 'Movil VI', zona: 'Punta Cana', cantReal: 90, frecuencia: null}),
+     elemento: 'COLUMNA'},
+  ];
+  const r = resumenDeCumplimiento(rows);
+  assert.equal(r.pct, null, 'sin dato, no 0 ni 100');
+  assert.equal(r.pctPedidos, 50);
+  const plantas = cumplimientoPorPlanta(rows);
+  assert.deepEqual(plantas.map(p => [p.planta, p.m3, p.m3Despachado, p.pct]),
+                   [['Movil VI', 0, 90, null], ['Movil II', 0, 10, null]],
+                   'la que mas despacho primero, aunque ninguna tenga m3 de frecuencia');
+  assert.deepEqual(cumplimientoPorElemento(rows).map(e => [e.tipo, e.m3Despachado, e.pct]),
+                   [['COLUMNA', 90, null], ['LOSA', 10, null]]);
 });
 
 test('por planta las dos unidades se separan cuando el volumen no esta parejo', () => {

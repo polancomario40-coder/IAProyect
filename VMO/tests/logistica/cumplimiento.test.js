@@ -25,7 +25,9 @@ const estado = (programacion, cargue, supuestos = SUPUESTOS(), overrides = new M
     { programacion, cargue, trayectoOverrides: overrides, observaciones: new Map() },
     supuestos);
 
-// 07:00 de cargue + 15 + 10 + 30 de trayecto = llegada 07:55.
+// 07:00 de cargue + 15 + 10 + 30 de trayecto = llegada 07:55. Desde el
+// 2026-11-24 la llegada estimada es solo un dato: el estado lo decide el
+// primer conduce contra la hora programada.
 const CARGUE_7 = 420, LLEGADA_ESPERADA = 475;
 
 test('sin alguno de los dos archivos no calcula nada', () => {
@@ -33,45 +35,68 @@ test('sin alguno de los dos archivos no calcula nada', () => {
   assert.equal(computeCumplimiento({ programacion: [], cargue: null }, SUPUESTOS()), null);
 });
 
-test('la llegada estimada es cargue + tiempo de cargue + calidad + trayecto', () => {
+test('la llegada estimada queda como dato; la diferencia es 1er conduce menos hora programada (2026-11-24)', () => {
+  // Hasta el 2026-11-24 diff era llegada estimada - hora programada. Con la
+  // regla de la jefa la llegada (cargue + calidad + trayecto) solo se
+  // muestra, y la diferencia es la del primer conduce: negativo es antes.
   const { results } = estado([pedido('ACME', 'TORRE ALFA', 480)],
                              [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
   assert.equal(results.length, 1);
   assert.equal(results[0].horaLlegadaEst, LLEGADA_ESPERADA);
-  assert.equal(results[0].diff, LLEGADA_ESPERADA - 480);
+  assert.equal(results[0].horaCargue, CARGUE_7);
+  assert.equal(results[0].diff, CARGUE_7 - 480);
+  assert.equal(results[0].diff, -60, 'el conduce fue una hora antes de la hora programada');
 });
 
-test('cumple si la diferencia entra en la tolerancia, e incumple si la pasa', () => {
-  // Programado 07:25 -> llega 07:55 -> +30, justo el borde de la tolerancia.
-  const justo = estado([pedido('ACME', 'TORRE ALFA', 445)], [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
-  assert.equal(justo.results[0].diff, 30);
-  assert.equal(justo.results[0].estado, 'Cumplido', 'el borde de la tolerancia cumple');
+test('cumple si el primer conduce es 30 min o mas antes de la hora programada', () => {
+  // Programado 08:00, primer conduce 07:00: una hora antes, cumple.
+  const antes = estado([pedido('ACME', 'TORRE ALFA', 480)], [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
+  assert.equal(antes.results[0].diff, -60);
+  assert.equal(antes.results[0].estado, 'Cumplido');
 
-  const pasado = estado([pedido('ACME', 'TORRE ALFA', 444)], [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
-  assert.equal(pasado.results[0].estado, 'Incumplido');
+  // Programado 07:20: el conduce fue solo 20 min antes, no alcanza.
+  const pocoAntes = estado([pedido('ACME', 'TORRE ALFA', 440)], [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
+  assert.equal(pocoAntes.results[0].diff, -20);
+  assert.equal(pocoAntes.results[0].estado, 'Incumplido', 'antes, pero no lo bastante');
+
+  // Programado 06:40: el conduce fue despues de la hora, incumple.
+  const despues = estado([pedido('ACME', 'TORRE ALFA', 400)], [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
+  assert.equal(despues.results[0].diff, 20);
+  assert.equal(despues.results[0].estado, 'Incumplido');
 });
 
-test('llegar antes cumple, por mucho que sea (2026-10-09)', () => {
+test('conducir antes cumple, por mucho que sea (2026-10-09)', () => {
   // Del 2026-10-02 al 2026-10-09 hubo un piso de 60 min que hacia incumplir
-  // los adelantos grandes; el usuario lo saco: llegar antes siempre cumple.
+  // los adelantos grandes; el usuario lo saco y la regla del 2026-11-24 lo
+  // mantiene: no hay "demasiado temprano".
   const lejos = estado([pedido('ACME', 'TORRE ALFA', 900)], [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
   assert.ok(lejos.results[0].diff < -400);
   assert.equal(lejos.results[0].estado, 'Cumplido');
 
   // Aunque el dia guardado traiga un piso, ya no se usa.
   const sup = {...SUPUESTOS(), toleranciaAdelanto: 0};
-  const unMinuto = estado([pedido('ACME', 'TORRE ALFA', 476)], [camion('ACME', 'TORRE ALFA', CARGUE_7)], sup);
-  assert.equal(unMinuto.results[0].diff, -1);
-  assert.equal(unMinuto.results[0].estado, 'Cumplido');
+  const justoPasado = estado([pedido('ACME', 'TORRE ALFA', 451)], [camion('ACME', 'TORRE ALFA', CARGUE_7)], sup);
+  assert.equal(justoPasado.results[0].diff, -31);
+  assert.equal(justoPasado.results[0].estado, 'Cumplido');
 });
 
-test('tarde: el borde de la tolerancia cumple y un minuto mas no', () => {
-  const justo = estado([pedido('ACME', 'TORRE ALFA', 445)], [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
-  assert.equal(justo.results[0].diff, 30);
-  assert.equal(justo.results[0].estado, 'Cumplido');
-  const pasado = estado([pedido('ACME', 'TORRE ALFA', 444)], [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
-  assert.equal(pasado.results[0].diff, 31);
-  assert.equal(pasado.results[0].estado, 'Incumplido');
+test('el borde: 30 min antes cumple y 29 no', () => {
+  const justo = estado([pedido('ACME', 'TORRE ALFA', 450)], [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
+  assert.equal(justo.results[0].diff, -30);
+  assert.equal(justo.results[0].estado, 'Cumplido', 'el borde cumple');
+  const corto = estado([pedido('ACME', 'TORRE ALFA', 449)], [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
+  assert.equal(corto.results[0].diff, -29);
+  assert.equal(corto.results[0].estado, 'Incumplido');
+});
+
+test('la anticipacion es la tolerancia del dia, no un 30 fijo', () => {
+  // 30 min antes cumple con tolerancia 30 y no con 45.
+  const sup = {...SUPUESTOS(), tolerancia: 45};
+  const r = estado([pedido('ACME', 'TORRE ALFA', 450)], [camion('ACME', 'TORRE ALFA', CARGUE_7)], sup);
+  assert.equal(r.results[0].diff, -30);
+  assert.equal(r.results[0].estado, 'Incumplido');
+  const conTiempo = estado([pedido('ACME', 'TORRE ALFA', 465)], [camion('ACME', 'TORRE ALFA', CARGUE_7)], sup);
+  assert.equal(conTiempo.results[0].estado, 'Cumplido', '45 min antes');
 });
 
 test('un pedido sin hora programada NO puede dar Cumplido', () => {
@@ -83,12 +108,19 @@ test('un pedido sin hora programada NO puede dar Cumplido', () => {
   assert.equal(results[0].diff, null);
 });
 
-test('una planta sin trayecto configurado no cumple ni incumple: avisa', () => {
+test('sin trayecto de la planta igual se evalua: el trayecto ya no entra (2026-11-24)', () => {
+  // Hasta el 2026-11-24 una planta sin trayecto daba "Sin dato de planta" y
+  // no entraba al porcentaje. Con el primer conduce no hace falta la planta:
+  // ese estado ya no existe.
   const { results } = estado([pedido('ACME', 'TORRE ALFA', 480)],
                              [camion('ACME', 'TORRE ALFA', CARGUE_7, { planta: 'Planta Nueva' })]);
-  assert.equal(results[0].estado, 'Sin dato de planta');
-  assert.equal(results[0].horaLlegadaEst, null);
+  assert.equal(results[0].estado, 'Cumplido');
+  assert.equal(results[0].diff, -60);
+  assert.equal(results[0].horaLlegadaEst, null, 'la llegada si necesita el trayecto, y queda sin dato');
   assert.equal(results[0].zona, 'Sin zona');
+  const tarde = estado([pedido('ACME', 'TORRE ALFA', 430)],
+                       [camion('ACME', 'TORRE ALFA', CARGUE_7, { planta: 'Planta Nueva' })]);
+  assert.equal(tarde.results[0].estado, 'Incumplido');
 });
 
 test('solo Cumplido e Incumplido son evaluables', () => {
@@ -244,14 +276,19 @@ test('el trayecto se guarda con la clave que la pantalla recibe, y se aplica', (
   assert.notEqual(antes.claveTrayecto, antes.rowKey, 'si fueran iguales este test no probaria nada');
 });
 
-test('el trayecto editado a mano le gana al promedio de la planta', () => {
+test('el trayecto editado a mano le gana al de la planta, pero ya no cambia el estado', () => {
   const overrides = new Map([['ACME||TORRE ALFA', 90]]);
-  const { results } = estado([pedido('ACME', 'TORRE ALFA', 480)],
-                             [camion('ACME', 'TORRE ALFA', CARGUE_7)], SUPUESTOS(), overrides);
+  const p = [pedido('ACME', 'TORRE ALFA', 480)];
+  const c = [camion('ACME', 'TORRE ALFA', CARGUE_7)];
+  const { results } = estado(p, c, SUPUESTOS(), overrides);
   assert.equal(results[0].trayecto, 90);
   assert.equal(results[0].isOverride, true);
   assert.equal(results[0].horaLlegadaEst, CARGUE_7 + 15 + 10 + 90);
-  assert.equal(results[0].estado, 'Incumplido');
+  // Hasta el 2026-11-24 esa llegada (+55 sobre la hora) lo hacia incumplir.
+  const sinEditar = estado(p, c).results[0];
+  assert.equal(results[0].diff, sinEditar.diff);
+  assert.equal(results[0].estado, 'Cumplido');
+  assert.equal(sinEditar.estado, 'Cumplido');
 });
 
 test('la zona sale de la planta del primer camion', () => {
@@ -315,8 +352,21 @@ test('renglones a la MISMA hora son un solo pedido', () => {
     ped('A', 'O', 600, 10, {despachado: 10}),
   ]);
   assert.equal(horas.length, 2);
-  assert.deepEqual(horas[0], {hora: 480, cantidad: 50, despachado: 45, pendiente: null,
+  assert.deepEqual(horas[0], {hora: 480, horaFin: null, cantidad: 50, despachado: 45, pendiente: null,
                               tieneDespachado: true, tienePendiente: false});
+});
+
+test('la hora final de un pedido es la mas tardia de sus renglones (2026-11-24)', () => {
+  // TERRAMARE el 23/11: 33 + 300 m3 a la misma hora son un servicio, y su
+  // Hora Final es la del renglon que termina mas tarde. Un renglon sin Hora
+  // Final no la baja, y una hora sin ninguna queda en null.
+  const horas = pedidosPorHora([
+    {...ped('A', 'O', 480, 33), horaFinMin: 600},
+    {...ped('A', 'O', 480, 300), horaFinMin: 1080},
+    {...ped('A', 'O', 480, 5), horaFinMin: null},
+    {...ped('A', 'O', 1200, 10), horaFinMin: null},
+  ]);
+  assert.deepEqual(horas.map(h => [h.hora, h.cantidad, h.horaFin]), [[480, 338, 1080], [1200, 10, null]]);
 });
 
 test('los camiones se reparten por Despachado, en orden cronologico', () => {
@@ -401,14 +451,17 @@ test('EL CASO PARMOL: un camion chico y temprano no hace cumplir a los que sigue
   assert.equal(colada.cargues, 60);
   assert.equal(colada.estado, 'Incumplido', 'la colada real arranco tarde y se ve');
 
-  // El camion de las 00:10 responde solo por SU hora. Llegar antes cumple
-  // desde el 2026-10-09 (pedido del usuario): sale Cumplido con −7h55, pero
-  // pesa sus 9.5 m3 y no los 420 de la colada.
-  assert.equal(temprano.diff, -475);
+  // El camion de las 00:10 responde solo por SU hora. Conducir antes cumple
+  // (2026-10-09, y la regla del 2026-11-24 lo mantiene): sale Cumplido con
+  // −8h50 (00:10 contra 09:00), y no arrastra a la colada, que arranco 12:21
+  // contra las 11:00.
+  assert.equal(temprano.diff, -530);
   assert.equal(temprano.estado, 'Cumplido');
+  assert.equal(colada.diff, 81);
 
   const r = resumenDeCumplimiento(results);
-  assert.equal(r.pct, 2, 'solo los 9.5 m3 del temprano: la colada tarde no se tapa');
+  assert.equal(r.pctPedidos, 50, 'una de dos: la colada tarde no se tapa');
+  assert.equal(r.pct, null, 'el programa no trae Hora Final: la frecuencia queda sin dato');
 });
 
 test('lo no despachado sale de la columna Pendiente, no del cruce', () => {
@@ -578,4 +631,146 @@ test('si la obra tiene otro renglon con m3, los camiones van a ese', () => {
 test('una cantidad desconocida (null) si se cruza: solo se saca el cero explicito', () => {
   const r = estado([pedido('ACME', 'TORRE ALFA', 480, null)], [camion('ACME', 'TORRE ALFA', CARGUE_7)]);
   assert.equal(r.results[0].estado, 'Cumplido');
+});
+
+
+// ── Frecuencia de despacho por ritmo (regla de la jefa, 2026-11-24) ────────
+//
+// Programado = m3 programados / horas de la Hora Inicio a la Hora Final.
+// Real = m3 despachados / horas del primer al ultimo conduce. Cumple si el
+// real es igual o mayor. Sin ritmo que medir (directo, sin Hora Final, un
+// solo camion) cumple; sin despachar, sin hora o en un dia sin ninguna Hora
+// Final no se evalua (null).
+
+// Un servicio con bomba: hora y Hora Final ya con el +60 del parser.
+const servicio = (cliente, hora, fin, cantidad, bomba = '45') =>
+  ({...pedido(cliente, 'OBRA ' + cliente, hora, cantidad), horaFinMin: fin, bomba, elemento: 'LOSA'});
+// Los viajes de ese servicio, uno por hora, todos de `cantidad` m3.
+const viajes = (cliente, horas, cantidad) =>
+  horas.map((h, i) => camion(cliente, 'OBRA ' + cliente, h, { ficha: cliente + '-' + i, cantidad }));
+const fila1 = (programacion, cargue) => estado(programacion, cargue).results[0];
+
+test('frecuencia: cumple si el ritmo real es igual o mayor que el programado', () => {
+  // 100 m3 de 08:00 a 18:00 = 10 m3/h. Despacho: 100 m3 del primer conduce
+  // (07:00) al ultimo (12:00) = 20 m3/h.
+  const r = fila1([servicio('ACME', 480, 1080, 100)],
+                  viajes('ACME', [420, 495, 570, 645, 720], 20));
+  assert.equal(r.frecuencia, 'Cumple');
+  assert.equal(r.ritmoProg, 10);
+  assert.equal(r.ritmoReal, 20);
+  assert.equal(r.horasProg, 10);
+  assert.equal(r.horasReal, 5);
+  assert.equal(r.horaFinProg, 1080);
+});
+
+test('frecuencia: el ritmo justo igual cumple (100 m3 en 10 h contra 10 m3/h)', () => {
+  // 100 m3 en 10 h reales contra 100 m3 programados en 10 h.
+  const exacto = fila1([servicio('ACME', 480, 1080, 100)],
+                       viajes('ACME', [420, 570, 720, 870, 1020], 20));
+  assert.equal(exacto.ritmoReal, 10);
+  assert.equal(exacto.frecuencia, 'Cumple');
+  // 20 m3 en 1h30 (13,33 m3/h) contra dos viajes de 7 en 63 min: es el mismo
+  // ritmo, pero en coma flotante el real sale 13,333...2 contra 13,333...4.
+  // Sin el margen de 1e-9 saldria "No cumple".
+  const flotante = fila1([servicio('ACME', 480, 570, 20)], viajes('ACME', [420, 483], 7));
+  assert.ok(flotante.ritmoReal < flotante.ritmoProg, 'si fueran iguales este caso no probaria el margen');
+  assert.equal(flotante.frecuencia, 'Cumple');
+});
+
+test('frecuencia: no cumple si el ritmo real es menor', () => {
+  // 100 m3 en 10 h = 10 m3/h; salieron 50 m3 en 10 h = 5 m3/h.
+  const r = fila1([servicio('ACME', 480, 1080, 100)],
+                  viajes('ACME', [420, 720, 1020], 50 / 3));
+  assert.equal(r.frecuencia, 'No cumple');
+  assert.equal(r.ritmoProg, 10);
+  assert.ok(Math.abs(r.ritmoReal - 5) < 1e-9);
+  assert.equal(r.estado, 'Cumplido', 'el inicio va por su lado: el primer conduce fue a tiempo');
+});
+
+test('frecuencia: un directo cumple sin ritmo, aunque vaya lento', () => {
+  // El programa no les pone Hora Final a los directos; aunque la traiga, un
+  // directo no tiene ritmo que medir.
+  for (const bomba of ['Directo', '', null]){
+    const r = fila1([servicio('ACME', 480, 1080, 100, bomba)],
+                    viajes('ACME', [420, 720, 1020], 10));
+    assert.equal(r.frecuencia, 'Cumple', `bomba ${JSON.stringify(bomba)}`);
+    assert.equal(r.ritmoProg, null);
+    assert.equal(r.ritmoReal, null);
+  }
+});
+
+test('frecuencia: un servicio de un solo camion cumple sin ritmo', () => {
+  const r = fila1([servicio('ACME', 480, 1080, 100)], viajes('ACME', [420], 7));
+  assert.equal(r.frecuencia, 'Cumple');
+  assert.equal(r.ritmoProg, null);
+  assert.equal(r.ritmoReal, null);
+  assert.equal(r.horasReal, null, 'cero horas entre el primer y el ultimo conduce');
+  assert.equal(r.horasProg, 10);
+});
+
+test('frecuencia: un servicio sin Hora Final cumple sin ritmo, si el dia trae otras', () => {
+  const { results } = estado(
+    [servicio('ACME', 480, 1080, 100), servicio('BETA', 480, null, 100)],
+    [...viajes('ACME', [420, 1020], 50), ...viajes('BETA', [420, 1020], 5)]);
+  const beta = results.find(r => r.cliente === 'BETA');
+  assert.equal(beta.frecuencia, 'Cumple', 'lento, pero sin Hora Final no hay contra que medir');
+  assert.equal(beta.ritmoProg, null);
+  assert.equal(beta.horasProg, null);
+  assert.equal(beta.horaFinProg, null);
+});
+
+test('frecuencia: un dia sin ninguna Hora Final queda sin dato, no en 100%', () => {
+  // Los dias guardados antes del 2026-11-24 no tienen Hora Final. Tomar cada
+  // servicio como "sin ritmo, cumple" daria 100%: tiene que dar null.
+  const { results } = estado(
+    [servicio('ACME', 480, null, 100), servicio('BETA', 480, undefined, 20, 'Directo')],
+    [...viajes('ACME', [420, 1020], 5), ...viajes('BETA', [470], 20)]);
+  assert.deepEqual(results.map(r => [r.estado, r.frecuencia]),
+                   [['Cumplido', null], ['Incumplido', null]]);
+  const r = resumenDeCumplimiento(results);
+  assert.equal(r.pct, null);
+  assert.equal(r.m3, 0);
+  assert.equal(r.servicios, 0);
+  assert.equal(r.pctPedidos, 50, 'el inicio de carga si se calcula');
+});
+
+test('frecuencia: sin despachar o sin hora programada no se evalua', () => {
+  const { results } = estado(
+    [{...servicio('ACME', 480, 1080, 20), despachado: 20},
+     {...servicio('ACME', 1140, 1200, 30), despachado: 0},
+     servicio('BETA', null, null, 10)],
+    [...viajes('ACME', [420, 440], 10), ...viajes('BETA', [500, 520], 5)]);
+  const porHora = new Map(results.map(r => [r.cliente + ' ' + r.horaProg, r]));
+  assert.equal(porHora.get('ACME 1140').estado, 'Sin despachar');
+  assert.equal(porHora.get('ACME 1140').frecuencia, null);
+  assert.equal(porHora.get('BETA null').estado, 'Sin hora programada');
+  assert.equal(porHora.get('BETA null').frecuencia, null);
+  assert.equal(porHora.get('ACME 480').frecuencia, 'Cumple');
+});
+
+test('los camiones sin programacion no tienen frecuencia', () => {
+  const { results } = estado([servicio('ACME', 480, 1080, 20)],
+                             [...viajes('ACME', [420, 440], 10), ...viajes('NADIE', [500, 600], 7)]);
+  const sinProg = results.find(r => r.estado === 'Sin programación');
+  assert.equal(sinProg.frecuencia, null);
+  assert.equal(sinProg.ritmoProg, null);
+});
+
+test('pct sigue a la frecuencia (m3) y pctPedidos al inicio (entregas): pueden no coincidir', () => {
+  // ACME arranco a tiempo (07:00 contra 08:00) pero despacho lento: 50 m3
+  // programados en 5 h (10 m3/h) y salieron en 8 h (6,25 m3/h).
+  // BETA arranco tarde (07:50 contra 08:00, solo 10 min antes) pero al ritmo:
+  // 20 m3 programados en 2 h (10 m3/h) y salieron en 1 h (20 m3/h).
+  const { results } = estado(
+    [servicio('ACME', 480, 780, 50), servicio('BETA', 480, 600, 20)],
+    [...viajes('ACME', [420, 540, 660, 780, 900], 10), ...viajes('BETA', [470, 530], 10)]);
+  const acme = results.find(r => r.cliente === 'ACME');
+  const beta = results.find(r => r.cliente === 'BETA');
+  assert.deepEqual([acme.estado, acme.frecuencia], ['Cumplido', 'No cumple']);
+  assert.deepEqual([beta.estado, beta.frecuencia], ['Incumplido', 'Cumple']);
+  const r = resumenDeCumplimiento(results);
+  assert.equal(r.pctPedidos, 50, 'Inicio de carga: 1 de 2 entregas');
+  assert.equal(r.pct, 29, 'Frecuencia: 20 de 70 m3 al ritmo');
+  assert.deepEqual([r.m3, r.m3Cumplidos], [70, 20]);
+  assert.deepEqual([r.servicios, r.conRitmo, r.conRitmoCumple], [2, 2, 1]);
 });

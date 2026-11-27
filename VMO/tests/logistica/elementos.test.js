@@ -4,7 +4,11 @@ const test = require('node:test');
 const assert = require('node:assert');
 const L = require('../../static/logistica.logic.js');
 
-const fila = (elemento, estado, cantReal, diff = 0) => ({elemento, estado, cantReal, diff});
+// `frecuencia` acompana al estado (2026-11-24): `pct` pesa los m3 por el ritmo
+// y `pctPedidos` cuenta por el estado. Juntas, el % es el de siempre.
+const FRECUENCIA_DE = {'Cumplido': 'Cumple', 'Incumplido': 'No cumple'};
+const fila = (elemento, estado, cantReal, diff = 0) =>
+  ({elemento, estado, frecuencia: FRECUENCIA_DE[estado] ?? null, cantReal, diff});
 
 test('el tipo es el elemento sin el sufijo de modulo o numero de Macao', () => {
   assert.equal(L.tipoDeElemento('COLUMNA M1'), 'COLUMNA');
@@ -21,8 +25,8 @@ test('por elemento: las dos unidades, ordenado por m3', () => {
     fila('COLUMNA M1', 'Incumplido', 50), fila('COLUMNA M5', 'Cumplido', 50),
     fila('MURO', 'Sin programación', 99),
   ]);
-  assert.deepEqual(r.map(e => [e.tipo, e.pct, e.pctPedidos, e.m3]),
-                   [['COLUMNA', 50, 50, 100], ['LOSA', 75, 50, 40]],
+  assert.deepEqual(r.map(e => [e.tipo, e.pct, e.pctPedidos, e.m3, e.m3Despachado]),
+                   [['COLUMNA', 50, 50, 100, 100], ['LOSA', 75, 50, 40, 40]],
                    'lo que no se evalua no entra');
 });
 

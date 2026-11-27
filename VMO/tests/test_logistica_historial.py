@@ -362,6 +362,55 @@ def test_una_base_sin_las_columnas_de_bomba_se_migra_sola(cliente):
     assert vuelta[0]["bomba"] == "45"
 
 
+def test_la_hora_final_sobrevive_el_viaje(cliente):
+    """2026-11-24: la Hora Final (con el +60, como horaMin) es lo que da las
+    horas programadas de la frecuencia por ritmo. Entra por los cuatro lugares
+    —modelo, columna, INSERT y SELECT—; si falta uno, el dia reabierto sale
+    sin Hora Final y su frecuencia queda "sin dato"."""
+    c, h = cliente
+    prog = [{"cliente": "ACME", "obra": "TORRE ALFA", "horaMin": 480, "horaFinMin": 1080,
+             "cantidad": 100, "bomba": "45"},
+            # Sin la clave: un directo, o una fila sin Hora Final.
+            {"cliente": "BETA", "obra": "NAVE", "horaMin": 540, "cantidad": 7, "bomba": "Directo"},
+            {"cliente": "GAMMA", "obra": "GALPON", "horaMin": 600, "horaFinMin": None, "cantidad": 12}]
+    assert c.post("/api/logistica/dias", json=dia(programacion=prog), headers=h).status_code == 200
+    vuelta = c.get("/api/logistica/dias/2026-09-29", headers=h).json()["programacion"]
+    assert [(f["cliente"], f["horaMin"], f["horaFinMin"]) for f in vuelta] == [
+        ("ACME", 480.0, 1080.0), ("BETA", 540.0, None), ("GAMMA", 600.0, None)]
+
+
+def test_una_base_sin_hora_fin_min_se_migra_y_lo_guardado_vuelve_sin_hora_final(cliente):
+    """Una base de antes del 2026-11-24 no tiene la columna. La migracion la
+    agrega; los dias ya guardados vuelven con horaFinMin en None (su frecuencia
+    es "sin dato", no 100%) y los nuevos la guardan."""
+    import sqlite3
+    conn = sqlite3.connect(core.LOG_DB_PATH)
+    conn.executescript("""
+        CREATE TABLE logistica_dia (
+            fecha TEXT PRIMARY KEY, guardado_en TEXT NOT NULL,
+            cargue_min REAL, calidad_min REAL, tolerancia_min REAL);
+        CREATE TABLE logistica_programacion (
+            fecha TEXT NOT NULL, orden INTEGER NOT NULL,
+            cliente TEXT, obra TEXT, hora_min REAL, pedido TEXT, cantidad REAL,
+            elemento TEXT, producto TEXT, prioridad TEXT, zona_hoja TEXT,
+            despachado REAL, pendiente REAL, bomba TEXT, vendedor TEXT, zona_prog TEXT,
+            PRIMARY KEY (fecha, orden));
+        INSERT INTO logistica_dia VALUES ('2026-09-28', '2026-09-28T20:00:00', 15, 10, 30);
+        INSERT INTO logistica_programacion (fecha, orden, cliente, obra, hora_min, cantidad, bomba)
+            VALUES ('2026-09-28', 0, 'VIEJO', 'OBRA', 480, 20, '45');
+    """)
+    conn.commit()
+    conn.close()
+    c, h = cliente
+    viejo = c.get("/api/logistica/dias/2026-09-28", headers=h)
+    assert viejo.status_code == 200, viejo.text
+    assert viejo.json()["programacion"][0]["horaFinMin"] is None
+    prog = [{"cliente": "ACME", "obra": "X", "horaMin": 480, "horaFinMin": 720, "cantidad": 7, "bomba": "45"}]
+    assert c.post("/api/logistica/dias", json=dia(programacion=prog), headers=h).status_code == 200
+    vuelta = c.get("/api/logistica/dias/2026-09-29", headers=h).json()["programacion"]
+    assert vuelta[0]["horaFinMin"] == 720.0
+
+
 def test_responsable_y_espaciamiento_sobreviven_el_viaje(cliente):
     """2026-10-06: el responsable por fila y el espaciamiento maximo entran por
     los cuatro lugares (modelo, tabla/columna, INSERT, SELECT)."""

@@ -60,6 +60,9 @@ class LogFilaProgramacion(BaseModel):
     cliente: str | None = None
     obra: str | None = None
     horaMin: float | None = None
+    # La Hora Final del programa, con el mismo +60 (2026-11-24): sin declararla
+    # pydantic la tira y la frecuencia por ritmo quedaria siempre sin dato.
+    horaFinMin: float | None = None
     pedido: str | int | float | None = None
     cantidad: float = 0
     elemento: str | int | float | None = None
@@ -739,6 +742,10 @@ class LogEntregaDia(BaseModel):
     zona: str = Field(default="", max_length=40)
     llegada: float | None = None
     diff: float | None = None
+    # El ritmo de la frecuencia (2026-11-24), en m3/h; null es sin ritmo.
+    frecuencia: Literal["Cumple", "No cumple"] | None = None
+    ritmoProg: float | None = Field(default=None, ge=0)
+    ritmoReal: float | None = Field(default=None, ge=0)
     estado: str = Field(max_length=40)
     responsable: str = Field(default="", max_length=20)
     motivo: str = Field(default="", max_length=120)

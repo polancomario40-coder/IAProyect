@@ -310,6 +310,8 @@ def transformar_programacion(prog_raw: list[dict]) -> list[dict]:
         obra = _texto_o_none(row.get("idClienteObra") or row.get("Obra")) or ""
         hora_leida = hora_a_minutos(row.get("Hora"))
         hora_min = (hora_leida + AJUSTE_HORA_PROGRAMADA_MIN) if hora_leida is not None else None
+        hora_fin_leida = hora_a_minutos(row.get("HoraFin") or row.get("HoraFinal"))
+        hora_fin_min = (hora_fin_leida + AJUSTE_HORA_PROGRAMADA_MIN) if hora_fin_leida is not None else None
         cantidad = _float_o_none(row.get("Cantidad")) or 0.0
         planta = _texto_o_none(row.get("idPlanta"))
         zona = ZONA_PLANTA_POR_DEFECTO.get(planta or "", None)
@@ -320,6 +322,7 @@ def transformar_programacion(prog_raw: list[dict]) -> list[dict]:
             "cliente": cliente,
             "obra": obra,
             "horaMin": hora_min,
+            "horaFinMin": hora_fin_min,
             "pedido": _texto_o_none(row.get("OrdComp") or row.get("Pedido")),
             "cantidad": cantidad,
             "elemento": _texto_o_none(row.get("Elemento")),
@@ -446,17 +449,31 @@ def guardar_en_vmo_db(fecha_str: str, programacion: list[dict], cargue_rows: lis
                 "INSERT INTO logistica_dia_planta (fecha, planta, trayecto_min, zona) VALUES (?, ?, ?, ?)",
                 [(fecha_str, p["planta"], p["trayecto"], p["zona"]) for p in plantas_list]
             )
-            conn.executemany(
-                "INSERT INTO logistica_programacion (fecha, orden, cliente, obra, hora_min, "
-                "pedido, cantidad, elemento, producto, prioridad, zona_hoja, "
-                "despachado, pendiente, bomba, vendedor, zona_prog) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                [(fecha_str, i, r["cliente"], r["obra"], r["horaMin"], r["pedido"],
-                  r["cantidad"], r["elemento"], r["producto"], r["prioridad"],
-                  r["zonaSheet"], r["despachado"], r["pendiente"],
-                  r["bomba"], r["vendedor"], r["zonaProg"])
-                 for i, r in enumerate(programacion)]
-            )
+            cols_prog = [c[1] for c in conn.execute("PRAGMA table_info(logistica_programacion)")]
+            if "hora_fin_min" in cols_prog:
+                conn.executemany(
+                    "INSERT INTO logistica_programacion (fecha, orden, cliente, obra, hora_min, "
+                    "pedido, cantidad, elemento, producto, prioridad, zona_hoja, "
+                    "despachado, pendiente, bomba, vendedor, zona_prog, hora_fin_min) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    [(fecha_str, i, r["cliente"], r["obra"], r["horaMin"], r["pedido"],
+                      r["cantidad"], r["elemento"], r["producto"], r["prioridad"],
+                      r["zonaSheet"], r["despachado"], r["pendiente"],
+                      r["bomba"], r["vendedor"], r["zonaProg"], r.get("horaFinMin"))
+                     for i, r in enumerate(programacion)]
+                )
+            else:
+                conn.executemany(
+                    "INSERT INTO logistica_programacion (fecha, orden, cliente, obra, hora_min, "
+                    "pedido, cantidad, elemento, producto, prioridad, zona_hoja, "
+                    "despachado, pendiente, bomba, vendedor, zona_prog) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    [(fecha_str, i, r["cliente"], r["obra"], r["horaMin"], r["pedido"],
+                      r["cantidad"], r["elemento"], r["producto"], r["prioridad"],
+                      r["zonaSheet"], r["despachado"], r["pendiente"],
+                      r["bomba"], r["vendedor"], r["zonaProg"])
+                     for i, r in enumerate(programacion)]
+                )
             conn.executemany(
                 "INSERT INTO logistica_cargue (fecha, orden, ficha, hora_min, cliente, conduce, "
                 "elemento, planta, obra, cantidad) VALUES (?,?,?,?,?,?,?,?,?,?)",

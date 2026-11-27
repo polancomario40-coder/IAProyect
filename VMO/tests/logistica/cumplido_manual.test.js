@@ -24,10 +24,12 @@ const estado = () => ({
 });
 const fila = (s, elemento) => L.computeCumplimiento(s, SUPUESTOS()).results.find(r => r.elemento === elemento);
 
-test('sin tocar nada, la escalera sale incumplida (+2h33)', () => {
+// Desde el 2026-11-24 decide el primer conduce contra la hora programada
+// (08:00): la columna arranco 07:00 y cumple; la escalera 09:08, +1h08.
+test('sin tocar nada, la escalera sale incumplida (1er conduce +1h08)', () => {
   const r = fila(estado(), 'ESCALERA');
   assert.equal(r.estado, 'Incumplido');
-  assert.equal(r.diff, 153);
+  assert.equal(r.diff, 68);
   assert.equal(r.manual, false);
 });
 
@@ -39,10 +41,31 @@ test('con motivo y marcada, pasa a cumplida y cuenta en los porcentajes', () => 
   const r = fila(s, 'ESCALERA');
   assert.equal(r.estado, 'Cumplido');
   assert.equal(r.manual, true);
-  assert.equal(r.diff, 153, 'la diferencia real no se esconde');
+  assert.equal(r.diff, 68, 'la diferencia real no se esconde');
   assert.equal(L.estadoVisible(r), 'Cumplido (manual)');
   const res = L.resumenDeCumplimiento(L.computeCumplimiento(s, SUPUESTOS()).results);
-  assert.deepEqual([res.pedidosCumplidos, res.pedidos, res.pctPedidos, res.pct], [2, 2, 100, 100]);
+  assert.deepEqual([res.pedidosCumplidos, res.pedidos, res.pctPedidos], [2, 2, 100]);
+  // La marca es del Inicio de carga. La Frecuencia va por el ritmo, y este
+  // programa no trae Hora Final: queda sin dato.
+  assert.equal(res.pct, null);
+});
+
+test('la marca manual no toca la frecuencia', () => {
+  // Con Hora Final la frecuencia se evalua, y es la misma con o sin marca.
+  const conFin = () => {
+    const s = estado();
+    s.programacion = s.programacion.map(p => ({...p, horaFinMin: 600}));
+    return s;
+  };
+  const antes = L.resumenDeCumplimiento(L.computeCumplimiento(conFin(), SUPUESTOS()).results);
+  const s = conFin();
+  const k = fila(s, 'ESCALERA').rowKey;
+  s.motivos.set(k, 'PRIORIDAD OTRO ELEMENTO');
+  s.cumplidosManuales.add(k);
+  const despues = L.resumenDeCumplimiento(L.computeCumplimiento(s, SUPUESTOS()).results);
+  assert.deepEqual([antes.pctPedidos, despues.pctPedidos], [50, 100]);
+  assert.equal(despues.pct, antes.pct);
+  assert.deepEqual([despues.m3, despues.m3Cumplidos], [antes.m3, antes.m3Cumplidos]);
 });
 
 test('sin motivo, la marca no alcanza: sigue incumplida', () => {

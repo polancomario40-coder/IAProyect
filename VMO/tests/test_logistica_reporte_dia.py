@@ -80,11 +80,63 @@ def test_devuelve_un_pdf_con_el_resumen_y_el_detalle(cliente):
     assert 'filename="Reporte_dia_VMO_2026-10-14.pdf"' in res.headers["content-disposition"]
     paginas, texto = texto_del_pdf(res)
     assert paginas == 2, "resumen y detalle"
-    for esperado in ("Reporte del día", "miércoles 14/10/2026", "Tolerancia 30 min", "Frecuencia de despacho", "54%",
+    for esperado in ("Reporte del día", "miércoles 14/10/2026", "1er conduce 30 min antes",
+                     "Hora programada +60 min", "Frecuencia de despacho", "54%",
                      "Inicio de carga", "62%", "Santo Domingo", "Directo", "TARDANZA DE BOMBA",
                      "Detalle de entregas", "ACME SRL", "BETA SA", "Obs.: llegó antes",
                      "Sin programación 1", "Página 2 de 2"):
         assert esperado in texto, esperado
+    # 2026-11-24: el cargue, la calidad y la llegada estimada ya no deciden nada
+    for viejo in ("Tolerancia 30 min", "Cargue 15 min", "Calidad 10 min", "Llegada"):
+        assert viejo not in texto, viejo
+
+
+def test_la_frecuencia_y_el_inicio_dicen_su_regla_nueva(cliente):
+    """2026-11-24: la Frecuencia es el ritmo (m3/h) y el Inicio es el primer
+    conduce al menos 30 min antes. Las tarjetas, la tabla de bloques, el pie y
+    las columnas del detalle lo dicen; el detalle trae los dos ritmos."""
+    c, h = cliente
+    res = c.post("/api/logistica/reporte-dia", headers=h, json=pedido(entregas=[
+        entrega(primerCargue=510, diff=30, frecuencia="No cumple", ritmoProg=12.5, ritmoReal=8.34),
+        entrega("BETA SA", "Cumplido", responsable="", motivo="", primerCargue=445, diff=-35,
+                frecuencia="Cumple", ritmoProg=None, ritmoReal=None)]))
+    assert res.status_code == 200, res.text
+    doc = fitz.open(stream=res.content, filetype="pdf")
+    resumen, detalle = doc[0].get_text(), doc[1].get_text()
+    for esperado in ("651 de 1,216 m³ al ritmo", "13 de 21 entregas a tiempo", "1er conduce tarde",
+                     "Inicio a tiempo", "m³ al ritmo", "m³ al ritmo programado sobre los m³ evaluados",
+                     "Cumple si el real es igual o mayor",
+                     "al menos 30 min antes de la hora programada"):
+        assert esperado in resumen, esperado
+    for esperado in ("1er cond.", "Dif.", "Planta", "m³/h prog.", "m³/h real",
+                     "08:30", "+30m", "12.5", "8.3", "07:25", "-35m"):
+        assert esperado in detalle, esperado
+    # sin ritmo (directo, un camion, sin Hora Final) va guion
+    beta = detalle.split("BETA SA")[1].split("Cumplido")[0].split("\n")
+    assert beta.count("-") == 2, beta
+
+
+def test_sin_hora_final_la_frecuencia_dice_sin_dato(cliente):
+    """Un dia guardado antes del 2026-11-24 no tiene Hora Final: su
+    Frecuencia es null y la tarjeta lo dice en vez de "0 de 0 m3"."""
+    c, h = cliente
+    sin_fin = pedido()
+    sin_fin["bloques"][0].update(pct=None, m3=0, m3Cumplidos=0)
+    res = c.post("/api/logistica/reporte-dia", headers=h, json=sin_fin)
+    assert res.status_code == 200, res.text
+    texto = texto_del_pdf(res)[1]
+    # El final de la frase depende del ancho de la tarjeta: se mira el comienzo.
+    assert "sin Hora Final en el programa" in texto
+    assert "0 de 0 m³" not in texto
+
+
+def test_la_frecuencia_de_una_entrega_se_valida(cliente):
+    c, h = cliente
+    for malo in ({"frecuencia": "Quizas"}, {"ritmoProg": -1}, {"ritmoReal": -0.5}):
+        res = c.post("/api/logistica/reporte-dia", headers=h, json=pedido(entregas=[entrega(**malo)]))
+        assert res.status_code == 422, malo
+    # sin las claves (un PDF armado antes del 2026-11-24) sigue andando
+    assert c.post("/api/logistica/reporte-dia", headers=h, json=pedido()).status_code == 200
 
 
 def test_cada_pagina_lleva_el_logo_en_la_banda_y_la_imagen_va_una_sola_vez(cliente):
@@ -184,8 +236,9 @@ def test_un_supuesto_que_vario_dice_varia(cliente):
     res = c.post("/api/logistica/reporte-dia", headers=h, json=pedido_rango(
         supuestos={"cargue": 15, "calidad": 10, "tolerancia": None, "ajusteHora": 60, "varian": ["tolerancia"]}))
     texto = texto_del_pdf(res)[1]
-    assert "Tolerancia varía" in texto
-    assert "la tolerancia de cada día" in texto
+    # 2026-11-24: la tolerancia es la anticipacion del primer conduce
+    assert "1er conduce varía antes" in texto
+    assert "la anticipación de cada día" in texto
 
 
 def test_muchos_dias_siguen_en_mas_paginas(cliente):

@@ -226,12 +226,15 @@ function anillo(pct, unidad, detalle){
 }
 
 // Las dos unidades de una ventana, juntas y en el mismo orden siempre.
-function parDeAnillos(titulo, res){
+// `diasRitmo` (2026-11-24): la frecuencia solo existe en los dias guardados con
+// la Hora Final del programa; si son menos que todos, se dice cuantos.
+function parDeAnillos(titulo, res, diasRitmo = null, diasTotal = null){
+  const soloAlgunos = diasRitmo !== null && diasTotal !== null && diasRitmo < diasTotal;
   return `
     <div class="aro-grupo">
       <div class="aro-titulo">${titulo}</div>
       <div class="aro-par">
-        ${anillo(res.pct, NOMBRE_PCT, `${fmtInt(res.m3Cumplidos)}/${fmtInt(res.m3)} m³`)}
+        ${anillo(res.pct, NOMBRE_PCT, `${fmtInt(res.m3Cumplidos)}/${fmtInt(res.m3)} m³${soloAlgunos ? ` · ${diasRitmo} ${diasRitmo === 1 ? 'día' : 'días'} con Hora Final` : ''}`)}
         ${anillo(res.pctPedidos, NOMBRE_PCT_PEDIDOS, `${fmtInt(res.pedidosCumplidos)}/${fmtInt(res.pedidos)} entregas`)}
       </div>
     </div>`;
@@ -320,7 +323,7 @@ function historialVacio(){
         <ol style="margin:0 0 22px; padding-left:20px; color:var(--ink); font-size:13.5px; line-height:1.9;">
           <li>Abrí el <strong>dashboard del día</strong> y subí los dos Excel: la
               <strong>Programación</strong> y el <strong>Tiempo de Cargue</strong>.</li>
-          <li>Revisá los trayectos y los cruces marcados, poné la fecha, y apretá
+          <li>Revisá los cruces marcados, poné la fecha, y apretá
               <strong>&ldquo;Guardar día&rdquo;</strong>.</li>
         </ol>
         <a class="volver" href="/logistica.html" style="display:inline-block;">Ir al dashboard del día →</a>
@@ -398,6 +401,7 @@ async function cargarTodo(){
 function renderKpis(dias, ultimo, fallidos){
   const oat = acumuladoDeCumplimiento(dias);
   const delDia = resumenDeCumplimiento(ultimo.results);
+  const diasRitmo = dias.filter(d => d.results.some(r => r.frecuencia === 'Cumple' || r.frecuencia === 'No cumple')).length;
   // Los dias en que hubo algo: con una planta elegida, los que ella despacho.
   // Sin filtro son todos, porque un dia guardado sin filas igual se guardo.
   const filtrado = plantaElegida || servicioElegido;
@@ -420,7 +424,7 @@ function renderKpis(dias, ultimo, fallidos){
     <div class="aros">
       ${parDeAnillos(filtrado
           ? `Acumulado${tituloPlanta().replace(' — ', ' de ')}${mesElegido ? ' · ' + ventanaTexto() : ''} · ${oat.dias} ${oat.dias === 1 ? 'día' : 'días'}`
-          : `Acumulado · ${ventanaTexto()} · ${oat.dias} ${oat.dias === 1 ? 'día' : 'días'}`, oat)}
+          : `Acumulado · ${ventanaTexto()} · ${oat.dias} ${oat.dias === 1 ? 'día' : 'días'}`, oat, diasRitmo, oat.dias)}
       ${parDeAnillos(`Último día · ${ultimo.fecha}${delDia.pedidos === 0 ? ' · sin entregas' : ''}`, delDia)}
       <div class="aro-datos">
         <div>
@@ -436,14 +440,11 @@ function renderKpis(dias, ultimo, fallidos){
     ${brechaTexto(oat, 'el acumulado')}`;
 }
 
-// El aviso de brecha, igual que en la pantalla del dia: cuando las dos
-// unidades no coinciden, decirlo, porque significa que las entregas que
-// cumplieron no son las que movieron el volumen.
-function brechaTexto(res, cual){
-  if (res.pct === null || res.pctPedidos === null || res.pct === res.pctPedidos) return '';
-  return `<div class="nota" style="margin:-8px 0 20px;">En ${cual}, ${NOMBRE_PCT.toLowerCase()} e
-    ${NOMBRE_PCT_PEDIDOS.toLowerCase()} discrepan en <strong>${Math.abs(res.pct - res.pctPedidos)} puntos</strong>: las entregas
-    que cumplieron no son las que movieron el volumen.</div>`;
+// El aviso de brecha entre las dos unidades se saco el 2026-11-24: desde ese
+// dia son dos medidas distintas (ritmo e inicio) y que no coincidan no dice
+// nada. Queda la funcion para no tocar a quien la llama.
+function brechaTexto(){
+  return '';
 }
 </script>
 
@@ -492,7 +493,7 @@ function renderSerie(serie){
     <div class="panel">
       <div class="panel-head">
         <h2>Cumplimiento por día${tituloPlanta()}</h2>
-        <span class="sub">la barra es la ${NOMBRE_PCT.toLowerCase()}; el número chico, los m³ evaluados</span>
+        <span class="sub">la barra es la ${NOMBRE_PCT.toLowerCase()}; el número chico, los m³ evaluados (0 = sin Hora Final)</span>
       </div>
       <div class="panel-body" style="overflow-x:auto;">
         <svg width="100%" height="${alto + 36}" style="min-width:${ancho}px; display:block;"
@@ -548,7 +549,7 @@ function renderPlantas(dias, fechaDelDia){
         </table>
       </div>
     </div>
-    <div class="nota">Cada <strong>hora programada</strong> se juzga por su primer camión —si la colada arrancó a tiempo— y después pesa por los <strong>m³ que movió</strong>. La planta es la de ese primer camión, que es la misma que decide su tiempo de trayecto. <strong>Las dos columnas de porcentaje son la misma medida con distinta unidad</strong>: frecuencia de despacho pesa el volumen que movió cada entrega, inicio de carga las cuenta todas igual. Cuando discrepan mucho —Movil VI dio 75% y 50% sobre los tres primeros días— es que las entregas que cumplieron no son las que movieron el hormigón.</div>`;
+    <div class="nota">La planta de cada entrega es la de su primer camión. <strong>${NOMBRE_PCT}</strong> son los m³ de los servicios que despacharon al ritmo programado (m³ por hora, de la Hora Inicio a la Hora Final del programa); solo hay dato en los días guardados con la Hora Final. <strong>${NOMBRE_PCT_PEDIDOS}</strong> cuenta las entregas con el primer conduce hecho al menos 30 min antes de la hora programada.</div>`;
 }
 
 // ================= DETALLE DE UNA PLANTA =================
@@ -580,8 +581,8 @@ function renderDetalle(dias, planta){
         <table>
           <thead><tr>
             <th>Fecha</th><th>Cliente</th><th>Obra</th>
-            <th class="num">Hora prog.</th><th class="num">Primer cargue</th>
-            <th class="num">Trayecto</th><th class="num">Diferencia</th>
+            <th class="num">Hora prog.</th><th class="num">Primer conduce</th>
+            <th class="num">Diferencia</th><th class="num">m³/h prog. / real</th>
             <th>Estado</th><th class="num">Camiones</th><th class="num">m³</th>
           </tr></thead>
           <tbody>${filas.map(r => `
@@ -593,8 +594,8 @@ function renderDetalle(dias, planta){
                   >${esc(r.obraReal || r.obraProg || '')}</td>
               <td class="num">${minToStr(r.horaProg)}</td>
               <td class="num">${minToStr(r.horaCargue)}</td>
-              <td class="num" style="color:var(--muted);">${r.trayecto !== null && r.trayecto !== undefined ? r.trayecto + ' min' : '—'}</td>
               <td class="num">${r.diff !== null && r.diff !== undefined ? fmtDiff(r.diff) : '—'}</td>
+              <td class="num" style="${r.frecuencia === 'No cumple' ? 'color:var(--err);' : 'color:var(--muted);'}">${r.ritmoProg !== null && r.ritmoProg !== undefined ? `${r.ritmoProg.toFixed(1)} / ${r.ritmoReal.toFixed(1)}` : (r.frecuencia ? 'sin ritmo' : '—')}</td>
               <td>${estadoPill(r)}</td>
               <td class="num">${fmtInt(r.cargues || 0)}</td>
               <td class="num">${fmtInt(r.cantReal || 0)}</td>
@@ -603,7 +604,7 @@ function renderDetalle(dias, planta){
         </table>
       </div>
     </div>
-    <div class="nota">La <strong>diferencia</strong> es entre la llegada estimada —primer cargue más carga, calidad y trayecto— y la hora programada: negativa es llegar antes. Una entrega entra al porcentaje solo si está <strong>Cumplido</strong> o <strong>Incumplido</strong>; las demás se muestran porque son parte del día, pero no se cuentan.</div>`;
+    <div class="nota">La <strong>diferencia</strong> es entre el primer conduce y la hora programada: negativa es antes, y cumple si es de 30 min o más antes. El ritmo es m³ por hora, programado (Hora Inicio a Hora Final) contra real (primer a último conduce). Una entrega entra al porcentaje solo si está <strong>Cumplido</strong> o <strong>Incumplido</strong>; las demás se muestran porque son parte del día, pero no se cuentan.</div>`;
 }
 
 function render(dias, fallidos){
@@ -762,8 +763,8 @@ function renderMotivos(dias){
         <h2>${titulo}</h2>
         <label class="sub">Medir por
           <select id="selOrdenMotivos" style="margin-left:6px;">
-            <option value="entregas" ${ordenMotivos === 'entregas' ? 'selected' : ''}>${NOMBRE_PCT_PEDIDOS}</option>
-            <option value="m3" ${ordenMotivos === 'm3' ? 'selected' : ''}>${NOMBRE_PCT}</option>
+            <option value="entregas" ${ordenMotivos === 'entregas' ? 'selected' : ''}>Entregas</option>
+            <option value="m3" ${ordenMotivos === 'm3' ? 'selected' : ''}>m³</option>
           </select>
         </label>
       </div>

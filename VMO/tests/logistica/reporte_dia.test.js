@@ -91,6 +91,22 @@ test('el detalle trae todas las entregas, incumplidas primero, con su motivo', (
   assert.equal(rep.entregas.find(e => e.cliente === 'ACME').servicio, 'Con bomba');
 });
 
+test('el detalle lleva la frecuencia y los dos ritmos para el PDF (2026-11-24)', () => {
+  // ACME: 16 m3 de 08:00 a 10:00 = 8 m3/h; salieron 16 m3 de 07:00 a 07:20 =
+  // 48 m3/h. Los directos cumplen sin ritmo.
+  const s = estado();
+  s.programacion = s.programacion.map(p => p.cliente === 'ACME' ? {...p, horaFinMin: 600} : p);
+  const rep = L.reporteDelDia(s, SUPUESTOS());
+  const por = Object.fromEntries(rep.entregas.map(e => [e.cliente, [e.frecuencia, e.ritmoProg, e.ritmoReal]]));
+  assert.deepEqual(por, {ACME: ['Cumple', 8, 48], BETA: ['Cumple', null, null],
+                         GAMA: ['Cumple', null, null], NADIE: [null, null, null]});
+  const g = rep.bloques[0];
+  assert.equal(g.pct, 100, 'Frecuencia: los 32 m3 evaluados van al ritmo');
+  assert.equal(g.pctPedidos, 33, 'Inicio: solo ACME arranco 30 min antes');
+  // Sin ninguna Hora Final en el dia la frecuencia del PDF queda sin dato.
+  assert.equal(L.reporteDelDia(estado(), SUPUESTOS()).bloques[0].pct, null);
+});
+
 test('lleva los supuestos del dia y los nombres de las metricas', () => {
   const rep = L.reporteDelDia(estado(), SUPUESTOS());
   assert.equal(rep.desde, '2026-10-14');

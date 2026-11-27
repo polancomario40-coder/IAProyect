@@ -242,6 +242,10 @@ function leerProgramacionSheets(hojas){
     const iCliente = colIndex(header, ['Cliente']);
     const iObra = colIndex(header, ['Obra']);
     const iHora = colIndex(header, ['Hora Inicio','Hora']);
+    // Hora Final (2026-11-24): con la Hora Inicio da las horas programadas del
+    // servicio, que es lo que mide la frecuencia (ritmo m3/h). Solo exacta: un
+    // "Hora" suelto no es la hora final.
+    const iFin = header.findIndex(h => ['HORA FINAL', 'HORA FIN'].includes(normalize(h)));
     const iPedido = colIndex(header, ['Pedido']);
     const iCant = colIndex(header, ['Cantidad','Cant']);
     const iElemento = colIndex(header, ['Elemento']);
@@ -273,6 +277,12 @@ function leerProgramacionSheets(hojas){
       if (iProducto>=0 && !esProductoQueCuenta(row[iProducto])) continue;
       const horaLeida = iHora>=0 ? excelTimeToMinutes(row[iHora]) : null;
       const horaMin = horaLeida===null ? null : horaLeida + AJUSTE_HORA_PROGRAMADA_MIN;
+      // Lleva el mismo +60 que la Hora Inicio. 00:00 es que el renglon no la
+      // tiene (los directos y Macao vienen siempre asi), y una final que no es
+      // posterior a la inicial tampoco sirve para sacar horas: las dos van null.
+      const finLeida = iFin>=0 ? excelTimeToMinutes(row[iFin]) : null;
+      const horaFinMin = (finLeida && horaLeida!==null && finLeida > horaLeida)
+        ? finLeida + AJUSTE_HORA_PROGRAMADA_MIN : null;
       const cantidad = iCant>=0 ? parseFloat(row[iCant]) : null;
       const textoONull = (i) => {
         if (i < 0 || row[i]===null || row[i]===undefined) return null;
@@ -288,6 +298,7 @@ function leerProgramacionSheets(hojas){
         cliente: String(cliente).trim(),
         obra: iObra>=0 ? String(row[iObra]||'').trim() : '',
         horaMin: horaMin,
+        horaFinMin,
         pedido: iPedido>=0 ? row[iPedido] : null,
         cantidad: isNaN(cantidad) ? 0 : (cantidad||0),
         elemento: iElemento>=0 ? row[iElemento] : null,
@@ -432,10 +443,13 @@ function groupBy(arr, keyFn){
     const por = new Map();
     filas.forEach(f => {
       const k = f.horaMin === null ? 'sinhora' : String(f.horaMin);
-      if (!por.has(k)) por.set(k, {hora: f.horaMin, cantidad: 0, despachado: 0, pendiente: 0,
+      if (!por.has(k)) por.set(k, {hora: f.horaMin, horaFin: null, cantidad: 0, despachado: 0, pendiente: 0,
                                    tieneDespachado: false, tienePendiente: false});
       const p = por.get(k);
       p.cantidad += f.cantidad || 0;
+      // Dos renglones de la misma hora (TERRAMARE 23/11: 33 + 300 m3) son un
+      // servicio: su hora final es la mas tardia de los dos.
+      if (f.horaFinMin !== null && f.horaFinMin !== undefined) p.horaFin = Math.max(p.horaFin ?? 0, f.horaFinMin);
       if (f.despachado !== null && f.despachado !== undefined){ p.despachado += f.despachado; p.tieneDespachado = true; }
       if (f.pendiente !== null && f.pendiente !== undefined){ p.pendiente += f.pendiente; p.tienePendiente = true; }
     });
@@ -579,6 +593,28 @@ function esProgramadoEnCero(p){
   return p.cantidad !== null && p.cantidad !== undefined && p.cantidad !== '' && Number(p.cantidad) === 0;
 }
 
+// FRECUENCIA DE DESPACHO (regla de la jefa, 2026-11-24): el ritmo. Programado =
+// m3 programados / horas entre la Hora Inicio y la Hora Final del programa (100
+// m3 en 10 h = 10 m3/h). Real = m3 despachados / horas entre el primer y el
+// ultimo conduce. Cumple si el real es igual o mayor. Lo que no tiene ritmo que
+// medir —directos (el programa no les pone Hora Final), servicios sin Hora
+// Final o de un solo camion— cumple (decision de Axel). null = no se evalua:
+// sin despachar, sin hora programada, o un dia sin ninguna Hora Final.
+function ritmoDelServicio(ph, bomba, camiones, diaConHoraFin){
+  const nada = {frecuencia: null, ritmoProg: null, ritmoReal: null, horasProg: null, horasReal: null};
+  if (!diaConHoraFin || !camiones.length || ph.hora === null) return nada;
+  const horas = camiones.map(c => c.horaMin).filter(h => h !== null).sort((a, b) => a - b);
+  const horasReal = horas.length > 1 ? (horas[horas.length - 1] - horas[0]) / 60 : 0;
+  const horasProg = ph.horaFin !== null && ph.horaFin !== undefined && ph.horaFin > ph.hora ? (ph.horaFin - ph.hora) / 60 : null;
+  const esDirecto = !bomba || bomba === 'Directo';
+  if (esDirecto || horasProg === null || horasReal <= 0 || !(ph.cantidad > 0))
+    return {...nada, frecuencia: 'Cumple', horasProg, horasReal: horasReal || null};
+  const ritmoProg = ph.cantidad / horasProg;
+  const ritmoReal = camiones.reduce((s, c) => s + (c.cantidad || 0), 0) / horasReal;
+  // 1e-9: que 100 m3 en 10 h contra 10 m3/h no caiga por un redondeo de coma flotante
+  return {frecuencia: ritmoReal + 1e-9 >= ritmoProg ? 'Cumple' : 'No cumple', ritmoProg, ritmoReal, horasProg, horasReal};
+}
+
 function computeCumplimiento(state, assumptions){
   if (!state.programacion || !state.cargue) return null;
 
@@ -589,6 +625,10 @@ function computeCumplimiento(state, assumptions){
   // incumplido por +5h32. Sin el, esos camiones quedan "Sin programacion".
   // Un null (cantidad desconocida) si se cruza: solo se saca el cero explicito.
   const programacion = state.programacion.filter(p => !esProgramadoEnCero(p));
+  // Un dia guardado antes del 2026-11-24 no tiene ninguna Hora Final: su
+  // frecuencia es "sin dato", no 100% (que es lo que daria tomar cada servicio
+  // sin ritmo como cumplido).
+  const diaConHoraFin = programacion.some(p => p.horaFinMin !== null && p.horaFinMin !== undefined);
 
   const progGroups = groupBy(programacion, p => normalize(p.cliente)+'||'+normalize(p.obra));
   const cargueGroups = groupBy(state.cargue, c => normalize(c.cliente)+'||'+normalize(c.obra));
@@ -645,20 +685,23 @@ function computeCumplimiento(state, assumptions){
       const planta = primero ? primero.planta : null;
       const trayecto = hasOverride ? state.trayectoOverrides.get(claveObra)
                                    : (planta ? assumptions.trayecto[planta] : null);
+      // La llegada estimada (cargue + calidad + trayecto) queda solo como dato:
+      // desde el 2026-11-24 no decide nada.
       const horaLlegadaEst = (primero && trayecto!==undefined && trayecto!==null)
         ? (primero.horaMin + assumptions.cargue + assumptions.calidad + trayecto) : null;
-      // sin hora programada valida no hay contra que comparar: eso NO puede dar Cumplido
-      const diff = (horaLlegadaEst!==null && ph.hora!==null) ? (horaLlegadaEst - ph.hora) : null;
-      // Llegar antes CUMPLE, por mucho que sea (pedido del usuario, 2026-10-09):
-      // solo incumple lo que llega tarde mas alla de la tolerancia. Del
-      // 2026-10-02 al 2026-10-09 hubo un piso (toleranciaAdelanto, 60 min por
-      // defecto) que hacia incumplir los adelantos grandes; en la practica eran
-      // clientes que pidieron antes, y se saco. Aplica tambien a los dias ya
-      // guardados: el piso que tengan guardado ya no se usa.
+      // INICIO DE CARGA (regla de la jefa, 2026-11-24): cumple si el primer
+      // conduce se hizo al menos `tolerancia` minutos (30) ANTES de la hora
+      // programada, que es la hora de vaciar (la del archivo + 60). `diff` es
+      // primer conduce - hora programada: negativo es antes. Hasta esa fecha se
+      // comparaba la llegada estimada contra la hora + 30, y con 45 dias
+      // guardados cambian 79 de 857 entregas (47 pasan a incumplidas, 32 dejan
+      // de serlo). Sin hora programada no hay contra que comparar: eso NO puede
+      // dar Cumplido. Ya no hace falta la planta: el trayecto no entra.
+      const diff = (primero && ph.hora!==null) ? (primero.horaMin - ph.hora) : null;
       const calculado = (diff!==null)
-                   ? (diff<=assumptions.tolerancia ? 'Cumplido' : 'Incumplido')
-                   : (ph.hora===null ? 'Sin hora programada'
-                   : !primero ? 'Sin despachar' : 'Sin dato de planta');
+                   ? (diff <= -assumptions.tolerancia ? 'Cumplido' : 'Incumplido')
+                   : (ph.hora===null ? 'Sin hora programada' : 'Sin despachar');
+      const ritmo = ritmoDelServicio(ph, grupo.bomba, camiones, diaConHoraFin);
       const plantaZona = planta || plantaObra;
       const zona = plantaZona ? (assumptions.zonaPlanta[plantaZona] || 'Sin zona') : 'Sin zona';
       const rowKey = claveFila(cliente, obraReal, grupo.bomba, grupo.elemento, ph.hora);
@@ -685,6 +728,7 @@ function computeCumplimiento(state, assumptions){
         diff, estado, manual, zona, confianza,
         cantReal: camiones.reduce((s,r)=>s+r.cantidad,0),
         cargues: camiones.length, matchRows: camiones,
+        horaFinProg: ph.horaFin ?? null, ...ritmo,
         // La observacion va por fila: cliente, obra, bomba, elemento y hora.
         // Sin respaldo a claves viejas: los dias guardados con las claves
         // anteriores se borraron y recargaron el 2026-10-06.
@@ -809,6 +853,7 @@ function computeCumplimiento(state, assumptions){
       cliente: primero.cliente, obraProg: '', obraReal: primero.obra, horaProg: null, cantProg: 0,
       rowKey: rowKeySinProg, isOverride: false,
       horaCargue: primero.horaMin, planta, trayecto: null, horaLlegadaEst: null, diff: null,
+      frecuencia: null, ritmoProg: null, ritmoReal: null, horasProg: null, horasReal: null, horaFinProg: null,
       estado: 'Sin programación', zona, confianza: '—', cantReal, cargues: rows.length, matchRows: rows,
       trayecto: assumptions.trayecto[planta] ?? null, observacion: state.observaciones.get(rowKeySinProg) || ''
     });
@@ -1027,14 +1072,21 @@ function computeResumen(state, assumptions = {}){
   // lo agrupan.
   //
   // La regla que comparten todas: **solo Cumplido e Incumplido entran al
-  // porcentaje**. "Sin programacion", "Sin hora programada" y "Sin dato de
-  // planta" se cuentan aparte y NUNCA en el denominador — es la misma regla
+  // porcentaje**. "Sin programacion", "Sin hora programada" y "Sin
+  // despachar" se cuentan aparte y NUNCA en el denominador — es la misma regla
   // que la pantalla del dia, y el 2026-09-29 ya costo que el Excel exportado
   // usara otra y diera un numero distinto al del dashboard.
 
   function _evaluables(results){
     return results.filter(r => r.estado === 'Cumplido' || r.estado === 'Incumplido');
   }
+  // Desde el 2026-11-24 las dos unidades miden cosas distintas: `pctPedidos`
+  // (Inicio de carga) cuenta entregas por su `estado`, y `pct` (Frecuencia de
+  // despacho) pesa por m3 las que tienen `frecuencia` (el ritmo). Un dia sin
+  // Hora Final no tiene ninguna con frecuencia y su `pct` queda en null.
+  const conFrecuencia = r => r.frecuencia === 'Cumple' || r.frecuencia === 'No cumple';
+  const m3Frecuencia = r => conFrecuencia(r) ? (r.cantReal || 0) : 0;
+  const m3FrecuenciaOk = r => r.frecuencia === 'Cumple' ? (r.cantReal || 0) : 0;
 
   // Los nombres de las dos unidades (pedido del usuario, 2026-10-13). Solo
   // cambiaron los nombres, no la cuenta: `pct` (pesado por m3) se llama
@@ -1099,9 +1151,14 @@ function computeResumen(state, assumptions = {}){
     const cumplidos = ev.filter(r => r.estado === 'Cumplido');
     const cam = ev.reduce((s, r) => s + (r.cargues || 0), 0);
     const camOk = cumplidos.reduce((s, r) => s + (r.cargues || 0), 0);
-    const m3 = ev.reduce((s, r) => s + (r.cantReal || 0), 0);
-    const m3Ok = cumplidos.reduce((s, r) => s + (r.cantReal || 0), 0);
+    const m3 = ev.reduce((s, r) => s + m3Frecuencia(r), 0);
+    const m3Ok = ev.reduce((s, r) => s + m3FrecuenciaOk(r), 0);
+    const conRitmo = ev.filter(r => r.ritmoProg !== null && r.ritmoProg !== undefined);
     return {
+      // cuantos servicios se midieron de verdad por ritmo (con bomba, Hora
+      // Final y dos camiones o mas) y cuantos de esos cumplieron
+      servicios: ev.filter(conFrecuencia).length,
+      conRitmo: conRitmo.length, conRitmoCumple: conRitmo.filter(r => r.frecuencia === 'Cumple').length,
       pedidos: ev.length,
       pedidosCumplidos: cumplidos.length,
       camiones: cam,
@@ -1130,15 +1187,16 @@ function computeResumen(state, assumptions = {}){
       if (!por.has(planta)) por.set(planta, {planta, zona: r.zona, pedidos: 0,
                                              pedidosCumplidos: 0,
                                              camiones: 0, camionesCumplidos: 0,
-                                             m3: 0, m3Cumplidos: 0});
+                                             m3: 0, m3Cumplidos: 0, m3Despachado: 0});
       const acc = por.get(planta);
       acc.pedidos++;
       acc.camiones += r.cargues || 0;
-      acc.m3 += r.cantReal || 0;
+      acc.m3 += m3Frecuencia(r);
+      acc.m3Cumplidos += m3FrecuenciaOk(r);
+      acc.m3Despachado += r.cantReal || 0;
       if (r.estado === 'Cumplido'){
         acc.pedidosCumplidos++;
         acc.camionesCumplidos += r.cargues || 0;
-        acc.m3Cumplidos += r.cantReal || 0;
       }
     });
     // Las dos unidades, mismo criterio que el total — y el mismo peso: `pct`
@@ -1151,9 +1209,9 @@ function computeResumen(state, assumptions = {}){
       .map(a => ({...a,
                   pct: a.m3 ? Math.round(100 * a.m3Cumplidos / a.m3) : null,
                   pctPedidos: a.pedidos ? Math.round(100 * a.pedidosCumplidos / a.pedidos) : null}))
-      // Ordenadas por volumen, que es la unidad del porcentaje: la planta que
-      // mas mueve va primero.
-      .sort((a, b) => b.m3 - a.m3 || a.planta.localeCompare(b.planta));
+      // Ordenadas por volumen despachado: la planta que mas mueve va primero
+      // (tambien en un dia sin Hora Final, donde `m3` de frecuencia es 0).
+      .sort((a, b) => b.m3Despachado - a.m3Despachado || a.planta.localeCompare(b.planta));
   }
 
   // ================= POR TIPO DE ELEMENTO (2026-10-08) =================
@@ -1174,17 +1232,19 @@ function computeResumen(state, assumptions = {}){
     const por = new Map();
     _evaluables(results).forEach(r => {
       const tipo = tipoDeElemento(r.elemento);
-      if (!por.has(tipo)) por.set(tipo, {tipo, pedidos: 0, pedidosCumplidos: 0, m3: 0, m3Cumplidos: 0});
+      if (!por.has(tipo)) por.set(tipo, {tipo, pedidos: 0, pedidosCumplidos: 0, m3: 0, m3Cumplidos: 0, m3Despachado: 0});
       const acc = por.get(tipo);
       acc.pedidos++;
-      acc.m3 += r.cantReal || 0;
-      if (r.estado === 'Cumplido'){ acc.pedidosCumplidos++; acc.m3Cumplidos += r.cantReal || 0; }
+      acc.m3 += m3Frecuencia(r);
+      acc.m3Cumplidos += m3FrecuenciaOk(r);
+      acc.m3Despachado += r.cantReal || 0;
+      if (r.estado === 'Cumplido') acc.pedidosCumplidos++;
     });
     return [...por.values()]
       .map(a => ({...a,
                   pct: a.m3 ? Math.round(100 * a.m3Cumplidos / a.m3) : null,
                   pctPedidos: a.pedidos ? Math.round(100 * a.pedidosCumplidos / a.pedidos) : null}))
-      .sort((a, b) => b.m3 - a.m3 || a.tipo.localeCompare(b.tipo));
+      .sort((a, b) => b.m3Despachado - a.m3Despachado || a.tipo.localeCompare(b.tipo));
   }
 
   // Las filas del dia en el orden del cuadro por elemento. Dentro de cada tipo
@@ -1204,7 +1264,7 @@ function computeResumen(state, assumptions = {}){
   // evalua; dentro de cada estado, por compania de la A a la Z. El cuadro por
   // elemento y la imagen siguen con ordenarPorElemento.
   const RANGO_ESTADO = {'Incumplido': 0, 'Cumplido': 1, 'Sin despachar': 2,
-                        'Sin hora programada': 3, 'Sin dato de planta': 4, 'Sin programación': 5};
+                        'Sin hora programada': 3, 'Sin programación': 5};
   function ordenarParaTablaDelDia(rows){
     const rango = r => RANGO_ESTADO[r.estado] ?? 6;
     const az = (a, b) => (a || '').localeCompare(b || '', 'es', {sensitivity: 'base'});
@@ -1402,7 +1462,7 @@ function computeResumen(state, assumptions = {}){
         const incumplidos = results.filter(r => r.estado === 'Incumplido')
           .map(r => ({cliente: r.cliente, obra: r.obraReal || r.obraProg || '', planta: r.planta || null,
                       zona: zonaDeFila(r), elemento: r.elemento || null, horaProg: r.horaProg,
-                      llegada: r.horaLlegadaEst, diff: r.diff, m3: r.cantReal || 0,
+                      llegada: r.horaLlegadaEst, primerConduce: r.horaCargue, diff: r.diff, m3: r.cantReal || 0,
                       responsable: resp.get(r.rowKey) || null, motivo: mot.get(r.rowKey) || null,
                       observacion: r.observacion || ''}))
           // Por compania y despues por hora, como la tabla del dia.
@@ -1740,7 +1800,7 @@ function computeResumen(state, assumptions = {}){
       resumen: resumenDeCumplimiento(rows),
       incumplidos: incumplidos.map(r => [
         r.cliente, r.obraReal || r.obraProg || '—', r.bomba || 'Directo', r.elemento || '—',
-        fmtInt(r.cantProg), minToStr(r.horaProg), minToStr(r.horaLlegadaEst), fmtDiff(r.diff),
+        fmtInt(r.cantProg), minToStr(r.horaProg), minToStr(r.horaCargue), fmtDiff(r.diff),
         resp.get(r.rowKey) || '—', mot.get(r.rowKey) || '—', obs.get(r.rowKey) || '',
       ]),
     };
@@ -1863,6 +1923,7 @@ function computeResumen(state, assumptions = {}){
       horaProg: r.horaProg ?? null, cantProg: r.cantProg || 0, cantReal: r.cantReal || 0,
       cargues: r.cargues || 0, primerCargue: r.horaCargue ?? null, planta: r.planta || '',
       zona: zonaDeFila(r) || '', llegada: r.horaLlegadaEst ?? null, diff: r.diff ?? null,
+      frecuencia: r.frecuencia ?? null, ritmoProg: r.ritmoProg ?? null, ritmoReal: r.ritmoReal ?? null,
       estado: estadoVisible(r), responsable: d.resp.get(r.rowKey) || '', motivo: d.mot.get(r.rowKey) || '',
       observacion: r.observacion || '',
     })));

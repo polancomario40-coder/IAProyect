@@ -5905,7 +5905,10 @@ def setup_logistica_db(conn=None):
         # CREATE TABLE IF NOT EXISTS no toca una tabla ya creada, asi que sin
         # esto el INSERT de abajo falla en cualquier base anterior al arreglo.
         cols = [c[1] for c in conn.execute("PRAGMA table_info(logistica_programacion)")]
-        for columna in ("despachado", "pendiente"):
+        # hora_fin_min (2026-11-24): la Hora Final del programa, para la
+        # frecuencia por ritmo. Los dias guardados antes quedan en NULL y su
+        # frecuencia sale "sin dato".
+        for columna in ("despachado", "pendiente", "hora_fin_min"):
             if columna not in cols:
                 conn.execute(f"ALTER TABLE logistica_programacion ADD COLUMN {columna} REAL")
         # bomba, vendedor y zona de la planilla (2026-10-06), con el mismo patron
@@ -5997,12 +6000,12 @@ def _log_guardar_dia(conn, dia: dict) -> dict:
         conn.executemany(
             "INSERT INTO logistica_programacion (fecha, orden, cliente, obra, hora_min, "
             "pedido, cantidad, elemento, producto, prioridad, zona_hoja, "
-            "despachado, pendiente, bomba, vendedor, zona_prog) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "despachado, pendiente, bomba, vendedor, zona_prog, hora_fin_min) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [(fecha, i, r.get("cliente"), r.get("obra"), r.get("horaMin"), r.get("pedido"),
               r.get("cantidad"), r.get("elemento"), r.get("producto"), r.get("prioridad"),
               r.get("zonaSheet"), r.get("despachado"), r.get("pendiente"),
-              r.get("bomba"), r.get("vendedor"), r.get("zonaProg"))
+              r.get("bomba"), r.get("vendedor"), r.get("zonaProg"), r.get("horaFinMin"))
              for i, r in enumerate(dia["programacion"])])
         conn.executemany(
             "INSERT INTO logistica_cargue (fecha, orden, ficha, hora_min, cliente, conduce, "
@@ -6156,10 +6159,10 @@ def _log_leer_dia(conn, fecha: str) -> dict | None:
         {"cliente": f[0], "obra": f[1], "horaMin": f[2], "pedido": f[3], "cantidad": f[4],
          "elemento": f[5], "producto": f[6], "prioridad": f[7], "zonaSheet": f[8],
          "despachado": f[9], "pendiente": f[10],
-         "bomba": f[11], "vendedor": f[12], "zonaProg": f[13]}
+         "bomba": f[11], "vendedor": f[12], "zonaProg": f[13], "horaFinMin": f[14]}
         for f in conn.execute(
             "SELECT cliente, obra, hora_min, pedido, cantidad, elemento, producto, "
-            "prioridad, zona_hoja, despachado, pendiente, bomba, vendedor, zona_prog "
+            "prioridad, zona_hoja, despachado, pendiente, bomba, vendedor, zona_prog, hora_fin_min "
             "FROM logistica_programacion "
             "WHERE fecha = ? ORDER BY orden", (fecha,))]
 
@@ -6572,6 +6575,11 @@ def log_nombre_reporte_dia(desde: str, hasta: str) -> str:
     return f"Reporte_VMO_{desde}_al_{hasta}.pdf"
 
 
+def _log_ritmo(v) -> str:
+    """m3/h con un decimal; sin ritmo (directo, un camion, sin Hora Final) va guion."""
+    return "-" if v is None else f"{v:.1f}"
+
+
 def _log_fecha_corta(iso: str) -> str:
     f = datetime.strptime(iso, "%Y-%m-%d")
     return f"{_LOG_DIAS_SEMANA[f.weekday()][:3]} {f:%d/%m}"
@@ -6581,7 +6589,7 @@ def _log_tabla_bloques(c, y, bloques, nom_pct, nom_ped, separar_en=(), negrita_p
     """La tabla de bloques (General, zonas, servicios; o un renglon por dia):
     los dos % con barra y los conteos. Devuelve la y de la ultima linea."""
     M, W = _LOG_PDF_M, _LOG_PDF_W
-    cols = [("", 104), (nom_pct, 135), (nom_ped, 135), ("Entregas a tiempo", 86), ("m³ a tiempo", 92),
+    cols = [("", 104), (nom_pct, 135), (nom_ped, 135), ("Inicio a tiempo", 86), ("m³ al ritmo", 92),
             ("Incumplidas", 64), ("m³ despachados", 76), ("Cargues", 50), ("Camiones", 0)]
     cols[-1] = ("Camiones", W - 2 * M - sum(w for _, w in cols[:-1]))
     xx = M
@@ -6676,8 +6684,9 @@ def log_reporte_dia_pdf(rep: dict) -> bytes:
             return "varía"
         v = sup.get(clave)
         return "-" if v is None else f"{v:g} min"
-    supuestos = (f"Cargue {minutos('cargue')} · Calidad {minutos('calidad')} · "
-                 f"Tolerancia {minutos('tolerancia')} · Hora programada +{minutos('ajusteHora')}")
+    # 2026-11-24: el cargue, la calidad y el trayecto ya no entran; solo la
+    # anticipacion del primer conduce y el ajuste de la hora programada.
+    supuestos = (f"1er conduce {minutos('tolerancia')} antes · Hora programada +{minutos('ajusteHora')}")
     nom_pct = rep["nombres"]["pct"]
     nom_ped = rep["nombres"]["pctPedidos"]
     doc = fitz.open()
@@ -6687,9 +6696,11 @@ def log_reporte_dia_pdf(rep: dict) -> bytes:
     _log_encabezado_pagina(c, titulo, fecha_txt, supuestos)
     gen = rep["bloques"][0]
     tarjetas = [
-        (nom_pct, _log_pct(gen["pct"]), f"{_log_num(gen['m3Cumplidos'])} de {_log_num(gen['m3'])} m³ a tiempo", _LOG_AZUL),
+        (nom_pct, _log_pct(gen["pct"]),
+         f"{_log_num(gen['m3Cumplidos'])} de {_log_num(gen['m3'])} m³ al ritmo" if gen["pct"] is not None
+         else "sin Hora Final en el programa", _LOG_AZUL),
         (nom_ped, _log_pct(gen["pctPedidos"]), f"{gen['pedidosCumplidos']} de {gen['pedidos']} entregas a tiempo", _LOG_NARANJA),
-        ("Incumplidas", _log_num(gen["incumplidos"]), "entregas que llegaron tarde", None),
+        ("Incumplidas", _log_num(gen["incumplidos"]), "1er conduce tarde", None),
         ("m³ despachados", _log_num(gen["m3Despachado"]), f"todo el cargue {lapso}", None),
         ("Cargues", _log_num(gen["cargues"]), "viajes de camión", None),
         ("Camiones", _log_num(gen["camiones"], 1),
@@ -6740,19 +6751,23 @@ def log_reporte_dia_pdf(rep: dict) -> bytes:
         if cob.get("sinResponsable"):
             faltan.append(f"{cob['sinResponsable']} sin responsable")
         if faltan:
-            c.texto(M, H - M - 18, f"De {cob['incumplidos']} incumplidas, " + " y ".join(faltan)
+            c.texto(M, H - M - 33, f"De {cob['incumplidos']} incumplidas, " + " y ".join(faltan)
                     + ": se cargan en el dashboard del día y se vuelve a guardar.", tam=7, color=_LOG_MAL)
     else:
         c.texto(M, y_abajo, f"Ninguna entrega incumplida {'en el período' if es_rango else 'este día'}.",
                 tam=10, negrita=True, color=_LOG_OK)
-    tolerancia = "la tolerancia de cada día" if "tolerancia" in varian else minutos("tolerancia")
+    tolerancia = "la anticipación de cada día" if "tolerancia" in varian else minutos("tolerancia")
+    # Dos renglones: en uno solo se cortaba con "..." (2026-11-24).
+    c.texto(M, H - M - 15,
+            f"{nom_pct}: m³ al ritmo programado sobre los m³ evaluados. Ritmo programado = m³ programados ÷ horas "
+            f"de la Hora Inicio a la Hora Final; real = m³ despachados ÷ horas del primer al último conduce.",
+            tam=6.5, color=_LOG_GRIS, ancho=W - 2 * M)
     c.texto(M, H - M - 6,
-            f"{nom_pct}: m³ de las entregas a tiempo sobre los m³ evaluados. {nom_ped}: entregas a tiempo sobre "
-            f"entregas evaluadas. Una entrega cumple si su primer camión llega como máximo "
-            f"{tolerancia} tarde (llegar antes cumple).",
+            f"Cumple si el real es igual o mayor; directos y servicios de un camión cumplen. {nom_ped}: entregas "
+            f"con el primer conduce hecho al menos {tolerancia} antes de la hora programada.",
             tam=6.5, color=_LOG_GRIS, ancho=W - 2 * M)
     if es_rango:
-        c.texto(M, H - M - 28, "Los % del período juntan todas las entregas de los días guardados: "
+        c.texto(M, H - M - 24, "Los % del período juntan todas las entregas de los días guardados: "
                 "no promedian los porcentajes de cada día. Camiones es el promedio por día.", tam=6.5, color=_LOG_GRIS, ancho=W - 2 * M)
 
     # ── Incumplidas del cliente y de VMO: por servicio y por compania ───
@@ -6805,9 +6820,11 @@ def log_reporte_dia_pdf(rep: dict) -> bytes:
 
     # ── Paginas siguientes: detalle de entregas ─────────────────────────
     # Estado en 72 y no 58 (2026-10-26): "Cumplido (manual)" salia cortado.
-    cols = [("Cliente", 104, "izq"), ("Obra", 84, "izq"), ("Elemento", 60, "izq"), ("Servicio", 44, "izq"),
+    # 2026-11-24: sin Llegada; entran el ritmo programado y el real (m3/h).
+    cols = [("Cliente", 92, "izq"), ("Obra", 76, "izq"), ("Elemento", 56, "izq"), ("Servicio", 44, "izq"),
             ("Hora prog.", 44, "der"), ("m³ prog.", 34, "der"), ("m³ real", 32, "der"), ("Cam.", 28, "der"),
-            ("1er cargue", 42, "der"), ("Planta", 48, "izq"), ("Llegada", 34, "der"), ("Dif.", 42, "der"),
+            ("1er cond.", 40, "der"), ("Dif.", 44, "der"), ("Planta", 42, "izq"),
+            ("m³/h prog.", 42, "der"), ("m³/h real", 40, "der"),
             ("Estado", 72, "izq"), ("Resp.", 36, "izq"), ("Motivo", 0, "izq")]
     if es_rango:
         # La fecha de cada entrega, a costa de Cliente y Obra.
@@ -6849,15 +6866,20 @@ def log_reporte_dia_pdf(rep: dict) -> bytes:
                             "Cumplido (manual)": _LOG_OK}.get(e["estado"], _LOG_GRIS)
             valores = [e["cliente"], e["obra"], e["elemento"], e["servicio"], _log_hhmm(e["horaProg"]),
                        _log_num(e["cantProg"], 1), _log_num(e["cantReal"], 1), _log_num(e["cargues"]),
-                       _log_hhmm(e["primerCargue"]), e["planta"], _log_hhmm(e["llegada"]), _log_dif(e["diff"]),
+                       _log_hhmm(e["primerCargue"]), _log_dif(e["diff"]), e["planta"],
+                       _log_ritmo(e.get("ritmoProg")), _log_ritmo(e.get("ritmoReal")),
                        e["estado"], e["responsable"], e["motivo"]]
             if es_rango:
                 valores.insert(0, f"{e['fecha'][8:10]}/{e['fecha'][5:7]}" if e.get("fecha") else "")
             xx = M
             for (nombre, w, al), v in zip(cols, valores):
                 es_estado = nombre == "Estado"
+                # el ritmo real en rojo cuando no llega al programado
+                color_v = (color_estado if es_estado or nombre == "Dif."
+                           else _LOG_MAL if nombre == "m³/h real" and e.get("frecuencia") == "No cumple"
+                           else _LOG_TINTA)
                 c.texto(xx, y, v, tam=7, negrita=es_estado and e["estado"] == "Incumplido",
-                        color=color_estado if es_estado or nombre == "Dif." else _LOG_TINTA,
+                        color=color_v,
                         ancho=w - (5 if al == "izq" else 9), alinear=al)
                 xx += w
             if e.get("observacion"):

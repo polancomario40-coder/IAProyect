@@ -250,16 +250,19 @@
       <details id="supuestosDetails" class="asm-dropdown">
         <summary class="asm-btn">⚙ Supuestos <span class="asm-caret">▾</span></summary>
         <div class="asm-popover">
-    <div class="asm-group">
+    <!-- Cargue, calidad y trayecto ya no deciden nada (2026-11-24: inicio de
+         carga = primer conduce antes de la hora; frecuencia = ritmo). Se
+         ocultan y se siguen guardando con el dia. -->
+    <div class="asm-group" style="display:none;">
       <label>Tiempo de cargue (min)</label>
       <input type="number" id="asmCargue" value="15" min="0">
     </div>
-    <div class="asm-group">
+    <div class="asm-group" style="display:none;">
       <label>Tiempo de calidad (min)</label>
       <input type="number" id="asmCalidad" value="10" min="0">
     </div>
     <div class="asm-group">
-      <label>Tolerancia de cumplimiento (min)</label>
+      <label>Primer conduce antes de la hora (min)</label>
       <input type="number" id="asmTolerancia" value="30" min="0">
     </div>
     <!-- Espaciamiento maximo entre camiones de una misma obra (2026-10-06):
@@ -269,7 +272,7 @@
       <input type="number" id="asmEspaciamiento" value="30" min="0">
     </div>
     <div class="asm-group">
-      <label>Tiempo de trayecto por planta (min)</label>
+      <label>Zona por planta</label>
       <table class="trayecto-table" id="trayectoTable"></table>
     </div>
     <div class="asm-note">Estos valores son estimados/provisionales. Ajústalos aquí y las tablas se recalculan automáticamente.</div>
@@ -342,7 +345,7 @@ const assumptions = {
 function renderTrayectoTable(){
   const tbl = document.getElementById('trayectoTable');
   const plantas = Object.keys(assumptions.trayecto).sort();
-  tbl.innerHTML = `<tr><th>Planta</th><th>Zona</th><th>Min.</th></tr>` + plantas.map(p => {
+  tbl.innerHTML = `<tr><th>Planta</th><th>Zona</th></tr>` + plantas.map(p => {
     const sinZona = !assumptions.zonaPlanta[p];
     return `
     <tr ${sinZona?'style="background:rgba(248,113,113,.08);"':''}>
@@ -354,7 +357,6 @@ function renderTrayectoTable(){
           <option value="Punta Cana" ${assumptions.zonaPlanta[p]==='Punta Cana'?'selected':''}>PC</option>
         </select>
       </td>
-      <td><input type="number" data-planta="${esc(p)}" class="trayectoInput" value="${assumptions.trayecto[p]??''}" min="0"></td>
     </tr>
   `;
   }).join('');
@@ -579,18 +581,18 @@ function renderCumplimientoTabla(containerId, rows, barraHtml = ''){
   // Cuando las dos unidades no coinciden, decirlo: la brecha es el dato, no un
   // detalle de redondeo. Significa que las entregas cumplidas y las que movieron
   // volumen no son las mismas.
-  const brecha = (pct!==null && pctPed!==null && pct!==pctPed)
-    ? `<div class="kpi-nota">${NOMBRE_PCT} e ${NOMBRE_PCT_PEDIDOS.toLowerCase()} discrepan en ${Math.abs(pct-pctPed)} puntos: las entregas que cumplieron no son las que movieron el volumen.</div>`
-    : '';
+  // Desde el 2026-11-24 miden cosas distintas (ritmo e inicio): que no
+  // coincidan ya no es una alerta.
+  const brecha = '';
 
   const kpisHtml = `
     <div class="comp-kpis">
-      <div class="kpi"><div class="label">% ${NOMBRE_PCT}</div><div class="value">${pct!==null?pct+'%':'—'}</div><div class="sub">${fmtInt(res.m3Cumplidos)} de ${fmtInt(res.m3)} m³ en tolerancia</div></div>
-      <div class="kpi"><div class="label">% ${NOMBRE_PCT_PEDIDOS}</div><div class="value">${pctPed!==null?pctPed+'%':'—'}</div><div class="sub">${res.pedidosCumplidos} de ${res.pedidos} horas programadas</div></div>
+      <div class="kpi"><div class="label">% ${NOMBRE_PCT}</div><div class="value">${pct!==null?pct+'%':'—'}</div><div class="sub">${pct!==null ? `${fmtInt(res.m3Cumplidos)} de ${fmtInt(res.m3)} m³ al ritmo programado` : 'sin dato: el programa no trae Hora Final'}</div></div>
+      <div class="kpi"><div class="label">% ${NOMBRE_PCT_PEDIDOS}</div><div class="value">${pctPed!==null?pctPed+'%':'—'}</div><div class="sub">${res.pedidosCumplidos} de ${res.pedidos} con el 1er conduce ${assumptions.tolerancia} min antes</div></div>
       <!-- "Cargues" y no "camiones": es la cuenta de VIAJES, y un camion que
            hace tres viajes aparece tres veces. Se muestra como contexto del
            volumen de arriba; ningun porcentaje sale de este numero. -->
-      <div class="kpi"><div class="label">Cargues evaluados</div><div class="value">${fmtInt(res.camiones)}</div><div class="sub">${fmtInt(res.camionesCumplidos)} a tiempo</div></div>
+      <div class="kpi"><div class="label">Cargues evaluados</div><div class="value">${fmtInt(res.camiones)}</div><div class="sub">${fmtInt(res.camionesCumplidos)} en entregas con inicio a tiempo</div></div>
       <div class="kpi"><div class="label">Fuera del cálculo</div><div class="value">${res.noEvaluables}</div><div class="sub">${sinProgramacion} sin programación · ${sinDespachar} sin despachar</div></div>
     </div>
     ${brecha}`;
@@ -604,7 +606,7 @@ function renderCumplimientoTabla(containerId, rows, barraHtml = ''){
       <div class="panel-head"><h2>Cumplimiento por elemento</h2><span class="sub-head">ordenado por m³; la tabla de abajo va en el mismo orden</span></div>
       <div class="panel-body" style="padding:0;">
         <table class="tabla-elementos">
-          <thead><tr><th>Elemento</th><th class="num">% ${NOMBRE_PCT}</th><th style="width:160px;"></th><th class="num">% ${NOMBRE_PCT_PEDIDOS}</th><th class="num">m³ en tolerancia</th></tr></thead>
+          <thead><tr><th>Elemento</th><th class="num">% ${NOMBRE_PCT}</th><th style="width:160px;"></th><th class="num">% ${NOMBRE_PCT_PEDIDOS}</th><th class="num">m³ al ritmo</th></tr></thead>
           <tbody>${porElemento.map(e => `
             <tr>
               <td><strong>${esc(e.tipo)}</strong></td>
@@ -630,16 +632,9 @@ function renderCumplimientoTabla(containerId, rows, barraHtml = ''){
         <td class="num">${fmtInt(r.cantReal)}<br><span style="font-size:10px; color:var(--muted);">${r.cargues} cam.</span></td>
         <td>${minToStr(r.horaCargue)}</td>
         <td>${esc(r.planta||'—')}</td>
-        <td class="num">${r.claveTrayecto ? `
-          <input type="number" class="trayectoOverrideInput" data-key="${r.claveTrayecto}" value="${(r.trayecto!==undefined && r.trayecto!==null)?r.trayecto:''}" min="0" style="width:60px; padding:4px 6px; border:1px solid ${r.isOverride?'var(--vmo-red)':'var(--line)'}; border-radius:5px; text-align:right; ${r.isOverride?'background:rgba(211,47,47,.12);':''}">
-          <span style="font-size:10px; color:var(--muted); display:block;">${r.isOverride?'real':'planta'}</span>`
-          : /* Sin programacion (#171, 2026-10-23): no hay hora contra la cual
-               comparar, asi que el trayecto no cambia nada. La casilla se podia
-               editar con data-key="undefined" y no hacia nada: va solo el numero. */
-            `${(r.trayecto!==undefined && r.trayecto!==null)?r.trayecto:'—'}`}
-        </td>
-        <td>${minToStr(r.horaLlegadaEst)}</td>
         <td class="num">${fmtDiff(r.diff)}</td>
+        <td class="num">${r.ritmoProg!==null && r.ritmoProg!==undefined ? r.ritmoProg.toFixed(1) : '—'}${r.horaFinProg ? `<br><span style="font-size:10px; color:var(--muted);">${minToStr(r.horaProg)}–${minToStr(r.horaFinProg)}</span>` : ''}</td>
+        <td class="num" style="${r.frecuencia==='No cumple'?'color:var(--err); font-weight:700;':''}">${r.ritmoReal!==null && r.ritmoReal!==undefined ? r.ritmoReal.toFixed(1) : '—'}${r.frecuencia ? `<br><span style="font-size:10px; color:var(--muted);">${r.frecuencia}</span>` : ''}</td>
         <td><span class="estado-pill estado-${r.estado.replace(/\s+/g,'-')}">${esc(estadoVisible(r))}</span>${
           r.manual ? `<button type="button" class="btnCumplidoManual btn-manual" data-key="${r.rowKey}" title="Vuelve al estado calculado">Deshacer</button>`
           : r.estado==='Incumplido' ? `<button type="button" class="btnCumplidoManual btn-manual" data-key="${r.rowKey}" title="Necesita motivo">Pasar a cumplido</button>` : ''}</td>
@@ -667,8 +662,8 @@ function renderCumplimientoTabla(containerId, rows, barraHtml = ''){
           </colgroup>
           <thead><tr>
             <th>Cliente</th><th>Obra</th><th>Bomba</th><th>Elemento</th><th>Hora programada</th><th class="num">m³ prog.</th>
-            <th class="num">m³ reales</th><th>Primer cargue</th>
-            <th>Planta</th><th class="num">Trayecto (min)</th><th>Llegada estimada</th><th class="num">Diferencia</th><th>Estado</th><th>Responsable</th><th>Motivo</th><th>Observaciones</th>
+            <th class="num">m³ reales</th><th>Primer conduce</th>
+            <th>Planta</th><th class="num">Diferencia</th><th class="num">m³/h prog.</th><th class="num">m³/h real</th><th>Estado</th><th>Responsable</th><th>Motivo</th><th>Observaciones</th>
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
@@ -808,7 +803,7 @@ function recalcAll(){
   const comp = computeCumplimiento(state, assumptions);
   if (comp){
     const avisoPlantas = plantasNuevas.length ? `<div class="nota-caveat" style="background:var(--err-bg); border-color:rgba(248,113,113,.4); color:var(--err);">⚠ Se detectaron plantas nuevas en tus datos que no estaban en los supuestos: <strong>${esc(plantasNuevas.join(', '))}</strong>. Se agregaron a ⚙ Supuestos con 30 min y zona Santo Domingo por defecto — revisa y corrige el trayecto/zona real de cada una.</div>` : '';
-    const nota = `${avisoPlantas}<div class="nota-caveat">Tiempo de llegada estimado = Hora de cargue + tiempo de cargue + tiempo de calidad + tiempo de trayecto por planta (ajustables en ⚙ Supuestos). El trayecto de cada fila es <strong>editable</strong>: escribe el minutaje real de esa obra y quedará marcado como "real" en vez del promedio de la planta. Incumplimiento si llega más tarde que la tolerancia configurada; llegar antes cuenta como cumplido. Macao no entra en el cumplimiento. ${renderSinCruceNote(comp)}</div>`;
+    const nota = `${avisoPlantas}<div class="nota-caveat"><strong>${NOMBRE_PCT_PEDIDOS}</strong>: cumple si el primer conduce se hizo al menos ${assumptions.tolerancia} min antes de la hora programada (Diferencia = primer conduce − hora; negativo es antes). <strong>${NOMBRE_PCT}</strong>: el ritmo. Programado = m³ programados ÷ horas de la Hora Inicio a la Hora Final del programa; real = m³ despachados ÷ horas del primer al último conduce; cumple si el real es igual o mayor. Los directos, los servicios sin Hora Final y los de un solo camión no tienen ritmo y cumplen; un día sin ninguna Hora Final queda sin dato. Macao no entra en el cumplimiento. ${renderSinCruceNote(comp)}</div>`;
     // Filtro Bomba / Directo (2026-10-13): las tres vistas de cumplimiento, sus
     // KPIs y su imagen. Cancelado y Resumen por cliente no se filtran.
     const servicio = document.getElementById('selServicio').value || null;
@@ -994,7 +989,7 @@ function construirCanvasCumplimiento(rows, zonaNombre){
 
   const cols = [
     {h:'Cliente', w:175, bold:true}, {h:'Obra', w:180}, {h:'Bomba', w:62}, {h:'Elemento', w:115},
-    {h:'m³ prog.', w:68, num:true}, {h:'Hora prog.', w:78}, {h:'Llegada est.', w:88},
+    {h:'m³ prog.', w:68, num:true}, {h:'Hora prog.', w:78}, {h:'1er conduce', w:88},
     {h:'Diferencia', w:92, num:true, red:true}, {h:'Responsable', w:95, bold:true},
     {h:'Motivo', w:150, bold:true}, {h:'Observaciones'}
   ];
@@ -1038,10 +1033,10 @@ function construirCanvasCumplimiento(rows, zonaNombre){
   // Los KPIs son los del tablero (resumenDeCumplimiento), no un conteo propio:
   // la imagen que se manda no puede decir un numero distinto a la pantalla.
   const kpis = [
-    {l:'% '+NOMBRE_PCT, v: res.pct!==null ? res.pct+'%' : '—', s:`${fmtInt(res.m3Cumplidos)} de ${fmtInt(res.m3)} m³ en tolerancia`, c:C.blue},
-    {l:'% '+NOMBRE_PCT_PEDIDOS, v: res.pctPedidos!==null ? res.pctPedidos+'%' : '—', s:`${res.pedidosCumplidos} de ${res.pedidos} horas programadas`, c:C.blue},
-    {l:'Cumplidas', v: String(res.pedidosCumplidos), s:'entregas a tiempo', c:C.ok},
-    {l:'Incumplidas', v: String(res.pedidos-res.pedidosCumplidos), s:`más de ${assumptions.tolerancia} min tarde`, c:C.red},
+    {l:'% '+NOMBRE_PCT, v: res.pct!==null ? res.pct+'%' : '—', s: res.pct!==null ? `${fmtInt(res.m3Cumplidos)} de ${fmtInt(res.m3)} m³ al ritmo programado` : 'sin Hora Final en el programa', c:C.blue},
+    {l:'% '+NOMBRE_PCT_PEDIDOS, v: res.pctPedidos!==null ? res.pctPedidos+'%' : '—', s:`${res.pedidosCumplidos} de ${res.pedidos} con el 1er conduce a tiempo`, c:C.blue},
+    {l:'Cumplidas', v: String(res.pedidosCumplidos), s:'inicio a tiempo', c:C.ok},
+    {l:'Incumplidas', v: String(res.pedidos-res.pedidosCumplidos), s:`1er conduce menos de ${assumptions.tolerancia} min antes`, c:C.red},
   ];
   const gap = 16, kw = (tableW - gap*3)/4;
   kpis.forEach((k,i)=>{
@@ -1202,8 +1197,12 @@ document.getElementById('btnExportar').addEventListener('click', async ()=>{
           Ficha: c.ficha, HoraCargueCamion: minToStr(c.horaMin), Planta: c.planta,
           Elemento: c.elemento, Conduce: c.conduce, CantidadCamion_m3: c.cantidad,
           EsPrimerCamion: i===0 ? 'Sí' : 'No',
-          HoraProgramada: minToStr(r.horaProg), TrayectoMin: r.trayecto, TrayectoEsReal: r.isOverride?'Sí':'No',
-          LlegadaEstimada: minToStr(r.horaLlegadaEst), DiferenciaMin: r.diff!==null?Math.round(r.diff):null,
+          HoraProgramada: minToStr(r.horaProg), HoraFinalProgramada: minToStr(r.horaFinProg),
+          // DiferenciaMin = primer conduce - hora programada (negativo es antes), 2026-11-24
+          DiferenciaMin: r.diff!==null?Math.round(r.diff):null,
+          RitmoProgramado_m3h: r.ritmoProg!==null && r.ritmoProg!==undefined ? Math.round(r.ritmoProg*10)/10 : null,
+          RitmoReal_m3h: r.ritmoReal!==null && r.ritmoReal!==undefined ? Math.round(r.ritmoReal*10)/10 : null,
+          Frecuencia: r.frecuencia || '',
           EstadoCumplimiento: estadoVisible(r), ConfianzaCoincidencia: r.confianza==='—'?'':r.confianza,
           // Dos columnas distintas (#167, 2026-10-23): el motivo del cruce lo pone
           // la app y el Motivo lo elige el usuario de la lista. Iban las dos como
@@ -1221,8 +1220,8 @@ document.getElementById('btnExportar').addEventListener('click', async ()=>{
         ...filaBase(),
         Cliente: s.cliente, ObraProgramada: s.obra, ObraReal: '', Zona: '',
         Ficha: '', HoraCargueCamion: '', Planta: '', Elemento: '', Conduce: '', CantidadCamion_m3: null,
-        EsPrimerCamion: '', HoraProgramada: minToStr(s.horaProg), TrayectoMin: null, TrayectoEsReal: '',
-        LlegadaEstimada: '', DiferenciaMin: null, EstadoCumplimiento: 'Cancelado', ConfianzaCoincidencia: '', MotivoDelCruce: s.motivo,
+        EsPrimerCamion: '', HoraProgramada: minToStr(s.horaProg), HoraFinalProgramada: '',
+        DiferenciaMin: null, RitmoProgramado_m3h: null, RitmoReal_m3h: null, Frecuencia: '', EstadoCumplimiento: 'Cancelado', ConfianzaCoincidencia: '', MotivoDelCruce: s.motivo,
         CantidadProgramada_m3: s.cantProg, Responsable: state.responsables.get(s.rowKey) || '',
         Motivo: state.motivos.get(s.rowKey) || '',
         Observaciones: state.observaciones.get(s.rowKey) || '',
