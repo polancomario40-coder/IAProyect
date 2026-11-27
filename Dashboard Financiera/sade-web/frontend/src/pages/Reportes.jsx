@@ -176,7 +176,13 @@ export default function Reportes() {
   }, {
     enabled: esAtrasados,
   })
-  const { data: dataProyeccion, isLoading: loadingProyeccion } = useReporteProyeccionCobro({
+  const {
+    data: dataProyeccion,
+    isLoading: loadingProyeccion,
+    isError: isErrorProyeccion,
+    error: errorProyeccion,
+    refetch: refetchProyeccion,
+  } = useReporteProyeccionCobro({
     fechaDesde,
     fechaHasta,
     empresa: filtroEmpresa || undefined,
@@ -1235,6 +1241,25 @@ export default function Reportes() {
       {/* ── CONTENIDO: INFORME DE PROYECCIÓN DE COBRO PRÓXIMA QUINCENA ── */}
       {pestañaActiva === 'PROYECCION' && (
         <section className="space-y-4">
+          {isErrorProyeccion && (
+            <div className="bg-rose-50 border border-rose-300 rounded-xl p-4 flex items-start gap-3 text-rose-900 text-xs">
+              <AlertTriangle className="text-rose-600 shrink-0 mt-0.5" size={18} />
+              <div className="flex-1">
+                <span className="font-bold text-sm block mb-1">Error al consultar el procedimiento de Proyección</span>
+                <span>{errorProyeccion?.message || 'Error de comunicación con el servidor.'}</span>
+                <p className="mt-2 text-rose-700">
+                  Verifique que se haya ejecutado el script <strong>01_BaseDeDatos_SQL\12_sp_ReporteProyeccionCobro.sql</strong> en la base de datos SQL Server (Financiera).
+                </p>
+              </div>
+              <button
+                onClick={() => refetchProyeccion()}
+                className="px-3 py-1.5 bg-rose-600 text-white font-semibold rounded-lg hover:bg-rose-700 transition-colors text-xs shrink-0"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between text-xs text-emerald-950 font-medium flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <CalendarCheck size={18} className="text-emerald-600 flex-shrink-0" />
@@ -1332,6 +1357,12 @@ export default function Reportes() {
                     <tr>
                       <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
                         Cargando proyección de cobro de la próxima quincena...
+                      </td>
+                    </tr>
+                  ) : isErrorProyeccion ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-rose-600 font-medium">
+                        Ocurrió un error al cargar la proyección. Ejecute 12_sp_ReporteProyeccionCobro.sql en SQL Server.
                       </td>
                     </tr>
                   ) : filasProyeccion.length === 0 ? (
