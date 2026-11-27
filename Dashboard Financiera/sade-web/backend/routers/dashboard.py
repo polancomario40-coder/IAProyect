@@ -18,7 +18,7 @@ async def get_kpis():
     - Moras e intereses pendientes
     """
     try:
-        rows = execute_sp("cxcDashboardKPIs")
+        rows = execute_sp("cxcDashboardKPIs", "SADE_WEB_2026_PROD")
         if not rows:
             raise HTTPException(status_code=404, detail="No se encontraron datos")
         return DashboardKPIs(**rows[0])
@@ -55,7 +55,7 @@ async def get_dashboard_completo(
 ):
     """Combina KPIs y cobros por mes en una sola llamada."""
     try:
-        kpis_rows = execute_sp("cxcDashboardKPIs")
+        kpis_rows = execute_sp("cxcDashboardKPIs", "SADE_WEB_2026_PROD")
         cobros_rows = execute_sp("cxcCobrosporMes", meses)
 
         if not kpis_rows:

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador y Pruebas - Sistema de Licencias SADE Web</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @keyframes pulse-slow {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.85; }
+    }
+    .animate-pulse-slow {
+      animation: pulse-slow 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 font-sans antialiased text-slate-800 min-h-screen flex flex-col">
+
+  <!-- BARRA DE CONTROL DEL SIMULADOR -->
+  <header class="bg-slate-900 text-white shadow-xl z-50 sticky top-0 border-b border-slate-700">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center font-bold text-white shadow-md shadow-blue-500/30">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <div>
+          <h1 class="text-sm font-bold tracking-wide flex items-center gap-2">
+            SIMULADOR DE LICENCIAS Y BLOQUEO
+            <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30">EN VIVO</span>
+          </h1>
+          <p class="text-[11px] text-slate-400">Prueba los 3 estados y la activación con las claves oficiales</p>
+        </div>
+      </div>
+
+      <!-- BOTONES DE CAMBIO DE ESTADO -->
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <button onclick="setStage('SILENT')" id="btn-SILENT" class="stage-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 transition">
+          🟢 Día 0-5 (Silencioso)
+        </button>
+        <button onclick="setStage('AMBER')" id="btn-AMBER" class="stage-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-500 border border-amber-400 shadow transition">
+          🟡 Día 5-10 (Aviso Ámbar)
+        </button>
+        <button onclick="setStage('RED')" id="btn-RED" class="stage-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 transition">
+          🔴 Día 10-15 (Aviso Rojo)
+        </button>
+        <button onclick="setStage('BLACK')" id="btn-BLACK" class="stage-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 transition">
+          ⚫ Día 15+ (Bloqueo Negro)
+        </button>
+        <button onclick="setStage('TAMPER')" id="btn-TAMPER" class="stage-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 transition">
+          ⚠️ Reloj Alterado
+        </button>
+      </div>
+    </div>
+
+    <!-- CÓDIGOS DE PRUEBA RÁPIDA -->
+    <div class="bg-slate-950 px-4 py-2 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs">
+      <span class="text-slate-400 font-medium">Pegar código de prueba rápido:</span>
+      <div class="flex items-center gap-2 flex-wrap">
+        <button onclick="insertCode('SADE-30D-20261227-1B76C6')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-blue-300 rounded border border-blue-900/50 text-[11px] font-mono">
+          <i class="fa-solid fa-key text-[10px] mr-1"></i> 30 Días (SADE-30D-...)
+        </button>
+        <button onclick="insertCode('SADE-1Y-20271127-418173')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-300 rounded border border-emerald-900/50 text-[11px] font-mono">
+          <i class="fa-solid fa-calendar-check text-[10px] mr-1"></i> 1 Año (SADE-1Y-...)
+        </button>
+        <button onclick="insertCode('SADE-PERM-99991231-479F82')" class="px-2.5 py-1 bg-purple-950 hover:bg-purple-900 text-purple-300 rounded border border-purple-700/50 text-[11px] font-mono font-bold">
+          <i class="fa-solid fa-infinity text-[10px] mr-1"></i> Permanente (SADE-PERM-...)
+        </button>
+        <button onclick="insertCode('SADE-FAKE-20261231-999999')" class="px-2.5 py-1 bg-red-950 hover:bg-red-900 text-red-300 rounded border border-red-800/50 text-[11px] font-mono">
+          <i class="fa-solid fa-xmark text-[10px] mr-1"></i> Código Inválido
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- FONDO: VISTA REAL DE LA APLICACIÓN SADE WEB -->
+  <main class="flex-1 flex overflow-hidden relative">
+    
+    <!-- Sidebar simulado -->
+    <aside class="w-64 bg-[#1e3a5f] text-white p-5 flex flex-col justify-between hidden md:flex shrink-0">
+      <div>
+        <div class="flex items-center gap-2 mb-6 pb-4 border-b border-white/10">
+          <span class="font-bold text-lg">SADE Web</span>
+          <span class="text-[10px] bg-blue-500/30 text-blue-200 px-1.5 py-0.5 rounded border border-blue-400/30">SSO</span>
+        </div>
+        <div class="space-y-1 text-sm font-medium text-slate-300">
+          <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-white/20 text-white">
+            <i class="fa-solid fa-chart-pie w-4"></i> Dashboard
+          </div>
+          <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10">
+            <i class="fa-solid fa-users w-4"></i> Clientes
+          </div>
+          <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10">
+            <i class="fa-solid fa-file-invoice-dollar w-4"></i> Informes Financieros
+          </div>
+          <div class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/10">
+            <i class="fa-solid fa-calendar-days w-4"></i> Proyección de Cobro
+          </div>
+        </div>
+      </div>
+      <div class="text-xs text-slate-400 border-t border-white/10 pt-4">
+        <p class="font-semibold text-white">INVERSIONES MARTINEZ</p>
+        <p class="text-[11px] text-blue-300">Usuario: Brayan Sierra</p>
+      </div>
+    </aside>
+
+    <!-- Contenido principal simulado -->
+    <div class="flex-1 p-6 lg:p-8 overflow-y-auto space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-2xl font-bold text-slate-800">Cartera de Préstamos</h2>
+          <p class="text-xs text-slate-500">Métricas y resumen general de cartera</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-semibold">
+            <i class="fa-solid fa-circle-check mr-1"></i> Servidor Online (Puerto 8080)
+          </span>
+        </div>
+      </div>
+
+      <!-- Tarjetas métricas -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <p class="text-xs text-slate-500 font-medium">Capital Cartera</p>
+          <p class="text-xl font-bold text-slate-900 mt-1">RD$ 12,450,800.00</p>
+        </div>
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <p class="text-xs text-slate-500 font-medium">Interés por Cobrar</p>
+          <p class="text-xl font-bold text-blue-600 mt-1">RD$ 845,210.00</p>
+        </div>
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <p class="text-xs text-slate-500 font-medium">Clientes Activos</p>
+          <p class="text-xl font-bold text-emerald-600 mt-1">142 Préstamos</p>
+        </div>
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <p class="text-xs text-slate-500 font-medium">Mora 30+ Días</p>
+          <p class="text-xl font-bold text-rose-600 mt-1">RD$ 115,300.00</p>
+        </div>
+      </div>
+
+      <!-- Tabla simulada -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+          <span class="text-sm font-bold text-slate-800">Últimos Préstamos Concedidos</span>
+          <span class="text-xs text-slate-500">Noviembre 2026</span>
+        </div>
+        <table class="w-full text-xs text-left">
+          <thead class="bg-slate-100 text-slate-600 uppercase font-semibold">
+            <tr>
+              <th class="p-3">Cliente</th>
+              <th class="p-3">Empresa</th>
+              <th class="p-3">Capital</th>
+              <th class="p-3">Total Cuota</th>
+              <th class="p-3">Estado</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr>
+              <td class="p-3 font-semibold text-slate-900">JUAN CARLOS RAMIREZ</td>
+              <td class="p-3 text-slate-600">DISTRIBUIDORA CORRIP</td>
+              <td class="p-3 font-mono font-medium">RD$ 45,000.00</td>
+              <td class="p-3 font-mono text-blue-600 font-semibold">RD$ 5,200.00</td>
+              <td class="p-3"><span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px]">Al Día</span></td>
+            </tr>
+            <tr>
+              <td class="p-3 font-semibold text-slate-900">MARIA ESTHER PEREZ</td>
+              <td class="p-3 text-slate-600">GRUPO RAMOS LA SIRENA</td>
+              <td class="p-3 font-mono font-medium">RD$ 80,000.00</td>
+              <td class="p-3 font-mono text-blue-600 font-semibold">RD$ 9,150.00</td>
+              <td class="p-3"><span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px]">Atraso 15D</span></td>
+            </tr>
+            <tr>
+              <td class="p-3 font-semibold text-slate-900">JOSE MANUEL ALMONTE</td>
+              <td class="p-3 text-slate-600">INVERSIONES ALMONTE</td>
+              <td class="p-3 font-mono font-medium">RD$ 120,000.00</td>
+              <td class="p-3 font-mono text-blue-600 font-semibold">RD$ 14,300.00</td>
+              <td class="p-3"><span class="px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-bold text-[10px]">Atraso 45D</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- MODAL DE LICENCIA DINÁMICO (SE RENDERIZA SEGÚN LA FASE) -->
+    <div id="license-container" class="hidden"></div>
+
+  </main>
+
+  <script>
+    // Códigos válidos pre-calculados con la clave criptográfica oficial
+    const VALID_CODES = {
+      'SADE-30D-20261227-1B76C6': { tipo: '30 Días', exp: '2026-12-27', desc: 'Licencia por 1 Mes' },
+      'SADE-60D-20270126-C7AE6E': { tipo: '60 Días', exp: '2027-01-26', desc: 'Licencia por 2 Meses' },
+      'SADE-90D-20270225-610E97': { tipo: '90 Días', exp: '2027-02-25', desc: 'Licencia por 3 Meses' },
+      'SADE-180D-20270526-1A831E': { tipo: '180 Días', exp: '2027-05-26', desc: 'Licencia por 6 Meses' },
+      'SADE-1Y-20271127-418173': { tipo: '1 Año', exp: '2027-11-27', desc: 'Licencia Anual' },
+      'SADE-PERM-99991231-479F82': { tipo: 'PERM', exp: 'Permanente', desc: 'Licencia Permanente Vitalicia' }
+    };
+
+    let currentStage = 'AMBER';
+    let isDismissed = false;
+
+    function insertCode(code) {
+      const input = document.getElementById('code-input');
+      if (input) {
+        input.value = code;
+        input.focus();
+      }
+    }
+
+    function setStage(stage) {
+      currentStage = stage;
+      isDismissed = false;
+
+      // Resaltar botón activo
+      document.querySelectorAll('.stage-btn').forEach(b => {
+        b.className = 'stage-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 transition';
+      });
+
+      const activeBtn = document.getElementById('btn-' + stage);
+      if (activeBtn) {
+        if (stage === 'AMBER') activeBtn.className = 'stage-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white border border-amber-400 shadow transition';
+        else if (stage === 'RED') activeBtn.className = 'stage-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white border border-red-400 shadow transition';
+        else if (stage === 'BLACK') activeBtn.className = 'stage-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-black text-white border border-red-600 shadow transition ring-2 ring-red-500';
+        else if (stage === 'TAMPER') activeBtn.className = 'stage-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-700 text-white border border-purple-400 shadow transition';
+        else activeBtn.className = 'stage-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white border border-emerald-400 shadow transition';
+      }
+
+      renderModal();
+    }
+
+    function dismissModal() {
+      isDismissed = true;
+      document.getElementById('license-container').classList.add('hidden');
+    }
+
+    function handleActivate(event) {
+      if (event) event.preventDefault();
+      const input = document.getElementById('code-input');
+      const val = (input ? input.value : '').trim().toUpperCase();
+      const errBox = document.getElementById('msg-error');
+      const okBox = document.getElementById('msg-ok');
+      const btn = document.getElementById('btn-submit');
+
+      if (!val) {
+        errBox.textContent = 'Debe ingresar un código de activación.';
+        errBox.classList.remove('hidden');
+        okBox.classList.add('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Validando Código Criptográfico...';
+      errBox.classList.add('hidden');
+      okBox.classList.add('hidden');
+
+      setTimeout(() => {
+        btn.disabled = false;
+        if (VALID_CODES[val]) {
+          const lic = VALID_CODES[val];
+          okBox.innerHTML = `<strong>¡Licencia Activada con Éxito!</strong><br>${lic.desc} — Válida hasta: ${lic.exp}`;
+          okBox.classList.remove('hidden');
+          errBox.classList.add('hidden');
+          btn.innerHTML = '<i class="fa-solid fa-circle-check mr-2"></i> Sistema Desbloqueado';
+          btn.className = 'w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition text-xs';
+
+          setTimeout(() => {
+            currentStage = 'ACTIVATED';
+            renderModal();
+          }, 1500);
+        } else {
+          errBox.textContent = 'Código de activación inválido. La firma criptográfica no coincide.';
+          errBox.classList.remove('hidden');
+          btn.innerHTML = '<i class="fa-solid fa-key mr-2"></i> Intentar Nuevamente';
+        }
+      }, 700);
+    }
+
+    function renderModal() {
+      const container = document.getElementById('license-container');
+
+      if (isDismissed || currentStage === 'SILENT') {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+        return;
+      }
+
+      container.classList.remove('hidden');
+
+      // 1. ESTADO ACTIVADO CON ÉXITO
+      if (currentStage === 'ACTIVATED') {
+        container.innerHTML = `
+          <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div class="bg-white border-2 border-emerald-500 rounded-2xl max-w-md w-full p-8 shadow-2xl text-center">
+              <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-200">
+                <i class="fa-solid fa-check-double text-2xl"></i>
+              </div>
+              <h3 class="text-xl font-bold text-slate-900 mb-2">¡Sistema Activado!</h3>
+              <p class="text-xs text-slate-600 mb-6">La licencia fue autenticada satisfactoriamente. Todos los módulos financieros y reportes están 100% operativos.</p>
+              <button onclick="setStage('SILENT')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs">
+                Ir al Dashboard
+              </button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      // 2. FASE DÍA 15+ (BLOQUEO TOTAL EN NEGRO) O RELOJ ALTERADO
+      if (currentStage === 'BLACK' || currentStage === 'TAMPER') {
+        const isTamper = currentStage === 'TAMPER';
+        container.innerHTML = `
+          <div class="fixed inset-0 bg-black/95 backdrop-blur-md z-40 flex items-center justify-center p-4">
+            <div class="bg-[#0b101b] border-2 border-red-600/80 rounded-2xl max-w-lg w-full p-8 shadow-2xl text-center text-white relative overflow-hidden">
+              <div class="w-20 h-20 bg-red-950/80 border-2 border-red-500/80 text-red-500 rounded-full flex items-center justify-center mx-auto mb-5 shadow-lg shadow-red-950/50 animate-pulse-slow">
+                <i class="fa-solid fa-lock text-3xl"></i>
+              </div>
+              <h2 class="text-2xl font-black tracking-wide text-white mb-2 uppercase">
+                ${isTamper ? 'BLOQUEO POR ALTERACIÓN DE RELOJ' : 'SISTEMA BLOQUEADO POR LICENCIA'}
+              </h2>
+              <div class="bg-red-950/40 border border-red-800/60 rounded-xl p-3.5 mb-5 text-left text-xs text-red-200 leading-relaxed">
+                <p class="font-semibold text-red-100 mb-1 flex items-center gap-1.5">
+                  <i class="fa-solid fa-shield-halved text-red-400"></i>
+                  ${isTamper ? 'Inconsistencia de fecha detectada' : 'Período de gracia de 15 días finalizado'}
+                </p>
+                <p>
+                  ${isTamper 
+                    ? 'El sistema detectó que la fecha del reloj de Windows fue atrasada para intentar eludir la expiración. El acceso queda totalmente suspendido.' 
+                    : 'El acceso a <strong>SADE Web</strong> se encuentra temporalmente suspendido. Para desbloquear el sistema y continuar, ingrese el código oficial provisto por su proveedor.'}
+                </p>
+              </div>
+
+              <form onsubmit="handleActivate(event)" class="space-y-4">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-300 text-left mb-1.5 uppercase tracking-wider">
+                    Código de Activación Oficial:
+                  </label>
+                  <input
+                    id="code-input"
+                    type="text"
+                    placeholder="SADE-XXXX-XXXXXXXX-XXXX"
+                    class="w-full bg-slate-900 border-2 border-slate-700 text-white font-mono text-sm px-4 py-3 rounded-xl focus:outline-none focus:border-red-500 transition uppercase tracking-widest placeholder:text-slate-600 text-center"
+                  />
+                </div>
+
+                <div id="msg-error" class="hidden p-3 bg-red-900/40 border border-red-700 rounded-xl text-red-200 text-xs font-medium text-left"></div>
+                <div id="msg-ok" class="hidden p-3 bg-emerald-900/40 border border-emerald-600 rounded-xl text-emerald-200 text-xs font-semibold text-left"></div>
+
+                <button
+                  id="btn-submit"
+                  type="submit"
+                  class="w-full bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg transition text-sm flex items-center justify-center gap-2"
+                >
+                  <i class="fa-solid fa-key"></i>
+                  <span>Desbloquear y Activar Sistema</span>
+                </button>
+              </form>
+              <p class="text-[11px] text-slate-500 mt-5">SADE Web &copy; 2026 — No es posible omitir esta pantalla</p>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      // 3. FASES PREVENTIVAS (ÁMBAR DÍA 5-10 / ROJO DÍA 10-15)
+      const isRed = currentStage === 'RED';
+      const borderCol = isRed ? 'border-red-500' : 'border-amber-500';
+      const iconCol = isRed ? 'bg-red-100 text-red-600 border-red-300' : 'bg-amber-100 text-amber-700 border-amber-300';
+      const bannerBg = isRed ? 'bg-red-50 border-red-300 text-red-950' : 'bg-amber-50 border-amber-300 text-amber-950';
+      const btnCol = isRed ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-600 hover:bg-amber-700';
+      const daysLeft = isRed ? '3' : '8';
+
+      container.innerHTML = `
+        <div class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+          <div class="bg-white border-2 ${borderCol} rounded-2xl max-w-xl w-full p-6 lg:p-8 shadow-2xl relative">
+            
+            <div class="flex items-start gap-4 mb-5">
+              <div class="w-14 h-14 ${iconCol} border-2 rounded-2xl flex items-center justify-center shrink-0">
+                <i class="fa-solid ${isRed ? 'fa-triangle-exclamation text-2xl' : 'fa-clock text-2xl'}"></i>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${isRed ? 'bg-red-100 text-red-800 border-red-200' : 'bg-amber-100 text-amber-900 border-amber-200'}">
+                    ${isRed ? 'Vencimiento Inminente' : 'Aviso de Licencia'}
+                  </span>
+                  <span class="text-xs text-slate-500 font-mono">${daysLeft} día(s) restante(s)</span>
+                </div>
+                <h3 class="text-xl font-bold leading-tight text-slate-900">
+                  ${isRed ? '¡Atención: Licencia a Punto de Expirar!' : 'Aviso de Vencimiento de Licencia'}
+                </h3>
+              </div>
+            </div>
+
+            <div class="p-4 rounded-xl border mb-5 text-xs ${bannerBg} leading-relaxed font-medium">
+              <p class="mb-2">
+                ${isRed 
+                  ? 'Quedan únicamente 3 días del período de prueba. Si no se ingresa la clave antes del día 15, el sistema se cerrará con pantalla de bloqueo total.' 
+                  : 'Su instalación de SADE Web tiene una licencia temporal que vencerá en los próximos días. Puede registrar la clave definitiva ahora.'}
+              </p>
+              <p class="text-[11px] text-slate-600 font-normal">
+                ${isRed 
+                  ? 'Transcurrido el plazo no se podrán consultar préstamos ni exportar reportes.' 
+                  : 'Puede ingresar el código suministrado o continuar usando el sistema.'}
+              </p>
+            </div>
+
+            <form onsubmit="handleActivate(event)" class="space-y-3.5 mb-5">
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Ingrese su Código de Activación:</label>
+                <input
+                  id="code-input"
+                  type="text"
+                  placeholder="Ejemplo: SADE-1Y-20271127-XXXXXX"
+                  class="w-full bg-slate-50 border border-slate-300 text-slate-900 font-mono text-xs px-3.5 py-2.5 rounded-xl focus:outline-none focus:border-blue-500 uppercase tracking-wider"
+                />
+              </div>
+
+              <div id="msg-error" class="hidden p-2.5 bg-red-100 border border-red-300 rounded-lg text-red-900 text-xs"></div>
+              <div id="msg-ok" class="hidden p-2.5 bg-emerald-100 border border-emerald-300 rounded-lg text-emerald-900 text-xs font-semibold"></div>
+
+              <button
+                id="btn-submit"
+                type="submit"
+                class="w-full ${btnCol} text-white font-bold py-2.5 px-4 rounded-xl shadow transition text-xs flex items-center justify-center gap-2"
+              >
+                <i class="fa-solid fa-key"></i>
+                <span>Activar Licencia Ahora</span>
+              </button>
+            </form>
+
+            <div class="pt-3 border-t border-slate-200 flex items-center justify-between">
+              <span class="text-[11px] text-slate-400">Fecha límite: 2026-12-12</span>
+              <button
+                type="button"
+                onclick="dismissModal()"
+                class="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition"
+              >
+                ${isRed ? 'Continuar (Riesgo de bloqueo)' : 'Entendido, Continuar al Sistema'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      `;
+    }
+
+    // Iniciar con la fase Ámbar seleccionada para visualización inmediata
+    renderModal();
+  </script>
+</body>
+</html>
