@@ -8,6 +8,7 @@ import Reportes from './pages/Reportes'
 import AuthCallback from './pages/AuthCallback'
 import LoginPage from './pages/LoginPage'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import LicenseModal from './components/LicenseModal'
 
 function Sidebar({ open, onClose }) {
   const navigate = useNavigate()
@@ -228,6 +229,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <LicenseModal />
         <AuthGuard>
           <Routes>
             <Route path="/auth-callback" element={<AuthCallback />} />
